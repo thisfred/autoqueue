@@ -188,7 +188,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             
         return table
 
-    # Implement the player specific methods
+    # Implement the player specific methods needed by autoqueue
     
     def player_get_userdir(self):
         """get the application user directory to store files"""
