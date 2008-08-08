@@ -20,7 +20,7 @@ import rhythmdb
 from autoqueue import AutoQueueBase, SongBase
 
 #XXX FILL IN FOR TESTING
-GCONFPATH = ''
+GCONFPATH = '.'
 
 class Song(SongBase):
     """A wrapper object around rhythmbox song objects."""
@@ -30,11 +30,13 @@ class Song(SongBase):
         
     def get_artist(self):
         """return lowercase UNICODE name of artist"""
-        return self.db.entry_get(song, rhythmdb.PROP_ARTIST).lower()
+        return unicode(
+            self.db.entry_get(self.song, rhythmdb.PROP_ARTIST).lower(), 'utf-8')
 
     def get_title(self):
         """return lowercase UNICODE title of song"""
-        return self.db.entry_get(song, rhythmdb.PROP_TITLE).lower()
+        return unicode(
+            self.db.entry_get(self.song, rhythmdb.PROP_TITLE).lower(), 'utf-8')
 
     def get_tags(self):
         """return a list of tags for the songs"""
@@ -46,27 +48,24 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         rb.Plugin.__init__(self)
         AutoQueueBase.__init__(self)
         self.cache = False
+        self.threaded = False
         
     def activate(self, shell):
         self.shell = shell
-        self.db = shell.get_property('db')
+        self.rdb = shell.get_property('db')
         sp = shell.get_player ()
         self.pec_id = sp.connect(
             'playing-song-changed', self.playing_entry_changed)
-        self.pc_id = sp.connect('playing-changed', self.playing_changed)
         
     def deactivate(self, shell):
-        self.db = None
+        self.rdb = None
         self.shell = None
         sp = shell.get_player()
         sp.disconnect(self.pec_id)
-        sp.disconnect(self.pc_id)
-
-    def playing_changed(self, sp, playing):
-        self.on_song_started(Song(sp.get_playing_entry(), self.db))
 
     def playing_entry_changed(self, sp, entry):
-        self.on_song_started(Song(entry, self.db))
+        if entry:
+            self.on_song_started(Song(entry, self.rdb))
         
     def player_get_userdir(self):
         """get the application user directory to store files"""
@@ -75,8 +74,9 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
     def player_construct_track_search(self, artist, title, restrictions):
         """construct a search that looks for songs with this artist
         and title"""
-        return (rhythmdb.QUERY_PROP_EQUALS, rhythmdb.PROP_ARTIST, artist,
-                rhythmdb.QUERY_PROP_EQUALS, rhythmdb.PROP_TITLE, title)
+        return (rhythmdb.QUERY_PROP_EQUALS, rhythmdb.PROP_ARTIST_FOLDED,
+                artist.encode('utf-8'), rhythmdb.QUERY_PROP_EQUALS,
+                rhythmdb.PROP_TITLE_FOLDED, title.encode('utf-8'))
     
     def player_construct_tag_search(self, tags, exclude_artists, restrictions):
         """construct a search that looks for songs with these
@@ -85,7 +85,8 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
 
     def player_construct_artist_search(self, artist, restrictions):
         """construct a search that looks for songs with this artist"""
-        return (rhythmdb.QUERY_PROP_EQUALS, rhythmdb.PROP_ARTIST, artist)
+        return (rhythmdb.QUERY_PROP_EQUALS, rhythmdb.PROP_ARTIST_FOLDED,
+                artist.encode('utf-8'))
         
     def player_construct_restrictions(
         self, track_block_time, relaxors, restrictors):
@@ -103,20 +104,20 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
     def player_enqueue(self, song):
         """Put the song at the end of the queue"""
         self.shell.add_to_queue(
-            self.db.entry_get(song.song, rhythmdb.PROP_LOCATION))
+            self.rdb.entry_get(song.song, rhythmdb.PROP_LOCATION))
 
     def player_search(self, search):
         """perform a player search"""
-        query = self.db.query_new()
-        self.db.query_append(query, search)
-        query_model = self.db.query_model_new_empty()
-        self.db.do_full_query_parsed(query_model, query)
+        query = self.rdb.query_new()
+        self.rdb.query_append(query, search)
+        query_model = self.rdb.query_model_new_empty()
+        self.rdb.do_full_query_parsed(query_model, query)
         result = []
         for row in query_model:
-            result.append(Song(row[0], self.db))
+            result.append(Song(row[0], self.rdb))
+        print 'result: ' + repr(result)
         return result
 
     def player_get_songs_in_queue(self):
         """return (wrapped) song objects for the songs in the queue"""
         return []
-
