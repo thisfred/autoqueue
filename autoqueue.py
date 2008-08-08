@@ -152,6 +152,7 @@ class AutoQueueBase(object):
     """Generic base class for autoqueue plugins."""
     cache = False
     def __init__(self):
+        self.threaded = True
         self.artist_block_time = 1
         self.track_block_time = 30
         self.desired_queue_length = 0
@@ -262,9 +263,12 @@ class AutoQueueBase(object):
             return
         #start a new thread to look up songs if necessary
         if self.desired_queue_length == 0 or self.queue_needs_songs():
-            background = threading.Thread(None, self.fill_queue) 
-            background.setDaemon(True)
-            background.start()
+            if self.threaded:
+                background = threading.Thread(None, self.fill_queue) 
+                background.setDaemon(True)
+                background.start()
+            else:
+                self.fill_queue()
     
     def queue_needs_songs(self):
         """determine whether the queue needs more songs added"""
