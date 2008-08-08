@@ -121,7 +121,9 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     def plugin_on_song_started(self, song):
         """Triggered when a song start. If the right conditions apply,
         we start looking for new songs to queue."""
-        self.on_song_started(Song(song))
+        if song:
+            song = Song(song)
+        self.on_song_started(song)
         
     def PluginPreferences(self, parent):
 
@@ -295,5 +297,5 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         return [Song(song) for song in songs]
 
     def player_get_songs_in_queue(self):
-        """return (wrapped) song objects for the songs in the wueue"""
+        """return (wrapped) song objects for the songs in the queue"""
         return [Song(song) for song in main.playlist.q.get()]
