@@ -1,0 +1,9 @@
+[RB Plugin]
+Loader=python
+Module=rhythmbox_autoqueue
+IAge=1
+Name=Autoqueue plugin
+Description=A plugin that fills the queue with similar songs
+Authors=Eric Casteleijn <thisfred@gmail.com>
+Copyright=Copyright © 2007-2008 Eric Casteleijn
+Website=http://code.google.com/p/autoqueue/
