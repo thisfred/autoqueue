@@ -93,6 +93,6 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
 
 
     def player_get_songs_in_queue(self):
-        """return (wrapped) song objects for the songs in the wueue"""
+        """return (wrapped) song objects for the songs in the queue"""
         return True
 
