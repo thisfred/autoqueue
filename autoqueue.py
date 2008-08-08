@@ -151,7 +151,7 @@ class SongBase(object):
 class AutoQueueBase(object):
     """Generic base class for autoqueue plugins."""
     def __init__(self):
-        self.artist_block_time = 7
+        self.artist_block_time = 1
         self.track_block_time = 30
         self.desired_queue_length = 4440
         self.cache_time = 90
@@ -308,8 +308,6 @@ class AutoQueueBase(object):
         """search for appropriate songs and put them in the queue"""
         self.running = True
         self.connection = sqlite3.connect(self.db)
-        if len(self._songs) >= 10:
-            self._songs.pop()
         while self.queue_needs_songs():
             self.unblock_artists()
             generator = self.song_generator()
@@ -346,6 +344,9 @@ class AutoQueueBase(object):
                         bsong.get_title()) for bsong in list(self._songs)])))
             if song:
                 self.player_enqueue(song)
+            else:
+                break
+            
         for artist_id in self._artists_to_update:
             self._update_similar_artists(
                 artist_id, self._artists_to_update[artist_id])
