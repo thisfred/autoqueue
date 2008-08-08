@@ -261,7 +261,7 @@ class AutoQueueBase(object):
         if self.running:
             return
         #start a new thread to look up songs if necessary
-        if self.queue_needs_songs():
+        if self.desired_queue_length == 0 or self.queue_needs_songs():
             background = threading.Thread(None, self.fill_queue) 
             background.setDaemon(True)
             background.start()
