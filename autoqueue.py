@@ -150,15 +150,15 @@ class SongBase(object):
 
 class AutoQueueBase(object):
     """Generic base class for autoqueue plugins."""
+    cache = False
     def __init__(self):
         self.artist_block_time = 1
         self.track_block_time = 30
-        self.desired_queue_length = 4440
+        self.desired_queue_length = 0
         self.cache_time = 90
-        self.cache = SQL and True
         self.by_tracks = True
         self.by_artists = True
-        self.by_tags = True
+        self.by_tags = False
         self.running = False
         self.verbose = False
         self.now = datetime.now()
@@ -262,7 +262,7 @@ class AutoQueueBase(object):
             return
         #start a new thread to look up songs if necessary
         if self.queue_needs_songs():
-            background = threading.Thread(None, self.add_to_queue) 
+            background = threading.Thread(None, self.fill_queue) 
             background.setDaemon(True)
             background.start()
     
@@ -304,49 +304,55 @@ class AutoQueueBase(object):
                     yield song
         return
 
-    def add_to_queue(self):
+    def queue_song(self):
+        self.unblock_artists()
+        generator = self.song_generator()
+        song = None
+        try:
+            song = generator.next()
+            self.log("found song")
+        except StopIteration:
+            if self._songs:
+                song = self._songs.popleft()
+                while self.is_blocked(
+                    song.get_artist()) and self._songs:
+                    song = self._songs.pop()
+                if self.is_blocked(song.get_artist()):
+                    song = None
+        try:
+            song2 = generator.next()
+        except StopIteration:
+            song2 = None
+        if (song2 and not (song is song2) and not
+            self.is_blocked(song2.get_artist())
+            and not song2 in self._songs):
+            self._songs = deque([
+                bsong for bsong in list(self._songs) if not
+                self.is_blocked(bsong.get_artist())])
+            self._songs.appendleft(song2)
+            if len(self._songs) > 10:
+                self._songs.pop()
+            if self._songs:
+                self.log("%s backup songs: \n%s" % (
+                    len(self._songs),
+                    "\n".join(["%s - %s" % (
+                    bsong.get_artist(),
+                    bsong.get_title()) for bsong in list(self._songs)])))
+        if song:
+            self.player_enqueue(song)
+            return True
+        else:
+            return False
+    
+    def fill_queue(self):
         """search for appropriate songs and put them in the queue"""
         self.running = True
         self.connection = sqlite3.connect(self.db)
+        if self.desired_queue_length == 0:
+            self.queue_song()
         while self.queue_needs_songs():
-            self.unblock_artists()
-            generator = self.song_generator()
-            song = None
-            try:
-                song = generator.next()
-                self.log("found song")
-            except StopIteration:
-                if self._songs:
-                    song = self._songs.popleft()
-                    while self.is_blocked(
-                        song.get_artist()) and self._songs:
-                        song = self._songs.pop()
-                    if self.is_blocked(song.get_artist()):
-                        song = None
-            try:
-                song2 = generator.next()
-            except StopIteration:
-                song2 = None
-            if (song2 and not (song is song2) and not
-                self.is_blocked(song2.get_artist())
-                and not song2 in self._songs):
-                self._songs = deque([
-                    bsong for bsong in list(self._songs) if not
-                    self.is_blocked(bsong.get_artist())])
-                self._songs.appendleft(song2)
-                if len(self._songs) > 10:
-                    self._songs.pop()
-                if self._songs:
-                    self.log("%s backup songs: \n%s" % (
-                        len(self._songs),
-                        "\n".join(["%s - %s" % (
-                        bsong.get_artist(),
-                        bsong.get_title()) for bsong in list(self._songs)])))
-            if song:
-                self.player_enqueue(song)
-            else:
+            if not self.queue_song():
                 break
-            
         for artist_id in self._artists_to_update:
             self._update_similar_artists(
                 artist_id, self._artists_to_update[artist_id])
