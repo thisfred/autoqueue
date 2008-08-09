@@ -82,6 +82,7 @@ class Cache(object):
         
     def __call__(self, func):
         def wrapper(*orig_args):
+            """decorator function wrapper"""
             args = orig_args[:]
             if args in self.t1: 
                 self.t1.remove(args)
@@ -137,15 +138,15 @@ class SongBase(object):
     
     def get_artist(self):
         """return lowercase UNICODE name of artist"""
-        raise NotImplemented
+        return NotImplemented
 
     def get_title(self):
         """return lowercase UNICODE title of song"""
-        raise NotImplemented
+        return NotImplemented
 
     def get_tags(self):
         """return a list of tags for the songs"""
-        raise NotImplemented
+        return NotImplemented
 
 
 class AutoQueueBase(object):
@@ -201,30 +202,30 @@ class AutoQueueBase(object):
 
     def player_get_userdir(self):
         """get the application user directory to store files"""
-        raise NotImplemented
+        return NotImplemented
     
     def player_construct_track_search(self, artist, title, restrictions):
         """construct a search that looks for songs with this artist
         and title"""
-        raise NotImplemented
+        return NotImplemented
     
     def player_construct_tag_search(self, tags, exclude_artists, restrictions):
         """construct a search that looks for songs with these
         tags"""
-        raise NotImplemented
+        return NotImplemented
     
     def player_construct_artist_search(self, artist, restrictions):
         """construct a search that looks for songs with this artist"""
-        raise NotImplemented
+        return NotImplemented
         
     def player_construct_restrictions(
         self, track_block_time, relaxors, restrictors):
         """contstruct a search to further modify the searches"""
-        raise NotImplemented
+        return NotImplemented
 
     def player_set_variables_from_config(self):
         """Initialize user settings from the configuration storage"""
-        raise NotImplemented
+        return NotImplemented
 
     def player_get_queue_length(self):
         """Get the current length of the queue"""
@@ -232,11 +233,11 @@ class AutoQueueBase(object):
 
     def player_enqueue(self, song):
         """Put the song at the end of the queue"""
-        raise NotImplemented
+        return NotImplemented
 
     def player_search(self, search):
         """perform a player search"""
-        raise NotImplemented
+        return NotImplemented
 
     def player_get_songs_in_queue(self):
         """return (wrapped) song objects for the songs in the queue"""
