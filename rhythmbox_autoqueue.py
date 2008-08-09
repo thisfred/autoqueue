@@ -121,7 +121,6 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         result = []
         for row in query_model:
             result.append(Song(row[0], self.rdb))
-        print 'result: ' + repr(result)
         return result
 
     def player_get_songs_in_queue(self):
