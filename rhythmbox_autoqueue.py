@@ -63,6 +63,12 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         sp = shell.get_player()
         sp.disconnect(self.pec_id)
 
+    def log(self, msg):
+        """print debug messages"""
+        if not self.verbose:
+            return
+        print msg
+
     def playing_entry_changed(self, sp, entry):
         if entry:
             self.on_song_started(Song(entry, self.rdb))
