@@ -174,26 +174,25 @@ class AutoQueueBase(object):
         self._tracks_to_update = {}
         self._last_call = datetime.now()
         self.player_set_variables_from_config()
-        self.dump = os.path.join(
-            self.player_get_userdir(), "autoqueue_block_cache")
-        self.db = os.path.join(self.player_get_userdir(), "similarity.db")
-
-        try:
-            pickle = open(self.dump, 'r')
-            try:
-                unpickler = Unpickler(pickle)
-                artists, times = unpickler.load()
-                if isinstance(artists, list):
-                    artists = deque(artists)
-                if isinstance(times, list):
-                    times = deque(times)
-                self._blocked_artists = artists
-                self._blocked_artists_times = times
-            finally:
-                pickle.close()
-        except IOError:
-            pass
         if self.cache:
+            self.dump = os.path.join(
+                self.player_get_userdir(), "autoqueue_block_cache")
+            self.db = os.path.join(self.player_get_userdir(), "similarity.db")
+            try:
+                pickle = open(self.dump, 'r')
+                try:
+                    unpickler = Unpickler(pickle)
+                    artists, times = unpickler.load()
+                    if isinstance(artists, list):
+                        artists = deque(artists)
+                    if isinstance(times, list):
+                        times = deque(times)
+                    self._blocked_artists = artists
+                    self._blocked_artists_times = times
+                finally:
+                    pickle.close()
+            except IOError:
+                pass
             try:
                 os.stat(self.db)
                 #self.prune_db()
@@ -229,7 +228,7 @@ class AutoQueueBase(object):
 
     def player_get_queue_length(self):
         """Get the current length of the queue"""
-        raise NotImplemented
+        return 0
 
     def player_enqueue(self, song):
         """Put the song at the end of the queue"""
@@ -241,7 +240,7 @@ class AutoQueueBase(object):
 
     def player_get_songs_in_queue(self):
         """return (wrapped) song objects for the songs in the queue"""
-        raise NotImplemented
+        return []
     
     def on_song_started(self, song):
         """Should be called by the plugin when a new song starts. If
@@ -351,20 +350,22 @@ class AutoQueueBase(object):
     def fill_queue(self):
         """search for appropriate songs and put them in the queue"""
         self.running = True
-        self.connection = sqlite3.connect(self.db)
+        if self.cache:
+            self.connection = sqlite3.connect(self.db)
         if self.desired_queue_length == 0:
             self.queue_song()
         while self.queue_needs_songs():
             if not self.queue_song():
                 break
-        for artist_id in self._artists_to_update:
-            self._update_similar_artists(
-                artist_id, self._artists_to_update[artist_id])
-        self._artists_to_update = {}
-        for track_id in self._tracks_to_update:
-            self._update_similar_tracks(
-                track_id, self._tracks_to_update[track_id])
-        self.connection.commit()
+        if self.cache:
+            for artist_id in self._artists_to_update:
+                self._update_similar_artists(
+                    artist_id, self._artists_to_update[artist_id])
+            self._artists_to_update = {}
+            for track_id in self._tracks_to_update:
+                self._update_similar_tracks(
+                    track_id, self._tracks_to_update[track_id])
+            self.connection.commit()
         self._tracks_to_update = {}
         self.running = False
    
@@ -377,18 +378,20 @@ class AutoQueueBase(object):
         self.log("Blocked artist: %s (%s)" % (
             artist_name,
             len(self._blocked_artists)))
-        try:
-            os.remove(self.dump)
-        except OSError:
-            pass
+        if self.cache:
+            try:
+                os.remove(self.dump)
+            except OSError:
+                pass
         if len(self._blocked_artists) == 0:
             return
-        pickle_file = open(self.dump, 'w')
-        pickler = Pickler(pickle_file, -1)
-        to_dump = (self._blocked_artists,
-                   self._blocked_artists_times)
-        pickler.dump(to_dump)
-        pickle_file.close()
+        if self.cache:
+            pickle_file = open(self.dump, 'w')
+            pickler = Pickler(pickle_file, -1)
+            to_dump = (self._blocked_artists,
+                       self._blocked_artists_times)
+            pickler.dump(to_dump)
+            pickle_file.close()
 
     def unblock_artists(self):
         """release blocked artists when they've been in the penalty
@@ -764,21 +767,3 @@ class AutoQueueBase(object):
             'id FROM artists);'
             )
         connection.commit()
-        
-    def dump_stuff(self):
-        """dump persistent data to pickles
-        """
-        try:
-            os.remove(self.dump)
-        except OSError:
-            pass
-        if len(self._blocked_artists) == 0:
-            return 0
-        pickle = open(self.dump, 'w')
-        try:
-            pickler = Pickler(pickle, -1)
-            to_dump = (self._blocked_artists, self._blocked_artists_times)
-            pickler.dump(to_dump)
-        finally:
-            pickle.close()
-        return 0
