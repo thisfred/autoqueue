@@ -383,10 +383,12 @@ class AutoQueueBase(object):
             pass
         if len(self._blocked_artists) == 0:
             return
-        pickler = Pickler(open(self.dump, 'w'), -1)
+        pickle_file = open(self.dump, 'w')
+        pickler = Pickler(pickle_file, -1)
         to_dump = (self._blocked_artists,
                    self._blocked_artists_times)
         pickler.dump(to_dump)
+        pickle_file.close()
 
     def unblock_artists(self):
         """release blocked artists when they've been in the penalty
