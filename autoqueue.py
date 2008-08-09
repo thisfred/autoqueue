@@ -196,7 +196,7 @@ class AutoQueueBase(object):
         if self.cache:
             try:
                 os.stat(self.db)
-                self.prune_db()
+                #self.prune_db()
             except OSError:
                 self.create_db()
 
