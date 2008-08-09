@@ -6,20 +6,6 @@ This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation"""
 
-from collections import deque
-from datetime import datetime, timedelta
-from time import strptime, sleep
-import urllib, threading
-import random, os
-from xml.dom import minidom
-from cPickle import Pickler, Unpickler
-
-try:
-    import sqlite3
-    SQL = True
-except ImportError:
-    SQL = False
-
 import const, gtk
 from plugins.events import EventPlugin
 from widgets import main
@@ -126,7 +112,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         self.on_song_started(song)
         
     def PluginPreferences(self, parent):
-
         def bool_changed(widget):
             if widget.get_active():
                 setattr(self, widget.get_name(), True)
@@ -169,7 +154,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             label = gtk.Label('%s:' % INT_SETTINGS[setting]['label'])
             entry = gtk.Entry()
             table.attach(label, 0, 1, j, j+1, xoptions=gtk.FILL | gtk.SHRINK)
-            table.attach(entry, 1, 2 ,j, j+1, xoptions=gtk.FILL | gtk.SHRINK)
+            table.attach(entry, 1, 2, j, j+1, xoptions=gtk.FILL | gtk.SHRINK)
             entry.connect('changed', int_changed, setting)
             try:
                 entry.set_text(
@@ -181,7 +166,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             label = gtk.Label('%s:' % STR_SETTINGS[setting]['label'])
             entry = gtk.Entry()
             table.attach(label, 0, 1, j, j+1, xoptions=gtk.FILL | gtk.SHRINK)
-            table.attach(entry, 1, 2 ,j, j+1, xoptions=gtk.FILL | gtk.SHRINK)
+            table.attach(entry, 1, 2, j, j+1, xoptions=gtk.FILL | gtk.SHRINK)
             entry.connect('changed', str_changed, setting)
             try:
                 entry.set_text(config.get('plugins', 'autoqueue_%s' % setting))
