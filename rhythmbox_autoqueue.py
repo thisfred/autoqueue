@@ -47,6 +47,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
     def __init__(self):
         rb.Plugin.__init__(self)
         AutoQueueBase.__init__(self)
+        self.verbose = True
         self.cache = False
         self.threaded = False
         
@@ -105,7 +106,10 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
 
     def player_get_queue_length(self):
         """Get the current length of the queue"""
-        return 0
+        return sum([
+            self.rdb.entry_get(
+            row[0], rhythmdb.PROP_DURATION) for row in
+            self.shell.props.queue_source.props.query_model])
 
     def player_enqueue(self, song):
         """Put the song at the end of the queue"""
@@ -125,4 +129,6 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
 
     def player_get_songs_in_queue(self):
         """return (wrapped) song objects for the songs in the queue"""
-        return []
+        return [
+            Song(row[0], self.rdb) for row in
+            self.shell.props.queue_source.props.query_model]
