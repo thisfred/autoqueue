@@ -303,12 +303,13 @@ class AutoQueueBase(object):
             tags = self.get_last_song().get_tags()
             if tags:
                 self.log("Searching for tags: %s" % tags)
-                search = self.player_construct_tag_search(tags, restrictions)
+                search = self.player_construct_tag_search(
+                    tags, self.get_blocked_artists() , restrictions)
                 for song in self.player_search(search):
                     yield song
-        return
 
     def queue_song(self):
+        """Queue a single track"""
         self.unblock_artists()
         generator = self.song_generator()
         song = None
