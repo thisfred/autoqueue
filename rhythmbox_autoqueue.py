@@ -19,8 +19,7 @@ import rhythmdb
 
 from autoqueue import AutoQueueBase, SongBase
 
-#XXX FILL IN FOR TESTING
-GCONFPATH = '.'
+GCONFPATH = '/apps/rhythmbox/plugins/lastfm_queue/'
 
 class Song(SongBase):
     """A wrapper object around rhythmbox song objects."""
@@ -76,7 +75,8 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         
     def player_get_userdir(self):
         """get the application user directory to store files"""
-        return GCONFPATH
+        #XXX Steal from charlotte 
+        return ''
     
     def player_construct_track_search(self, artist, title, restrictions):
         """construct a search that looks for songs with this artist
@@ -102,6 +102,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
 
     def player_set_variables_from_config(self):
         """Initialize user settings from the configuration storage"""
+        #XXX Steal from charlotte 
         pass
 
     def player_get_queue_length(self):
