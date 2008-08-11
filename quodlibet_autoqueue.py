@@ -108,7 +108,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         we start looking for new songs to queue."""
         if song:
             song = Song(song)
-        self.on_song_started(song)
+            self.on_song_started(song)
         
     def PluginPreferences(self, parent):
         def bool_changed(widget):
