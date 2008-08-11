@@ -14,7 +14,7 @@ from qltk import Frame
 from library import library
 import config
 
-from autoqueue import AutoQueueBase, SongBase
+from autoqueue import AutoQueueBase, SongBase, SQL
 
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) api key from last.fm here:
