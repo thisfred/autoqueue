@@ -90,8 +90,8 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     __enabled = False
   
     def __init__(self):
-        # Set up exit hook to dump cache
         super(AutoQueue, self).__init__()
+        self.cache = True
                
     def enabled(self):
         """user enabled the plugin"""
@@ -204,6 +204,8 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         tags"""
         search = ''
         search_tags = []
+        excluding = '&(%s)' % ', '.join(
+            ["!artist ='%s'" % escape(a) for a in exclude_artists])
         for tag in tags:
             if tag.startswith("artist:") or tag.startswith(
                 "album:"):
@@ -216,7 +218,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 'tag = "artist:%s"' % stripped,
                 'tag = "album:%s"' % stripped])
         search = "&(|(%s),%s,%s)" % (
-            ",".join(search_tags), exclude_artists, restrictions)
+            ",".join(search_tags), excluding, restrictions)
         return search
     
     def player_construct_artist_search(self, artist, restrictions):
