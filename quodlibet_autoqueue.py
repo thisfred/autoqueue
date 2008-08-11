@@ -92,7 +92,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     def __init__(self):
         # Set up exit hook to dump cache
         super(AutoQueue, self).__init__()
-        gtk.quit_add(0, self.dump_stuff)
                
     def enabled(self):
         """user enabled the plugin"""
