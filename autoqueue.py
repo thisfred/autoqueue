@@ -40,7 +40,7 @@ class Cache(object):
     >>> dec_cache = Cache(10)
     >>> @dec_cache
     ... def identity(f):
-    ...     pass
+    ...     return f
     >>> dummy = [identity(x) for x in range(20) + range(11,15) + range(20) +
     ... range(11,40) + [39, 38, 37, 36, 35, 34, 33, 32, 16, 17, 11, 41]] 
     >>> dec_cache.t1
@@ -53,12 +53,6 @@ class Cache(object):
     deque([(38,), (39,), (19,), (18,), (15,), (14,), (13,), (12,)])
     >>> dec_cache.p
     5
-    >>> identity(41)
-    41
-    >>> identity(32)
-    32
-    >>> identity(16)
-    16
     """
     def __init__(self, size):
         self.cached = {}
@@ -132,7 +126,34 @@ class Cache(object):
 
 
 class SongBase(object):
-    """A wrapper object around player specific song objects."""
+    """A wrapper object around player specific song objects.
+
+    >>> class MySong(SongBase):
+    ...     def get_artist(self):
+    ...         return self.song['artist']
+    ...
+    ...     def get_title(self):
+    ...         return self.song['title']
+    ...
+    ...     def get_tags(self):
+    ...         return self.song['tags']
+    ...
+    >>> songobject = {
+    ...     'artist': 'Joni Mitchell',
+    ...     'title': 'Carey',
+    ...     'tags': ['matala', 'crete', 'places', 'villages', 'islands',
+    ...         'female vocals']}
+    ...
+    >>> testSong = MySong(songobject)
+    >>> testSong.get_artist()
+    'Joni Mitchell'
+    >>> testSong.get_title()
+    'Carey'
+    >>> testSong.get_tags()
+    ['matala', 'crete', 'places', 'villages', 'islands', 'female vocals']
+    """
+    
+
     def __init__(self, song):
         self.song = song
     
@@ -769,3 +790,12 @@ class AutoQueueBase(object):
             'id FROM artists);'
             )
         connection.commit()
+
+
+def _test():
+    import doctest
+    doctest.testmod()
+
+if __name__ == "__main__":
+    _test()
+
