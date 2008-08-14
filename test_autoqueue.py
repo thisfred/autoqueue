@@ -53,6 +53,42 @@ class MyAutoQueue(AutoQueueBase):
             (2501, u'al green'), (2326, u'joni mitchell'),
             (2288, u'ray charles'), (2226, u'sam cooke')]}
         return similar_artists.get(artist_name)
+
+    def get_similar_tracks(self, artist_name, title):
+        similar_tracks = {
+            ('joni mitchell', 'carey'): 
+            [(838, u'nick drake', u'things behind the sun'),
+             (807, u'nick drake', u'horn'),
+             (715, u'joanna newsom', u'peach, plum, pear'),
+             (700, u'leonard cohen', u'suzanne'),
+             (691, u'joanna newsom', u'sprout and the bean'),
+             (664, u'bob dylan', u"blowin' in the wind"),
+             (635, u'leonard cohen', u'famous blue raincoat'),
+             (598, u'simon & garfunkel', u'song for the asking'),
+             (593, u'bob dylan', u"the times they are a-changin'"),
+             (535, u'simon & garfunkel', u'keep the customer satisfied'),
+             (520, u'cat stevens', u'peace train'),
+             (511, u'james taylor', u'fire and rain'),
+             (451, u'james taylor', u'enough to be on your way'),
+             (449, u'judee sill', u"that's the spirit"),
+             (449, u'joan baez', u'asimbonanga')],
+            ('nina simone', "i think it's going to rain today"):
+            [(446, u'dinah washington', u'our love is here to stay'),
+             (444, u'dinah washington', u'love for sale'),
+             (443, u'marlena shaw', u'will i find my love today?'),
+             (438, u'minnie riperton', u'reasons'),
+             (436, u'minnie riperton', u'adventures in paradise'),
+             (428, u'cassandra wilson', u'find him'),
+             (426, u'al jarreau', u'jacaranda bougainvillea'),
+             (426, u'jimmy smith and wes montgomery', u'mellow mood'),
+             (421, u'alice russell', u"i'm just here"),
+             (419, u'aretha franklin', u'love for sale'),
+             (419, u'al jarreau', u'better than anything (live version)'),
+             (418, u'natalie williams', u'remember the day'),
+             (418, u'natalie williams', u'girlfriend'),
+             (415, u'sarah vaughan', u'i could write a book'),
+             (415, u'sarah vaughan', u'honeysuckle rose'),]}
+        return similar_tracks.get((artist_name, title))
         
 class TestSong(object):
     def setup(self):
@@ -100,5 +136,4 @@ class TestAutoQueue(object):
         artist_id = self.autoqueue.get_artist(artist)[0]
         row = self.autoqueue.get_track(artist, title)
         assert_equals((artist_id, title, None), row[1:])
-
 
