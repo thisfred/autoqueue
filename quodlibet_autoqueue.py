@@ -90,7 +90,8 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     __enabled = False
   
     def __init__(self):
-        super(AutoQueue, self).__init__()
+        EventPlugin.__init__(self)
+        AutoQueueBase.__init__(self)
         self.cache = True
                
     def enabled(self):
