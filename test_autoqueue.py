@@ -201,6 +201,11 @@ class TestAutoQueue(object):
               (2501, u'al green'), (2326, u'joni mitchell'),
               (2288, u'ray charles'), (2226, u'sam cooke')]
         assert_equals(td, similar_artists)
+        row = self.autoqueue.get_artist(artist)
+        assert_equals((artist, None), row[1:])
+        artist = 'dionne warwick'
+        row = self.autoqueue.get_artist(artist)
+        assert_equals((artist, None), row[1:])
 
     def test_get_sorted_similar_tracks(self):
         artist = 'joni mitchell'
@@ -223,3 +228,12 @@ class TestAutoQueue(object):
               (449, u'judee sill', u"that's the spirit"),
               (449, u'joan baez', u'asimbonanga')]
         assert_equals(td, similar_tracks)
+        artist_id = self.autoqueue.get_artist(artist)[0]
+        row = self.autoqueue.get_track(artist, title)
+        assert_equals((artist_id, title, None), row[1:])
+        artist = 'leonard cohen'
+        title = 'suzanne'
+        artist_id = self.autoqueue.get_artist(artist)[0]
+        row = self.autoqueue.get_track(artist, title)
+        assert_equals((artist_id, title, None), row[1:])
+        
