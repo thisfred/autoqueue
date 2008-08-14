@@ -1,7 +1,8 @@
 """AutoQueue: an automatic queueing plugin library.
 version 0.3
 
-Copyright 2007-2008 Eric Casteleijn <thisfred@gmail.com>
+Copyright 2007-2008 Eric Casteleijn <thisfred@gmail.com>,
+                    Daniel Nouri <daniel.nouri@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
@@ -465,11 +466,8 @@ class AutoQueueBase(object):
         tags2 = list(set([tag.split(":")[-1] for tag in tags2]))
         return len([tag for tag in tags2 if tag in tags1])
 
-    def get_similar_tracks(self):
+    def get_similar_tracks(self, artist_name, title):
         """get similar tracks to the last one in the queue"""
-        last_song = self.get_last_song()
-        artist_name = last_song.get_artist()
-        title = last_song.get_title()
         self.log("Getting similar tracks from last.fm for: %s - %s" % (
             artist_name, title))
         enc_artist_name = artist_name.encode("utf-8")
@@ -482,13 +480,8 @@ class AutoQueueBase(object):
         url = TRACK_URL % (
             urllib.quote(enc_artist_name),
             urllib.quote(enc_title))
-        try:
-            while self._last_call + WAIT_BETWEEN_REQUESTS > datetime.now():
-                sleep(5)
-            stream = urllib.urlopen(url)
-            xmldoc = minidom.parse(stream).documentElement
-            self._last_call = datetime.now()
-        except:
+        xmldoc = self.last_fm_request(url)
+        if xmldoc is None:
             return []
         tracks = []
         nodes = xmldoc.getElementsByTagName("track")
@@ -509,22 +502,17 @@ class AutoQueueBase(object):
             tracks.append((match, similar_artist, similar_title))
         return tracks
             
-    def get_similar_artists(self):
-        """get similar artists to that of the last song in the queue"""
-        artist_name = self.get_last_song().get_artist()
+    def get_similar_artists(self, artist_name):
+        """get similar artists"""
+
         self.log("Getting similar artists from last.fm for: %s " % artist_name)
         if ("&" in artist_name or "/" in artist_name or "?" in artist_name
             or "#" in artist_name):
             artist_name = urllib.quote_plus(artist_name)
         url = ARTIST_URL % (
             urllib.quote(artist_name.encode("utf-8")))
-        try:
-            while self._last_call + WAIT_BETWEEN_REQUESTS > datetime.now():
-                sleep(5)
-            stream = urllib.urlopen(url)
-            xmldoc = minidom.parse(stream).documentElement
-            self._last_call = datetime.now()
-        except:
+        xmldoc = self.last_fm_request(url)
+        if xmldoc is None:
             return []
         artists = []
         nodes = xmldoc.getElementsByTagName("artist")
@@ -538,6 +526,17 @@ class AutoQueueBase(object):
             artists.append((match, name))
         return artists
 
+    def last_fm_request(self, url):
+        try:
+            while self._last_call + WAIT_BETWEEN_REQUESTS > datetime.now():
+                sleep(5)
+            stream = urllib.urlopen(url)
+            xmldoc = minidom.parse(stream).documentElement
+            self._last_call = datetime.now()
+            return xmldoc
+        except:
+            return None
+    
     @Cache(1000)
     def get_artist(self, artist_name):
         """get artist information from the database"""
@@ -579,7 +578,9 @@ class AutoQueueBase(object):
         """get similar artists from the database sorted by descending
         match score"""
         if not self.use_db:
-            return sorted(list(set(self.get_similar_artists())), reverse=True)
+            artist_name = self.get_last_song().get_artist()
+            return sorted(
+                list(set(self.get_similar_artists(artist_name))), reverse=True)
         artist = self.get_artist(self.get_last_song().get_artist())
         artist_id, updated = artist[0], artist[2]
         cursor = self.connection.cursor()
@@ -603,7 +604,8 @@ class AutoQueueBase(object):
                     (artist_id,))
                 return sorted(list(set(cursor.fetchall() + reverse_lookup)),
                             reverse=True)
-        similar_artists = self.get_similar_artists()
+        artist_name = self.get_last_song().get_artist()
+        similar_artists = self.get_similar_artists(artist_name)
         self._artists_to_update[artist_id] = similar_artists
         return sorted(list(set(similar_artists + reverse_lookup)), reverse=True)
 
@@ -611,7 +613,12 @@ class AutoQueueBase(object):
         """get similar tracks from the database sorted by descending
         match score"""
         if not self.use_db:
-            return sorted(list(set(self.get_similar_tracks())), reverse=True)
+            last_song = self.get_last_song()
+            artist_name = last_song.get_artist()
+            title = last_song.get_title()            
+            return sorted(
+                list(set(self.get_similar_tracks(artist_name, title))),
+                reverse=True)
         last_song = self.get_last_song()
         artist = last_song.get_artist()
         title = last_song.get_title()
@@ -639,7 +646,10 @@ class AutoQueueBase(object):
                     (track_id,))
                 return sorted(list(set(cursor.fetchall() + reverse_lookup)),
                               reverse=True)
-        similar_tracks = self.get_similar_tracks()
+        last_song = self.get_last_song()
+        artist_name = last_song.get_artist()
+        title = last_song.get_title()
+        similar_tracks = self.get_similar_tracks(artist_name, title)
         self._tracks_to_update[track_id] = similar_tracks
         return sorted(list(set(similar_tracks + reverse_lookup)), reverse=True)
 
