@@ -47,8 +47,6 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         rb.Plugin.__init__(self)
         AutoQueueBase.__init__(self)
         self.verbose = True
-        self.cache = False
-        self.threaded = False
         
     def activate(self, shell):
         self.shell = shell

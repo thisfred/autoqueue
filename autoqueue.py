@@ -126,34 +126,7 @@ class Cache(object):
 
 
 class SongBase(object):
-    """A wrapper object around player specific song objects.
-
-    >>> class MySong(SongBase):
-    ...     def get_artist(self):
-    ...         return self.song['artist']
-    ...
-    ...     def get_title(self):
-    ...         return self.song['title']
-    ...
-    ...     def get_tags(self):
-    ...         return self.song['tags']
-    ...
-    >>> songobject = {
-    ...     'artist': 'Joni Mitchell',
-    ...     'title': 'Carey',
-    ...     'tags': ['matala', 'crete', 'places', 'villages', 'islands',
-    ...         'female vocals']}
-    ...
-    >>> testSong = MySong(songobject)
-    >>> testSong.get_artist()
-    'Joni Mitchell'
-    >>> testSong.get_title()
-    'Carey'
-    >>> testSong.get_tags()
-    ['matala', 'crete', 'places', 'villages', 'islands', 'female vocals']
-    """
-    
-
+    """A wrapper object around player specific song objects."""
     def __init__(self, song):
         self.song = song
     
@@ -172,9 +145,11 @@ class SongBase(object):
 
 class AutoQueueBase(object):
     """Generic base class for autoqueue plugins."""
-    cache = False
+    use_db = False
+    store_blocked_artists = False
+    in_memory = False 
+    threaded = False
     def __init__(self):
-        self.threaded = True
         self.artist_block_time = 1
         self.track_block_time = 30
         self.desired_queue_length = 0
@@ -196,34 +171,15 @@ class AutoQueueBase(object):
         self._tracks_to_update = {}
         self._last_call = datetime.now()
         self.player_set_variables_from_config()
-        if self.cache:
-            self.dump = os.path.join(
-                self.player_get_userdir(), "autoqueue_block_cache")
-            self.db = os.path.join(self.player_get_userdir(), "similarity.db")
-            try:
-                pickle = open(self.dump, 'r')
-                try:
-                    unpickler = Unpickler(pickle)
-                    artists, times = unpickler.load()
-                    if isinstance(artists, list):
-                        artists = deque(artists)
-                    if isinstance(times, list):
-                        times = deque(times)
-                    self._blocked_artists = artists
-                    self._blocked_artists_times = times
-                finally:
-                    pickle.close()
-            except IOError:
-                pass
-            try:
-                os.stat(self.db)
-                #self.prune_db()
-            except OSError:
-                self.create_db()
+        if self.store_blocked_artists:
+            self.get_blocked_artists_pickle()
+        if self.use_db:
+            self.check_db()
 
     def player_get_userdir(self):
         """get the application user directory to store files"""
         return NotImplemented
+
     
     def player_construct_track_search(self, artist, title, restrictions):
         """construct a search that looks for songs with this artist
@@ -263,7 +219,46 @@ class AutoQueueBase(object):
     def player_get_songs_in_queue(self):
         """return (wrapped) song objects for the songs in the queue"""
         return []
+
+    def check_db(self):
+        if self.in_memory:
+            self.create_db()
+            return
+        try:
+            os.stat(self.get_db_path())
+        except OSError:
+            self.create_db()
+
+    def get_blocked_artists_pickle(self):
+        self.dump = os.path.join(
+            self.player_get_userdir(), "autoqueue_block_cache")
+        try:
+            pickle = open(self.dump, 'r')
+            try:
+                unpickler = Unpickler(pickle)
+                artists, times = unpickler.load()
+                if isinstance(artists, list):
+                    artists = deque(artists)
+                if isinstance(times, list):
+                    times = deque(times)
+                self._blocked_artists = artists
+                self._blocked_artists_times = times
+            finally:
+                pickle.close()
+        except IOError:
+            pass
+        
+    def get_db_path(self):
+        return os.path.join(self.player_get_userdir(), "similarity.db")
     
+    def get_database_connection(self):
+        """get database reference"""
+        if self.in_memory:
+            if self.connection:
+                return self.connection
+            return sqlite3.connect(":memory:")
+        return sqlite3.connect(self.get_db_path())
+
     def on_song_started(self, song):
         """Should be called by the plugin when a new song starts. If
         the right conditions apply, we start looking for new songs to
@@ -373,14 +368,14 @@ class AutoQueueBase(object):
     def fill_queue(self):
         """search for appropriate songs and put them in the queue"""
         self.running = True
-        if self.cache:
-            self.connection = sqlite3.connect(self.db)
+        if self.use_db:
+            self.connection = self.get_database_connection()
         if self.desired_queue_length == 0:
             self.queue_song()
         while self.queue_needs_songs():
             if not self.queue_song():
                 break
-        if self.cache:
+        if self.use_db:
             for artist_id in self._artists_to_update:
                 self._update_similar_artists(
                     artist_id, self._artists_to_update[artist_id])
@@ -401,14 +396,14 @@ class AutoQueueBase(object):
         self.log("Blocked artist: %s (%s)" % (
             artist_name,
             len(self._blocked_artists)))
-        if self.cache:
+        if self.store_blocked_artists:
             try:
                 os.remove(self.dump)
             except OSError:
                 pass
         if len(self._blocked_artists) == 0:
             return
-        if self.cache:
+        if self.store_blocked_artists:
             pickle_file = open(self.dump, 'w')
             pickler = Pickler(pickle_file, -1)
             to_dump = (self._blocked_artists,
@@ -583,7 +578,7 @@ class AutoQueueBase(object):
     def get_sorted_similar_artists(self):
         """get similar artists from the database sorted by descending
         match score"""
-        if not self.cache:
+        if not self.use_db:
             return sorted(list(set(self.get_similar_artists())), reverse=True)
         artist = self.get_artist(self.get_last_song().get_artist())
         artist_id, updated = artist[0], artist[2]
@@ -615,7 +610,7 @@ class AutoQueueBase(object):
     def get_sorted_similar_tracks(self):
         """get similar tracks from the database sorted by descending
         match score"""
-        if not self.cache:
+        if not self.use_db:
             return sorted(list(set(self.get_similar_tracks())), reverse=True)
         last_song = self.get_last_song()
         artist = last_song.get_artist()
@@ -751,7 +746,7 @@ class AutoQueueBase(object):
         """ Set up a database for the artist and track similarity scores
         """
         self.log("create_db")
-        connection = sqlite3.connect(self.db)
+        connection = self.get_database_connection()
         cursor = connection.cursor()
         cursor.execute(
             'CREATE TABLE artists (id INTEGER PRIMARY KEY, name'
@@ -766,11 +761,13 @@ class AutoQueueBase(object):
             'CREATE TABLE track_2_track (track1 INTEGER, track2 INTEGER,'
             ' match INTEGER)')
         connection.commit()
-
+        if self.in_memory:
+            self.connection = connection
+            
     def prune_db(self):
         """clean up the database: remove tracks and artists that are
         never played"""
-        connection = sqlite3.connect(self.db)
+        connection = self.get_database_connection()
         cursor = connection.cursor()
         cursor.execute(
             'DELETE FROM tracks WHERE updated IS NULL AND tracks.id NOT IN'
@@ -790,12 +787,3 @@ class AutoQueueBase(object):
             'id FROM artists);'
             )
         connection.commit()
-
-
-def _test():
-    import doctest
-    doctest.testmod()
-
-if __name__ == "__main__":
-    _test()
-

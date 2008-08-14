@@ -90,10 +90,11 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     __enabled = False
   
     def __init__(self):
-        self.cache = True
+        self.use_db = True
+        self.store_blocked_artists = True
+        self.threaded = True
         EventPlugin.__init__(self)
         AutoQueueBase.__init__(self)
-
                
     def enabled(self):
         """user enabled the plugin"""
@@ -177,7 +178,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         return table
 
     # Implement the player specific methods needed by autoqueue
-    
+
     def player_get_userdir(self):
         """get the application user directory to store files"""
         try:
