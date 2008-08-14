@@ -297,7 +297,11 @@ class AutoQueueBase(object):
         restrictions = self.player_construct_restrictions(
             self.track_block_time, self.relaxors, self.restrictors)
         if self.by_tracks:
-            for match, artist, title in self.get_sorted_similar_tracks():
+            last_song = self.get_last_song()
+            artist_name = last_song.get_artist()
+            title = last_song.get_title()
+            for match, artist, title in self.get_sorted_similar_tracks(
+                artist_name, title):
                 if self.is_blocked(artist):
                     continue
                 self.log("looking for: %s, %s, %s" % (match, artist, title))
@@ -307,7 +311,9 @@ class AutoQueueBase(object):
                 if songs:
                     yield random.choice(songs)
         if self.by_artists:
-            for match, artist in self.get_sorted_similar_artists():
+            last_song = self.get_last_song()
+            artist_name = last_song.get_artist()
+            for match, artist in self.get_sorted_similar_artists(artist_name):
                 if self.is_blocked(artist):
                     continue
                 self.log("looking for: %s, %s" % (match, artist))
@@ -574,14 +580,13 @@ class AutoQueueBase(object):
             (artist_id, title))
         return cursor.fetchone()
 
-    def get_sorted_similar_artists(self):
+    def get_sorted_similar_artists(self, artist_name):
         """get similar artists from the database sorted by descending
         match score"""
         if not self.use_db:
-            artist_name = self.get_last_song().get_artist()
             return sorted(
                 list(set(self.get_similar_artists(artist_name))), reverse=True)
-        artist = self.get_artist(self.get_last_song().get_artist())
+        artist = self.get_artist(artist_name)
         artist_id, updated = artist[0], artist[2]
         cursor = self.connection.cursor()
         cursor.execute(
@@ -593,7 +598,6 @@ class AutoQueueBase(object):
         if updated:
             updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
             if updated + timedelta(self.cache_time) > self.now:
-                artist_name = self.get_last_song().get_artist()
                 self.log(
                     "Getting similar artists from db for: %s " %
                     artist_name)
@@ -604,25 +608,18 @@ class AutoQueueBase(object):
                     (artist_id,))
                 return sorted(list(set(cursor.fetchall() + reverse_lookup)),
                             reverse=True)
-        artist_name = self.get_last_song().get_artist()
         similar_artists = self.get_similar_artists(artist_name)
         self._artists_to_update[artist_id] = similar_artists
         return sorted(list(set(similar_artists + reverse_lookup)), reverse=True)
 
-    def get_sorted_similar_tracks(self):
+    def get_sorted_similar_tracks(self, artist_name, title):
         """get similar tracks from the database sorted by descending
         match score"""
         if not self.use_db:
-            last_song = self.get_last_song()
-            artist_name = last_song.get_artist()
-            title = last_song.get_title()            
             return sorted(
                 list(set(self.get_similar_tracks(artist_name, title))),
                 reverse=True)
-        last_song = self.get_last_song()
-        artist = last_song.get_artist()
-        title = last_song.get_title()
-        track = self.get_track(artist, title)
+        track = self.get_track(artist_name, title)
         track_id, updated = track[0], track[3]
         cursor = self.connection.cursor()
         cursor.execute(
@@ -646,9 +643,6 @@ class AutoQueueBase(object):
                     (track_id,))
                 return sorted(list(set(cursor.fetchall() + reverse_lookup)),
                               reverse=True)
-        last_song = self.get_last_song()
-        artist_name = last_song.get_artist()
-        title = last_song.get_title()
         similar_tracks = self.get_similar_tracks(artist_name, title)
         self._tracks_to_update[track_id] = similar_tracks
         return sorted(list(set(similar_tracks + reverse_lookup)), reverse=True)

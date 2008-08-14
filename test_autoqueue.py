@@ -181,3 +181,45 @@ class TestAutoQueue(object):
               (415, u'sarah vaughan', u'i could write a book'),
               (415, u'sarah vaughan', u'honeysuckle rose')]
         assert_equals(td, similar_tracks)
+
+    def test_get_sorted_similar_artists(self):
+        artist = 'nina simone'
+        similar_artists = self.autoqueue.get_sorted_similar_artists(artist)
+        td = [(10000, u'billie holiday'), (7934, u'ella fitzgerald'),
+              (7402, u'sarah vaughan'), (6731, u'dinah washington'),
+              (6518, u'madeleine peyroux'), (6042, u'etta james'),
+              (5065, u'peggy lee'), (4984, u'julie london'),
+              (4905, u'ella fitzgerald & louis armstrong'),
+              (4887, u'blossom dearie'), (4743, u'cassandra wilson'),
+              (4651, u'aretha franklin'), (4488, u'bessie smith'),
+              (4435, u'carmen mcrae'), (4380, u"anita o'day"),
+              (4367, u'nat king cole'), (4311, u'lisa ekdahl'),
+              (3896, u'diana krall'), (3738, u'louis armstrong'),
+              (3385, u'dionne warwick'), (3243, u'corinne bailey rae'),
+              (3206, u'mahalia jackson'), (3064, u'bill withers'),
+              (2720, u'amy winehouse'), (2606, u'dusty springfield'),
+              (2501, u'al green'), (2326, u'joni mitchell'),
+              (2288, u'ray charles'), (2226, u'sam cooke')]
+        assert_equals(td, similar_artists)
+
+    def test_get_sorted_similar_tracks(self):
+        artist = 'joni mitchell'
+        title = 'carey'
+        similar_tracks = self.autoqueue.get_sorted_similar_tracks(
+            artist, title)
+        td = [(838, u'nick drake', u'things behind the sun'),
+              (807, u'nick drake', u'horn'),
+              (715, u'joanna newsom', u'peach, plum, pear'),
+              (700, u'leonard cohen', u'suzanne'),
+              (691, u'joanna newsom', u'sprout and the bean'),
+              (664, u'bob dylan', u"blowin' in the wind"),
+              (635, u'leonard cohen', u'famous blue raincoat'),
+              (598, u'simon & garfunkel', u'song for the asking'),
+              (593, u'bob dylan', u"the times they are a-changin'"),
+              (535, u'simon & garfunkel', u'keep the customer satisfied'),
+              (520, u'cat stevens', u'peace train'),
+              (511, u'james taylor', u'fire and rain'),
+              (451, u'james taylor', u'enough to be on your way'),
+              (449, u'judee sill', u"that's the spirit"),
+              (449, u'joan baez', u'asimbonanga')]
+        assert_equals(td, similar_tracks)
