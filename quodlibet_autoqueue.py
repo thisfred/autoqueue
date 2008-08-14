@@ -131,8 +131,9 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
         def int_changed(entry, key):
             value = entry.get_text()
-            config.set('plugins', 'autoqueue_%s' % key, value)
-            setattr(self, key, int(value))
+            if value:
+                config.set('plugins', 'autoqueue_%s' % key, value)
+                setattr(self, key, int(value))
             
         table = gtk.Table()
         table.set_col_spacings(3)
