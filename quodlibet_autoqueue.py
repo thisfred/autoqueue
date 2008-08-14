@@ -90,9 +90,10 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     __enabled = False
   
     def __init__(self):
+        self.cache = True
         EventPlugin.__init__(self)
         AutoQueueBase.__init__(self)
-        self.cache = True
+
                
     def enabled(self):
         """user enabled the plugin"""
