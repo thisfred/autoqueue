@@ -633,7 +633,7 @@ class AutoQueueBase(object):
             updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
             if updated + timedelta(self.cache_time) > self.now:
                 self.log("Getting similar tracks from db for: %s - %s" % (
-                    artist, title))
+                    artist_name, title))
                 cursor.execute(
                     "SELECT track_2_track.match, artists.name, tracks.title"
                     " FROM track_2_track INNER JOIN tracks ON"
