@@ -1,23 +1,122 @@
 from nose.tools import assert_equals
 from autoqueue import SongBase, AutoQueueBase
 
-class MySong(SongBase):
+class MockPlayer(object):
+    def __init__(self, plugin_on_song_started):
+        self.queue = []
+        self.library = [
+            ('nina simone', "i think it's going to rain today"),
+            ('joni mitchell', 'carey'),
+            ('joanna newsom', 'peach, plum, pear'),
+            ('leonard cohen', 'suzanne'),
+            ('simon & garfunkel', 'song for the asking'),
+            ('bob dylan', "the times they are a-changin'"),
+            ('simon & garfunkel', 'keep the customer satisfied'),
+            ('joanna newsom', 'sprout and the bean'),
+            ('bob dylan', "blowin' in the wind"),
+            ('james taylor', 'fire and rain'),
+            ('leonard cohen', 'famous blue raincoat'),
+            ('al jarreau', 'jacaranda bougainvillea'),
+            ('jimmy smith and wes montgomery', 'mellow mood'),
+            ('marlena shaw', 'will i find my love today?'),
+            ('minnie riperton', 'reasons'),
+            ('aretha franklin', 'love for sale'),
+            ]
+        self.plugin_on_song_started = plugin_on_song_started
+
+    def satisfies_criteria(self, song, criteria):
+        positions = {'artist':0, 'title':1, 'tags':3}
+        for criterium in criteria:
+            if criterium.startswith('not_'):
+                ncriterium = criterium.split("_")[1]
+                if ncriterium == 'tags':
+                    if len(song) < 3:
+                        continue
+                    if set(criteria[ncriterium]) < set(
+                        song[positions[ncriterium]]):
+                        return False
+                else:
+                    if song[positions[criterium]] in criteria[criterium]:
+                        return False
+            else:
+                if criterium == 'tags':
+                    if len(song) < 3:
+                        return False
+                    if not set(criteria[criterium]) < set(
+                        song[positions[criterium]]):
+                        return False
+                else:
+                    if criteria[criterium] != song[positions[criterium]]:
+                        return False
+        return True
+
+    def play_song_from_queue(self):
+        func = self.plugin_on_song_started
+        queue_song = self.queue.pop(0)
+        song = func(queue_song)
+        
+class MockSong(SongBase):
+    def __init__(self, artist, title, tags=None):
+        self.artist = artist
+        self.title = title
+        self.tags = tags
+
     def get_artist(self):
-        return self.song['artist'].lower()
+        return self.artist.lower()
+
     def get_title(self):
-        return self.song['title'].lower()
+        return self.title.lower()
+
     def get_tags(self):
-        return self.song['tags']
+        return self.tags
 
 
-class MyAutoQueue(AutoQueueBase):
+class MockAutoQueue(AutoQueueBase):
     def __init__(self):
-        self.verbose = True
+        self.player = MockPlayer(self.on_song_started)
         self.use_db = True
         self.in_memory = True
         self.threaded = False
-        super(MyAutoQueue, self).__init__()
+        super(MockAutoQueue, self).__init__() 
+        self.verbose = True
+   
+    def player_construct_track_search(self, artist, title, restrictions):
+        search = {'artist': artist, 'title': title}
+        search.update(restrictions)
+        return search
 
+    def player_construct_artist_search(self, artist, restrictions):
+        """construct a search that looks for songs with this artist"""
+        search = {'artist': artist}
+        search.update(restrictions)
+        return search
+    
+    def player_construct_tag_search(self, tags, exclude_artists, restrictions):
+        """construct a search that looks for songs with these
+        tags"""
+        search = {'tags': tags, 'not_artist': exclude_artists}
+        search.update(restrictions)
+        return search
+        
+    def player_construct_restrictions(
+        self, track_block_time, relaxors, restrictors):
+        """contstruct a search to further modify the searches"""
+        return {}
+    
+    def player_get_queue_length(self):
+        return len(self.player.queue)
+
+    def player_enqueue(self, song):
+        self.player.queue.append(song)
+
+    def player_search(self, search):
+        return [
+            MockSong(*song) for song in self.player.library if
+            self.player.satisfies_criteria(song, search)]
+
+    def player_get_songs_in_queue(self):
+        return self.player.queue
+        
     def get_similar_artists(self, artist_name):
         similar_artists = {
             'joni mitchell': [
@@ -52,7 +151,7 @@ class MyAutoQueue(AutoQueueBase):
             (10000, u'billie holiday'), (7934, u'ella fitzgerald'),
             (2501, u'al green'), (2326, u'joni mitchell'),
             (2288, u'ray charles'), (2226, u'sam cooke')]}
-        return similar_artists.get(artist_name)
+        return similar_artists.get(artist_name, [])
 
     def get_similar_tracks(self, artist_name, title):
         similar_tracks = {
@@ -88,17 +187,14 @@ class MyAutoQueue(AutoQueueBase):
              (421, u'alice russell', u"i'm just here"),
              (415, u'sarah vaughan', u'i could write a book'),
              (415, u'sarah vaughan', u'honeysuckle rose'),]}
-        return similar_tracks.get((artist_name, title))
+        return similar_tracks.get((artist_name, title), [])
         
 class TestSong(object):
     def setup(self):
-        songobject = {
-            'artist': 'Joni Mitchell',
-            'title': 'Carey',
-            'tags': ['matala', 'crete', 'places', 'villages', 'islands',
-                     'female vocals']}
-
-        self.song = MySong(songobject)
+        songobject = (
+            'Joni Mitchell', 'Carey', ['matala', 'crete', 'places', 'villages',
+                                       'islands', 'female vocals'])
+        self.song = MockSong(*songobject)
     
     def test_get_artist(self):
         assert_equals('joni mitchell', self.song.get_artist())
@@ -113,7 +209,7 @@ class TestSong(object):
 
 class TestAutoQueue(object):
     def setup(self):
-        self.autoqueue = MyAutoQueue()
+        self.autoqueue = MockAutoQueue()
     
     def test_in_memory(self):
         assert_equals(True, self.autoqueue.in_memory)
@@ -191,4 +287,38 @@ class TestAutoQueue(object):
         artist_id = self.autoqueue.get_artist(artist)[0]
         row = self.autoqueue.get_track(artist, title)
         assert_equals((artist_id, title, None), row[1:])
+
+    def test_queue_needs_songs(self):
+        self.autoqueue.desired_queue_length = 4
+        assert_equals(True, self.autoqueue.queue_needs_songs())
+        test_song = MockSong('Joni Mitchell', 'Carey')
+        for i in range(4):
+            self.autoqueue.player_enqueue(test_song)
+        assert_equals(False, self.autoqueue.queue_needs_songs())
+        
+    def test_on_song_started(self):
+        test_song = MockSong('Joni Mitchell', 'Carey')
+        self.autoqueue.on_song_started(test_song)
+        songs_in_queue = self.autoqueue.player_get_songs_in_queue()
+        assert_equals('joanna newsom', songs_in_queue[0].get_artist())
+        assert_equals('peach, plum, pear', songs_in_queue[0].get_title())
+        backup_songs = self.autoqueue._songs
+        assert_equals('leonard cohen', backup_songs[0].get_artist())
+        assert_equals('suzanne', backup_songs[0].get_title())
+
+    def test_backup_songs(self):
+        test_song = MockSong('Joni Mitchell', 'Carey')
+        self.autoqueue.player_enqueue(test_song)
+        self.autoqueue.player.play_song_from_queue()
+        songs_in_queue = self.autoqueue.player_get_songs_in_queue()
+        assert_equals('joanna newsom', songs_in_queue[0].get_artist())
+        assert_equals('peach, plum, pear', songs_in_queue[0].get_title())
+        backup_songs = self.autoqueue._songs
+        assert_equals('leonard cohen', backup_songs[0].get_artist())
+        assert_equals('suzanne', backup_songs[0].get_title())
+        self.autoqueue.player.play_song_from_queue()
+        songs_in_queue = self.autoqueue.player_get_songs_in_queue()
+        assert_equals('leonard cohen', songs_in_queue[0].get_artist())
+        assert_equals('suzanne', songs_in_queue[0].get_title())
+        assert_equals(0, len(self.autoqueue._songs))
         

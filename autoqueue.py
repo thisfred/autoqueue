@@ -180,20 +180,19 @@ class AutoQueueBase(object):
     def player_get_userdir(self):
         """get the application user directory to store files"""
         return NotImplemented
-
     
     def player_construct_track_search(self, artist, title, restrictions):
         """construct a search that looks for songs with this artist
         and title"""
         return NotImplemented
+
+    def player_construct_artist_search(self, artist, restrictions):
+        """construct a search that looks for songs with this artist"""
+        return NotImplemented
     
     def player_construct_tag_search(self, tags, exclude_artists, restrictions):
         """construct a search that looks for songs with these
         tags"""
-        return NotImplemented
-    
-    def player_construct_artist_search(self, artist, restrictions):
-        """construct a search that looks for songs with this artist"""
         return NotImplemented
         
     def player_construct_restrictions(
@@ -340,6 +339,7 @@ class AutoQueueBase(object):
             song = generator.next()
             self.log("found song")
         except StopIteration:
+            self.log("nothing found, using backup songs")
             if self._songs:
                 song = self._songs.popleft()
                 while self.is_blocked(
