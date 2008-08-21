@@ -75,7 +75,11 @@ class Song(SongBase):
 
     def get_title(self):
         """return lowercase UNICODE title of song"""
-        return self.song.comma("title").lower()
+        version = self.song.comma("version").lower()
+        title = self.song.comma("title").lower()
+        if version:
+            return "%s (%s)" % (title, version)
+        return title
 
     def get_tags(self):
         """return a list of tags for the songs"""
@@ -192,13 +196,17 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         and title"""
         search = '&(artist = "%s", title = "%s")' % (
             escape(artist), escape(title))
-        version = ""
+        versioned = ""
         if "(" in title:
-            version = '&(artist = "%s", title = "%s")' % (
+            split = title.split("(")
+            vtitle = "(".join(split[:-1]).strip()
+            version =  split[-1].strip()[:-1]
+            versioned = '&(artist = "%s", title = "%s", version="%s")' % (
                 escape(artist),
-                escape("(".join(title.split("(")[:-1]).strip()))
-        if version:
-            search = "|(%s, %s)" % (search, version)
+                escape(title),
+                escape(version))
+        if versioned:
+            search = "|(%s, %s)" % (search, versioned)
         if search:
             search = "&(%s, %s)" % (search, restrictions)
         return search

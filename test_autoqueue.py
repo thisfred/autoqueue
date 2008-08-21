@@ -5,7 +5,9 @@ class MockPlayer(object):
     def __init__(self, plugin_on_song_started):
         self.queue = []
         self.library = [
-            ('nina simone', "i think it's going to rain today"),
+            ('nina simone', "i think it's going to rain today",
+             ['forecasts', 'predictions', 'today', 'female vocals',
+              'weather', 'rain']),
             ('joni mitchell', 'carey'),
             ('joanna newsom', 'peach, plum, pear'),
             ('leonard cohen', 'suzanne'),
@@ -13,14 +15,14 @@ class MockPlayer(object):
             ('bob dylan', "the times they are a-changin'"),
             ('simon & garfunkel', 'keep the customer satisfied'),
             ('joanna newsom', 'sprout and the bean'),
-            ('bob dylan', "blowin' in the wind"),
+            ('bob dylan', "blowin' in the wind",
+             ['weather', 'wind', 'blowing', 'male vocals']),
             ('james taylor', 'fire and rain'),
             ('leonard cohen', 'famous blue raincoat'),
             ('al jarreau', 'jacaranda bougainvillea'),
             ('jimmy smith and wes montgomery', 'mellow mood'),
             ('marlena shaw', 'will i find my love today?'),
             ('minnie riperton', 'reasons'),
-            ('aretha franklin', 'love for sale'),
             ]
         self.plugin_on_song_started = plugin_on_song_started
 
@@ -78,6 +80,7 @@ class MockAutoQueue(AutoQueueBase):
         self.in_memory = True
         self.threaded = False
         super(MockAutoQueue, self).__init__() 
+        self.by_tags = True
         self.verbose = True
    
     def player_construct_track_search(self, artist, title, restrictions):
@@ -321,4 +324,32 @@ class TestAutoQueue(object):
         assert_equals('leonard cohen', songs_in_queue[0].get_artist())
         assert_equals('suzanne', songs_in_queue[0].get_title())
         assert_equals(0, len(self.autoqueue._songs))
+        
+    def test_block_artist(self):
+        artist_name = 'joni mitchell'
+        self.autoqueue.block_artist(artist_name)
+        assert_equals(True, self.autoqueue.is_blocked(artist_name))
+        assert_equals([artist_name], self.autoqueue.get_blocked_artists())
+
+    def test_get_last_song(self):
+        test_song = MockSong('Nina Simone', "I Think It's Going to Rain Today",
+                             ['forecasts', 'predictions', 'today',
+                              'female vocals', 'weather', 'rain'])
+        self.autoqueue.player_enqueue(test_song)
+        assert_equals(
+            'nina simone', self.autoqueue.get_last_song().get_artist())
+        assert_equals(
+            "i think it's going to rain today",
+            self.autoqueue.get_last_song().get_title())
+        self.autoqueue.player.play_song_from_queue()
+        assert_equals(
+            'marlena shaw', self.autoqueue.get_last_song().get_artist())
+        assert_equals(
+            'will i find my love today?',
+            self.autoqueue.get_last_song().get_title())
+        self.autoqueue.player.play_song_from_queue()
+        assert_equals(
+            'minnie riperton', self.autoqueue.get_last_song().get_artist())
+        assert_equals(
+            'reasons', self.autoqueue.get_last_song().get_title())
         
