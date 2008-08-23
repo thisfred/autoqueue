@@ -399,12 +399,12 @@ class AutoQueueBase(object):
             for artist_id in self._artists_to_update:
                 self._update_similar_artists(
                     artist_id, self._artists_to_update[artist_id])
-            self._artists_to_update = {}
             for track_id in self._tracks_to_update:
                 self._update_similar_tracks(
                     track_id, self._tracks_to_update[track_id])
             self.connection.commit()
-        self._tracks_to_update = {}
+            self._artists_to_update = {}
+            self._tracks_to_update = {}
         self.running = False
    
     def block_artist(self, artist_name):
@@ -659,7 +659,6 @@ class AutoQueueBase(object):
         self._tracks_to_update[track_id] = similar_tracks
         return sorted(list(set(similar_tracks + reverse_lookup)), reverse=True)
 
-    @Cache(1000)
     def _get_artist_match(self, artist1, artist2):
         """get artist match score from database"""
         self.connection.commit()
@@ -673,7 +672,6 @@ class AutoQueueBase(object):
             return 0
         return row[0]
 
-    @Cache(1000)
     def _get_track_match(self, track1, track2):
         """get track match score from database"""
         self.connection.commit()
