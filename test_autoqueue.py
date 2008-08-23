@@ -363,9 +363,33 @@ class TestAutoQueue(object):
         assert_equals(
             'reasons', self.autoqueue.get_last_song().get_title())
 
-       
+    def test_get_track_match(self):
+        test_song = MockSong('Joni Mitchell', 'Carey')
+        self.autoqueue.on_song_started(test_song)
+        artist = 'joni mitchell'
+        title = 'carey'
+        artist2 = 'joanna newsom'
+        title2 = 'peach, plum, pear'
+        assert_equals(
+            715,
+            self.autoqueue.get_track_match(artist, title, artist2, title2))
 
-    
+    def test_get_artist_match(self):
+        test_song = MockSong('Joni Mitchell', 'The Last Time I Saw Richard')
+        artist = 'joni mitchell'
+        artist2 =  'cat power'
+        self.autoqueue.on_song_started(test_song)
+        assert_equals(
+            5224,
+            self.autoqueue.get_artist_match(artist, artist2))
+
+    def test_get_tag_match(self):
+        tags1 = [
+            'artist:lowlands 2006', 'artist:sxsw 2005', 'modernity', 'love']
+        tags2 = ['covers', 'bloc party', 'modernity', 'love', 'live']
+        assert_equals(2.0/7.0, self.autoqueue.get_tag_match(tags1, tags2))
+
+        
 class TestThrottle(object):
     def test_throttle(self):
         now = datetime.now()
