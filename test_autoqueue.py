@@ -1,5 +1,8 @@
+from datetime import datetime, timedelta
 from nose.tools import assert_equals
-from autoqueue import SongBase, AutoQueueBase
+from autoqueue import SongBase, AutoQueueBase, Throttle
+
+WAIT_BETWEEN_REQUESTS = timedelta(0,0,10)
 
 class MockPlayer(object):
     def __init__(self, plugin_on_song_started):
@@ -120,7 +123,7 @@ class MockAutoQueue(AutoQueueBase):
     def player_get_songs_in_queue(self):
         return self.player.queue
         
-    def get_similar_artists(self, artist_name):
+    def get_similar_artists_from_lastfm(self, artist_name):
         similar_artists = {
             'joni mitchell': [
             (7459, u'crosby, stills, nash & young'), (7215, u'neil young'),
@@ -156,7 +159,7 @@ class MockAutoQueue(AutoQueueBase):
             (2288, u'ray charles'), (2226, u'sam cooke')]}
         return similar_artists.get(artist_name, [])
 
-    def get_similar_tracks(self, artist_name, title):
+    def get_similar_tracks_from_lastfm(self, artist_name, title):
         similar_tracks = {
             ('joni mitchell', 'carey'): 
             [(838, u'nick drake', u'things behind the sun'),
@@ -209,6 +212,13 @@ class TestSong(object):
         assert_equals(['matala', 'crete', 'places', 'villages', 'islands',
                        'female vocals'], self.song.get_tags())
 
+@Throttle(WAIT_BETWEEN_REQUESTS)
+def throttled_method():
+    return
+
+@Throttle(timedelta(0))
+def unthrottled_method():
+    return
 
 class TestAutoQueue(object):
     def setup(self):
@@ -352,4 +362,18 @@ class TestAutoQueue(object):
             'minnie riperton', self.autoqueue.get_last_song().get_artist())
         assert_equals(
             'reasons', self.autoqueue.get_last_song().get_title())
+
+       
+
+    
+class TestThrottle(object):
+    def test_throttle(self):
+        now = datetime.now()
+        times = 0
+        while True:
+            throttled_method()
+            times += 1
+            if datetime.now() > (now + timedelta(0,0,1000)):
+                break
+        assert_equals(True, times < 100)
         
