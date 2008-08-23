@@ -480,10 +480,11 @@ class AutoQueueBase(object):
             self._get_artist_match(id2, id1))        
 
     def get_tag_match(self, tags1, tags2):
-        """get match score for tags"""
-        tags1 = list(set([tag.split(":")[-1] for tag in tags1]))
-        tags2 = list(set([tag.split(":")[-1] for tag in tags2]))
-        return len([tag for tag in tags2 if tag in tags1])
+        """get match score for tags (Tanimoto coefficent, yeah I read
+        that book ;)"""
+        tags1 = set([tag.split(":")[-1] for tag in tags1])
+        tags2 = set([tag.split(":")[-1] for tag in tags2])
+        return float(len(tags1 & tags2))/float(len(tags1 | tags2))
 
     def get_similar_tracks_from_lastfm(self, artist_name, title):
         """get similar tracks to the last one in the queue"""
