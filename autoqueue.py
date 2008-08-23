@@ -36,6 +36,20 @@ ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
 WAIT_BETWEEN_REQUESTS = timedelta(0, 0, 0, 5) 
 
 
+class Throttle(object):
+    def __init__(self, wait):
+        self.wait = wait
+        self.last_called = datetime.now()
+
+    def __call__(self, func):
+        def wrapper(*orig_args):
+            while self.last_called + self.wait > datetime.now():
+                sleep(0.1)
+            result = func(*orig_args)
+            self.last_called = datetime.now()
+            return result
+        return wrapper
+
 class Cache(object):
     """
     >>> dec_cache = Cache(10)
@@ -170,7 +184,6 @@ class AutoQueueBase(object):
         self.restrictors = None
         self._artists_to_update = {}
         self._tracks_to_update = {}
-        self._last_call = datetime.now()
         self.player_set_variables_from_config()
         if self.store_blocked_artists:
             self.get_blocked_artists_pickle()
@@ -472,7 +485,7 @@ class AutoQueueBase(object):
         tags2 = list(set([tag.split(":")[-1] for tag in tags2]))
         return len([tag for tag in tags2 if tag in tags1])
 
-    def get_similar_tracks(self, artist_name, title):
+    def get_similar_tracks_from_lastfm(self, artist_name, title):
         """get similar tracks to the last one in the queue"""
         self.log("Getting similar tracks from last.fm for: %s - %s" % (
             artist_name, title))
@@ -508,9 +521,8 @@ class AutoQueueBase(object):
             tracks.append((match, similar_artist, similar_title))
         return tracks
             
-    def get_similar_artists(self, artist_name):
+    def get_similar_artists_from_lastfm(self, artist_name):
         """get similar artists"""
-
         self.log("Getting similar artists from last.fm for: %s " % artist_name)
         if ("&" in artist_name or "/" in artist_name or "?" in artist_name
             or "#" in artist_name):
@@ -532,13 +544,11 @@ class AutoQueueBase(object):
             artists.append((match, name))
         return artists
 
+    @Throttle(WAIT_BETWEEN_REQUESTS)
     def last_fm_request(self, url):
         try:
-            while self._last_call + WAIT_BETWEEN_REQUESTS > datetime.now():
-                sleep(5)
             stream = urllib.urlopen(url)
             xmldoc = minidom.parse(stream).documentElement
-            self._last_call = datetime.now()
             return xmldoc
         except:
             return None
@@ -585,7 +595,8 @@ class AutoQueueBase(object):
         match score"""
         if not self.use_db:
             return sorted(
-                list(set(self.get_similar_artists(artist_name))), reverse=True)
+                list(set(self.get_similar_artists_from_lastfm(artist_name))),
+                reverse=True)
         artist = self.get_artist(artist_name)
         artist_id, updated = artist[0], artist[2]
         cursor = self.connection.cursor()
@@ -608,7 +619,7 @@ class AutoQueueBase(object):
                     (artist_id,))
                 return sorted(list(set(cursor.fetchall() + reverse_lookup)),
                             reverse=True)
-        similar_artists = self.get_similar_artists(artist_name)
+        similar_artists = self.get_similar_artists_from_lastfm(artist_name)
         self._artists_to_update[artist_id] = similar_artists
         return sorted(list(set(similar_artists + reverse_lookup)), reverse=True)
 
@@ -617,7 +628,8 @@ class AutoQueueBase(object):
         match score"""
         if not self.use_db:
             return sorted(
-                list(set(self.get_similar_tracks(artist_name, title))),
+                list(set(self.get_similar_tracks_from_lastfm(
+                artist_name, title))),
                 reverse=True)
         track = self.get_track(artist_name, title)
         track_id, updated = track[0], track[3]
@@ -643,7 +655,7 @@ class AutoQueueBase(object):
                     (track_id,))
                 return sorted(list(set(cursor.fetchall() + reverse_lookup)),
                               reverse=True)
-        similar_tracks = self.get_similar_tracks(artist_name, title)
+        similar_tracks = self.get_similar_tracks_from_lastfm(artist_name, title)
         self._tracks_to_update[track_id] = similar_tracks
         return sorted(list(set(similar_tracks + reverse_lookup)), reverse=True)
 
