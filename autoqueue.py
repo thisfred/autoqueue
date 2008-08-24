@@ -155,8 +155,12 @@ class SongBase(object):
 
     def get_tags(self):
         """return a list of tags for the songs"""
-        return NotImplemented
+        return []
 
+    def get_version(self):
+        """return the version of the track if it has one and the
+        player has API to get at it"""
+        return None
 
 class AutoQueueBase(object):
     """Generic base class for autoqueue plugins."""
@@ -480,11 +484,10 @@ class AutoQueueBase(object):
             self._get_artist_match(id2, id1))        
 
     def get_tag_match(self, tags1, tags2):
-        """get match score for tags (Tanimoto coefficent, yeah I read
-        that book ;)"""
+        """get match score for tags"""
         tags1 = set([tag.split(":")[-1] for tag in tags1])
         tags2 = set([tag.split(":")[-1] for tag in tags2])
-        return float(len(tags1 & tags2))/float(len(tags1 | tags2))
+        return len(tags1 & tags2)
 
     def get_similar_tracks_from_lastfm(self, artist_name, title):
         """get similar tracks to the last one in the queue"""
