@@ -8,7 +8,7 @@ class MockPlayer(object):
     def __init__(self, plugin_on_song_started):
         self.queue = []
         self.library = [
-            ('nina simone', "i think it's going to rain today",
+            ('nina simone', "i think it's going to rain today", '',
              ['forecasts', 'predictions', 'today', 'female vocals',
               'weather', 'rain']),
             ('joni mitchell', 'carey'),
@@ -18,7 +18,7 @@ class MockPlayer(object):
             ('bob dylan', "the times they are a-changin'"),
             ('simon & garfunkel', 'keep the customer satisfied'),
             ('joanna newsom', 'sprout and the bean'),
-            ('bob dylan', "blowin' in the wind",
+            ('bob dylan', "blowin' in the wind", '',
              ['weather', 'wind', 'blowing', 'male vocals']),
             ('james taylor', 'fire and rain'),
             ('leonard cohen', 'famous blue raincoat'),
@@ -61,11 +61,12 @@ class MockPlayer(object):
         song = func(queue_song)
         
 class MockSong(SongBase):
-    def __init__(self, artist, title, tags=None):
+    def __init__(self, artist, title, version='', tags=None):
         self.artist = artist
         self.title = title
         self.tags = tags
-
+        self.version = version
+        
     def get_artist(self):
         return self.artist.lower()
 
@@ -75,7 +76,10 @@ class MockSong(SongBase):
     def get_tags(self):
         return self.tags
 
+    def get_version(self):
+        return self.version
 
+        
 class MockAutoQueue(AutoQueueBase):
     def __init__(self):
         self.player = MockPlayer(self.on_song_started)
@@ -198,9 +202,13 @@ class MockAutoQueue(AutoQueueBase):
 class TestSong(object):
     def setup(self):
         songobject = (
-            'Joni Mitchell', 'Carey', ['matala', 'crete', 'places', 'villages',
+            'Joni Mitchell', 'Carey', '', ['matala', 'crete', 'places', 'villages',
                                        'islands', 'female vocals'])
         self.song = MockSong(*songobject)
+        songobject = (
+            'Joni Mitchell', 'Carey', 'live', ['matala', 'crete', 'places', 'villages',
+                                       'islands', 'female vocals'])
+        self.song2 = MockSong(*songobject)
     
     def test_get_artist(self):
         assert_equals('joni mitchell', self.song.get_artist())
@@ -212,6 +220,10 @@ class TestSong(object):
         assert_equals(['matala', 'crete', 'places', 'villages', 'islands',
                        'female vocals'], self.song.get_tags())
 
+    def test_get_version(self):
+        assert_equals('live', self.song2.get_version())
+        
+        
 @Throttle(WAIT_BETWEEN_REQUESTS)
 def throttled_method():
     return
@@ -387,7 +399,7 @@ class TestAutoQueue(object):
         tags1 = [
             'artist:lowlands 2006', 'artist:sxsw 2005', 'modernity', 'love']
         tags2 = ['covers', 'bloc party', 'modernity', 'love', 'live']
-        assert_equals(2.0/7.0, self.autoqueue.get_tag_match(tags1, tags2))
+        assert_equals(2, self.autoqueue.get_tag_match(tags1, tags2))
 
         
 class TestThrottle(object):
