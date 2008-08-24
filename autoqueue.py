@@ -157,10 +157,6 @@ class SongBase(object):
         """return a list of tags for the songs"""
         return []
 
-    def get_version(self):
-        """return the version of the track if it has one and the
-        player has API to get at it"""
-        return None
 
 class AutoQueueBase(object):
     """Generic base class for autoqueue plugins."""

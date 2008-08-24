@@ -76,10 +76,7 @@ class MockSong(SongBase):
     def get_tags(self):
         return self.tags
 
-    def get_version(self):
-        return self.version
 
-        
 class MockAutoQueue(AutoQueueBase):
     def __init__(self):
         self.player = MockPlayer(self.on_song_started)

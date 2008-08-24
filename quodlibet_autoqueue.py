@@ -85,6 +85,7 @@ class Song(SongBase):
         """return a list of tags for the songs"""
         return self.song.list("tag")
 
+
 class AutoQueue(EventPlugin, AutoQueueBase):
     """The actual plugin class"""
     PLUGIN_ID = "AutoQueue"
