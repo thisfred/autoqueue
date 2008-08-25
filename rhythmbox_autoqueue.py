@@ -14,6 +14,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 
+import os
 import rb
 import rhythmdb
 
@@ -45,6 +46,8 @@ class Song(SongBase):
 class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
     def __init__(self):
         rb.Plugin.__init__(self)
+        self.use_db = True
+        self.store_blocked_artists = True
         AutoQueueBase.__init__(self)
         self.verbose = True
         
@@ -73,8 +76,11 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         
     def player_get_userdir(self):
         """get the application user directory to store files"""
-        #XXX Steal from charlotte 
-        return ''
+        folder = os.path.join(
+            os.getenv('HOME'), '.gnome2', 'rhythmbox', 'autoqueue')
+        if not os.path.isdir(folder):
+            os.mkdir(folder)
+        return folder
     
     def player_construct_track_search(self, artist, title, restrictions):
         """construct a search that looks for songs with this artist

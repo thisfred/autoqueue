@@ -243,10 +243,10 @@ class AutoQueueBase(object):
             self.create_db()
 
     def get_blocked_artists_pickle(self):
-        self.dump = os.path.join(
+        dump = os.path.join(
             self.player_get_userdir(), "autoqueue_block_cache")
         try:
-            pickle = open(self.dump, 'r')
+            pickle = open(dump, 'r')
             try:
                 unpickler = Unpickler(pickle)
                 artists, times = unpickler.load()
@@ -417,14 +417,16 @@ class AutoQueueBase(object):
             artist_name,
             len(self._blocked_artists)))
         if self.store_blocked_artists:
+            dump = os.path.join(
+                self.player_get_userdir(), "autoqueue_block_cache")
             try:
-                os.remove(self.dump)
+                os.remove(dump)
             except OSError:
                 pass
         if len(self._blocked_artists) == 0:
             return
         if self.store_blocked_artists:
-            pickle_file = open(self.dump, 'w')
+            pickle_file = open(dump, 'w')
             pickler = Pickler(pickle_file, -1)
             to_dump = (self._blocked_artists,
                        self._blocked_artists_times)
