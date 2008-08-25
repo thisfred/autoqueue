@@ -140,13 +140,12 @@ class MockAutoQueue(AutoQueueBase):
         return self.player.queue
 
     def last_fm_request(self, url):
-        print repr(url)
         urlfile = fake_responses.get(url)
         if not urlfile:
             return None
         stream = open(urlfile, 'r')
-        xmldoc = minidom.parse(stream).documentElement
         try:
+            xmldoc = minidom.parse(stream).documentElement
             return xmldoc
         except:
             return None
@@ -203,6 +202,46 @@ class TestAutoQueue(object):
         row = self.autoqueue.get_track(artist, title)
         assert_equals((artist_id, title, None), row[1:])
 
+    def test_get_similar_tracks_from_lastfm(self):
+        artist = 'joni mitchell'
+        similar_artists = self.autoqueue.get_similar_artists_from_lastfm(artist)
+        td = [
+            (10000, u'rickie lee jones'), (9271, u'carole king'),
+            (8669, u'ani difranco'), (8127, u'joan baez'),
+            (7473, u'neil young'), (7051, u'martha wainwright'),
+            (7044, u'indigo girls'), (6880, u'james taylor'),
+            (6705, u'paul simon'), (6677, u'dar williams'),
+            (6404, u'crosby, stills, nash & young'), (6229, u'k.d. lang'),
+            (6151, u'simon & garfunkel'), (6064, u'joan armatrading'),
+            (5959, u'patty griffin'), (5883, u'leonard cohen'),
+            (5840, u'tim buckley'), (5702, u'suzanne vega'),
+            (5649, u'janis ian'), (5591, u'kate bush'),
+            (5555, u'cat stevens'), (5477, u'neil young & crazy horse'),
+            (5456, u'sarah mclachlan')]
+        assert_equals(td, similar_artists[:23])
+
+    def test_get_similar_artists_from_lastfm(self):
+        artist = 'nina simone'
+        title = "i think it's going to rain today"
+        similar_tracks = self.autoqueue.get_similar_tracks_from_lastfm(
+            artist, title)
+        td = [
+            (447, u'ella fitzgerald', u'how long has this been going o'),
+            (446, u'dinah washington', u'our love is here to stay'),
+            (444, u'dinah washington', u'love for sale'),
+            (443, u'marlena shaw', u'will i find my love today?'),
+            (443, u'marlena shaw', u'a couple of loosers'),
+            (438, u'minnie riperton', u'reasons'),
+            (438, u'natalie cole', u'sorry (digitally remastered 02)'),
+            (438, u'natalie cole', u'stand by (digitally remastered 02)'),
+            (436, u'minnie riperton', u'adventures in paradise'),
+            (436, u'ella fitzgerald', u"i've got my love to keep me wa"),
+            (428, u'cassandra wilson', u'find him'),
+            (428, u'della reese', u'almost like being in love (lp version)'),
+            (426, u'al jarreau', u'jacaranda bougainvillea'),
+            (426, u'jimmy smith and wes montgomery', u'mellow mood')]
+        assert_equals(td, similar_tracks[:14])
+        
     def test_get_sorted_similar_artists(self):
         artist = 'nina simone'
         similar_artists = self.autoqueue.get_sorted_similar_artists(artist)
