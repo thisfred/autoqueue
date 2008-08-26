@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
 from xml.dom import minidom
 from nose.tools import assert_equals
@@ -7,17 +8,20 @@ WAIT_BETWEEN_REQUESTS = timedelta(0,0,10)
 
 fake_responses = {
     'http://ws.audioscrobbler.com/2.0/?method=track.getsimilar&artist='
-    'joni%20mitchell&track=carey&api_key=09d0975a99a4cab235b731d31abf0057':
+    'joni+mitchell&track=carey&api_key=09d0975a99a4cab235b731d31abf0057':
     'test1.xml',
     'http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist='
-    'nina%20simone&api_key=09d0975a99a4cab235b731d31abf0057':
+    'nina+simone&api_key=09d0975a99a4cab235b731d31abf0057':
     'test2.xml',
     'http://ws.audioscrobbler.com/2.0/?method=track.getsimilar&artist='
-    'nina%20simone&track=i%20think%20it%27s%20going%20to%20rain%20today'
+    'nina+simone&track=i+think+it%27s+going+to+rain+today'
     '&api_key=09d0975a99a4cab235b731d31abf0057': 'test3.xml',
     'http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist='
-    'joni%20mitchell&api_key=09d0975a99a4cab235b731d31abf0057':
+    'joni+mitchell&api_key=09d0975a99a4cab235b731d31abf0057':
     'test4.xml',
+    'http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist='
+    'habib+koit%C3%A9+%26+bamada&api_key=09d0975a99a4cab235b731d31abf0057':
+    'test5.xml'
     }
 
 class MockPlayer(object):
@@ -140,7 +144,6 @@ class MockAutoQueue(AutoQueueBase):
         return self.player.queue
 
     def last_fm_request(self, url):
-        #print repr(url)
         urlfile = fake_responses.get(url)
         if not urlfile:
             return None
@@ -221,7 +224,19 @@ class TestAutoQueue(object):
         assert_equals(td, similar_artists[:22])
         artist = u'habib koité & bamada'
         similar_artists = self.autoqueue.get_similar_artists_from_lastfm(artist)
-        td = []
+        td = [
+            (10000, u'salif keita'), (9536, u'mamou sidib\xe9'),
+            (9330, u'k\xe9l\xe9tigui diabat\xe9'),
+            (9058, u'ali farka tour\xe9'), (8917, u'habib koit\xe9'),
+            (8569, u'amadou & mariam'), (5950, u'tinariwen'),
+            (5826, u'boubacar traor\xe9'), (5371, u'oliver mtukudzi'),
+            (381, u'super rail band'), (359, u'lobi traor\xe9'),
+            (358, u'ali farka tour\xe9 & toumani diabat\xe9'),
+            (358, u'tartit'), (355, u'issa bagayogo'),
+            (349, u'kasse mady diabate'), (347, u'rokia traor\xe9'),
+            (346, u'daby tour\xe9'), (346, u'oumou sangar\xe9'),
+            (340, u'luciana souza'), (337, u'kandia kouyate'),
+            (326, u'ali farka tour\xe9 and ry cooder'), (318, u'sali sidibe')]
         assert_equals(td, similar_artists[:22])
         
     def test_get_similar_tracks_from_lastfm(self):

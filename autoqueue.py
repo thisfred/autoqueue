@@ -493,14 +493,14 @@ class AutoQueueBase(object):
             artist_name, title))
         enc_artist_name = artist_name.encode("utf-8")
         enc_title = title.encode("utf-8")
-        if ("&" in artist_name or "/" in artist_name or "?" in artist_name
-            or "#" in artist_name or "&" in title or "/" in title
-            or "?" in title or "#" in title):
-            enc_artist_name = urllib.quote_plus(enc_artist_name)
-            enc_title = urllib.quote_plus(enc_title)
+        ## if ("&" in artist_name or "/" in artist_name or "?" in artist_name
+        ##     or "#" in artist_name or "&" in title or "/" in title
+        ##     or "?" in title or "#" in title):
+        ##     enc_artist_name = urllib.quote_plus(enc_artist_name)
+        ##     enc_title = urllib.quote_plus(enc_title)
         url = TRACK_URL % (
-            urllib.quote(enc_artist_name),
-            urllib.quote(enc_title))
+            urllib.quote_plus(enc_artist_name),
+            urllib.quote_plus(enc_title))
         xmldoc = self.last_fm_request(url)
         if xmldoc is None:
             return []
@@ -527,11 +527,11 @@ class AutoQueueBase(object):
         """get similar artists"""
         self.log("Getting similar artists from last.fm for: %s " % artist_name)
         enc_artist_name = artist_name.encode("utf-8")
-        if ("&" in artist_name or "/" in artist_name or "?" in artist_name
-            or "#" in artist_name):
-            enc_artist_name = urllib.quote_plus(enc_artist_name)
+        ## if ("&" in artist_name or "/" in artist_name or "?" in artist_name
+        ##     or "#" in artist_name):
+        ##     enc_artist_name = urllib.quote_plus(enc_artist_name)
         url = ARTIST_URL % (
-            urllib.quote(enc_artist_name))
+            urllib.quote_plus(enc_artist_name))
         xmldoc = self.last_fm_request(url)
         if xmldoc is None:
             return []
@@ -757,7 +757,7 @@ class AutoQueueBase(object):
         """print debug messages"""
         if not self.verbose:
             return
-        print "[autoqueue]", msg
+        print "[autoqueue]", msg.encode('utf-8')
 
     def create_db(self):
         """ Set up a database for the artist and track similarity scores
