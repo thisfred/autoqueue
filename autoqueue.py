@@ -526,11 +526,12 @@ class AutoQueueBase(object):
     def get_similar_artists_from_lastfm(self, artist_name):
         """get similar artists"""
         self.log("Getting similar artists from last.fm for: %s " % artist_name)
+        enc_artist_name = artist_name.encode("utf-8")
         if ("&" in artist_name or "/" in artist_name or "?" in artist_name
             or "#" in artist_name):
-            artist_name = urllib.quote_plus(artist_name)
+            enc_artist_name = urllib.quote_plus(enc_artist_name)
         url = ARTIST_URL % (
-            urllib.quote(artist_name.encode("utf-8")))
+            urllib.quote(enc_artist_name))
         xmldoc = self.last_fm_request(url)
         if xmldoc is None:
             return []
