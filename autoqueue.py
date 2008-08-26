@@ -493,11 +493,6 @@ class AutoQueueBase(object):
             artist_name, title))
         enc_artist_name = artist_name.encode("utf-8")
         enc_title = title.encode("utf-8")
-        ## if ("&" in artist_name or "/" in artist_name or "?" in artist_name
-        ##     or "#" in artist_name or "&" in title or "/" in title
-        ##     or "?" in title or "#" in title):
-        ##     enc_artist_name = urllib.quote_plus(enc_artist_name)
-        ##     enc_title = urllib.quote_plus(enc_title)
         url = TRACK_URL % (
             urllib.quote_plus(enc_artist_name),
             urllib.quote_plus(enc_title))
@@ -527,9 +522,6 @@ class AutoQueueBase(object):
         """get similar artists"""
         self.log("Getting similar artists from last.fm for: %s " % artist_name)
         enc_artist_name = artist_name.encode("utf-8")
-        ## if ("&" in artist_name or "/" in artist_name or "?" in artist_name
-        ##     or "#" in artist_name):
-        ##     enc_artist_name = urllib.quote_plus(enc_artist_name)
         url = ARTIST_URL % (
             urllib.quote_plus(enc_artist_name))
         xmldoc = self.last_fm_request(url)
