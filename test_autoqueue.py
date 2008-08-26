@@ -140,6 +140,7 @@ class MockAutoQueue(AutoQueueBase):
         return self.player.queue
 
     def last_fm_request(self, url):
+        #print repr(url)
         urlfile = fake_responses.get(url)
         if not urlfile:
             return None
@@ -202,7 +203,7 @@ class TestAutoQueue(object):
         row = self.autoqueue.get_track(artist, title)
         assert_equals((artist_id, title, None), row[1:])
 
-    def test_get_similar_tracks_from_lastfm(self):
+    def test_get_similar_artists_from_lastfm(self):
         artist = 'joni mitchell'
         similar_artists = self.autoqueue.get_similar_artists_from_lastfm(artist)
         td = [
@@ -216,11 +217,14 @@ class TestAutoQueue(object):
             (5959, u'patty griffin'), (5883, u'leonard cohen'),
             (5840, u'tim buckley'), (5702, u'suzanne vega'),
             (5649, u'janis ian'), (5591, u'kate bush'),
-            (5555, u'cat stevens'), (5477, u'neil young & crazy horse'),
-            (5456, u'sarah mclachlan')]
-        assert_equals(td, similar_artists[:23])
-
-    def test_get_similar_artists_from_lastfm(self):
+            (5555, u'cat stevens'), (5477, u'neil young & crazy horse')]
+        assert_equals(td, similar_artists[:22])
+        artist = u'habib koité & bamada'
+        similar_artists = self.autoqueue.get_similar_artists_from_lastfm(artist)
+        td = []
+        assert_equals(td, similar_artists[:22])
+        
+    def test_get_similar_tracks_from_lastfm(self):
         artist = 'nina simone'
         title = "i think it's going to rain today"
         similar_tracks = self.autoqueue.get_similar_tracks_from_lastfm(
