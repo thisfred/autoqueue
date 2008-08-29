@@ -320,8 +320,6 @@ class AutoQueueBase(object):
                 search = self.player_construct_track_search(
                     artist, title, restrictions)
                 songs = self.player_search(search)
-                songs = [
-                    song in songs if not self.is_blocked(song.get_artist())]
                 if songs:
                     yield random.choice(songs)
         if self.by_artists:
@@ -334,8 +332,6 @@ class AutoQueueBase(object):
                 search = self.player_construct_artist_search(
                     artist, restrictions)
                 songs = self.player_search(search)
-                songs = [
-                    song in songs if not self.is_blocked(song.get_artist())]
                 if songs:
                     yield random.choice(songs)
         if self.by_tags:
