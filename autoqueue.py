@@ -39,9 +39,9 @@ def remove_duplicates(songs):
     ret = []
     seen = []
     for song in songs:
-        if (song.get_artist(), song.get_title()) in seen:
+        if (song.get_artist()) in seen:
             continue
-        seen.append((song.get_artist(), song.get_title()))
+        seen.append(song.get_artist())
         ret.append(song)
     return ret
 
@@ -374,8 +374,8 @@ class AutoQueueBase(object):
             song2 = generator.next()
         except StopIteration:
             song2 = None
-        if (song2 and not (song is song2) and not
-            self.is_blocked(song2.get_artist())):
+        if (song2 and not self.is_blocked(song2.get_artist()) and not
+            song.get_artist() == song2.get_artist()):
             songs = [song2] + [
                 bsong for bsong in list(self._songs) if not
                 self.is_blocked(bsong.get_artist())]
