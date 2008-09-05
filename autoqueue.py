@@ -35,6 +35,16 @@ ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
 # be nice to last.fm
 WAIT_BETWEEN_REQUESTS = timedelta(0, 0, 0, 5) 
 
+def remove_duplicates(songs):
+    ret = []
+    seen = []
+    for song in songs:
+        if (song.get_artist(), song.get_title()) in seen:
+            continue
+        seen.append((song.get_artist(), song.get_title()))
+        ret.append(song)
+    return ret
+
 
 class Throttle(object):
     def __init__(self, wait):
@@ -365,20 +375,20 @@ class AutoQueueBase(object):
         except StopIteration:
             song2 = None
         if (song2 and not (song is song2) and not
-            self.is_blocked(song2.get_artist())
-            and not song2 in self._songs):
-            self._songs = deque([
+            self.is_blocked(song2.get_artist())):
+            songs = [song2] + [
                 bsong for bsong in list(self._songs) if not
-                self.is_blocked(bsong.get_artist())])
-            self._songs.appendleft(song2)
+                self.is_blocked(bsong.get_artist())]
+            remove_duplicates(songs)
+            self._songs = deque(songs)
             if len(self._songs) > 10:
                 self._songs.pop()
-            if self._songs:
-                self.log("%s backup songs: \n%s" % (
-                    len(self._songs),
-                    "\n".join(["%s - %s" % (
-                    bsong.get_artist(),
-                    bsong.get_title()) for bsong in list(self._songs)])))
+        if self._songs:
+            self.log("%s backup songs: \n%s" % (
+                len(self._songs),
+                "\n".join(["%s - %s" % (
+                bsong.get_artist(),
+                bsong.get_title()) for bsong in list(self._songs)])))
         if song:
             self.player_enqueue(song)
             return True
