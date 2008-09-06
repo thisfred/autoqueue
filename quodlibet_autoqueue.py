@@ -83,7 +83,7 @@ class Song(SongBase):
 
     def get_tags(self):
         """return a list of tags for the songs"""
-        return self.song.list("tag")
+        return self.song.list("grouping")
 
 
 class AutoQueue(EventPlugin, AutoQueueBase):
@@ -227,9 +227,9 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 stripped = tag
             stripped = escape(stripped)
             search_tags.extend([
-                'tag = "%s"' % stripped,
-                'tag = "artist:%s"' % stripped,
-                'tag = "album:%s"' % stripped])
+                'grouping = "%s"' % stripped,
+                'grouping = "artist:%s"' % stripped,
+                'grouping = "album:%s"' % stripped])
         search = "&(|(%s),%s,%s)" % (
             ",".join(search_tags), excluding, restrictions)
         return search
