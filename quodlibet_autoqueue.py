@@ -83,7 +83,7 @@ class Song(SongBase):
 
     def get_tags(self):
         """return a list of tags for the songs"""
-        return self.song.list("grouping")
+        return self.song.list("grouping") + self.song.list("tag")
 
 
 class AutoQueue(EventPlugin, AutoQueueBase):
