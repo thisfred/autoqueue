@@ -35,16 +35,6 @@ ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
 # be nice to last.fm
 WAIT_BETWEEN_REQUESTS = timedelta(0, 0, 0, 5) 
 
-def remove_duplicates(songs):
-    ret = []
-    seen = []
-    for song in songs:
-        if (song.get_artist()) in seen:
-            continue
-        seen.append(song.get_artist())
-        ret.append(song)
-    return ret
-
 
 class Throttle(object):
     def __init__(self, wait):
@@ -59,6 +49,7 @@ class Throttle(object):
             self.last_called = datetime.now()
             return result
         return wrapper
+
 
 class Cache(object):
     """
@@ -308,6 +299,21 @@ class AutoQueueBase(object):
                 background.start()
             else:
                 self.fill_queue()
+
+    def cleanup(self, songs, next_artist=''):
+        ret = []
+        seen = []
+        if next_artist:
+            seen = [next_artist]
+        for song in songs:
+            artist = song.get_artist()
+            if artist in seen:
+                continue
+            if self.is_blocked(artist):
+                continue
+            seen.append(song.get_artist())
+            ret.append(song)
+        return ret
     
     def queue_needs_songs(self):
         """determine whether the queue needs more songs added"""
@@ -374,13 +380,10 @@ class AutoQueueBase(object):
             song2 = generator.next()
         except StopIteration:
             song2 = None
-        if (song2 and not self.is_blocked(song2.get_artist()) and not
-            song.get_artist() == song2.get_artist()):
-            songs = [song2] + [
-                bsong for bsong in list(self._songs) if not
-                self.is_blocked(bsong.get_artist())]
-            remove_duplicates(songs)
-            self._songs = deque(songs)
+        if song2:
+            songs = [song2] + list(self._songs)
+            clean = self.cleanup(songs, song.get_artist())
+            self._songs = deque(clean)
             if len(self._songs) > 10:
                 self._songs.pop()
         if self._songs:
