@@ -53,7 +53,11 @@ BOOL_SETTINGS = {
         'label': 'by tags'},
     'verbose': {
         'value': False,
-        'label': 'log to console'},}
+        'label': 'log to console'},
+    'random': {
+        'value': False,
+        'label': 'random picks'},
+    }
 STR_SETTINGS = {
     'restrictors' : {
         'value': '',
