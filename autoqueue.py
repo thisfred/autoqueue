@@ -329,7 +329,7 @@ class AutoQueueBase(object):
             last_song = self.get_last_song()
             artist_name = last_song.get_artist()
             title = last_song.get_title()
-            for match, artist, title in self.get_sorted_similar_tracks(
+            for match, artist, title in self.get_ordered_similar_tracks(
                 artist_name, title):
                 if self.is_blocked(artist):
                     continue
@@ -342,7 +342,7 @@ class AutoQueueBase(object):
         if self.by_artists:
             last_song = self.get_last_song()
             artist_name = last_song.get_artist()
-            for match, artist in self.get_sorted_similar_artists(artist_name):
+            for match, artist in self.get_ordered_similar_artists(artist_name):
                 if self.is_blocked(artist):
                     continue
                 self.log("looking for: %s, %s" % (match, artist))
@@ -599,13 +599,12 @@ class AutoQueueBase(object):
             (artist_id, title))
         return cursor.fetchone()
 
-    def get_sorted_similar_artists(self, artist_name):
+    def get_ordered_similar_artists(self, artist_name):
         """get similar artists from the database sorted by descending
         match score"""
         if not self.use_db:
             l = list(set(self.get_similar_artists_from_lastfm(artist_name)))
-            self.order(l)
-            return l
+            return self.ordered(l)
         artist = self.get_artist(artist_name)
         artist_id, updated = artist[0], artist[2]
         cursor = self.connection.cursor()
@@ -631,23 +630,23 @@ class AutoQueueBase(object):
         similar_artists = self.get_similar_artists_from_lastfm(artist_name)
         self._artists_to_update[artist_id] = similar_artists
         l = list(set(similar_artists + reverse_lookup))
-        self.order(l)
-        return l
+        return self.ordered(l)
 
-    def order(self, unordered_list):
+    def ordered(self, unordered_list):
+        res = unordered_list[:]
         if self.random:
-            random.shuffle(unordered_list)
+            random.shuffle(res)
         else:
-            unordered_list.sort(reverse=True)
+            res.sort(reverse=True)
+        return res
     
-    def get_sorted_similar_tracks(self, artist_name, title):
+    def get_ordered_similar_tracks(self, artist_name, title):
         """get similar tracks from the database sorted by descending
         match score"""
         if not self.use_db:
             l = list(set(self.get_similar_tracks_from_lastfm(
                 artist_name, title)))
-            self.order(l)
-            return l
+            return self.ordered(l)
         track = self.get_track(artist_name, title)
         track_id, updated = track[0], track[3]
         cursor = self.connection.cursor()
@@ -675,8 +674,7 @@ class AutoQueueBase(object):
         similar_tracks = self.get_similar_tracks_from_lastfm(artist_name, title)
         self._tracks_to_update[track_id] = similar_tracks
         l = list(set(similar_tracks + reverse_lookup))
-        self.order(l)
-        return l
+        return self.ordered(l)
 
     def _get_artist_match(self, artist1, artist2):
         """get artist match score from database"""
