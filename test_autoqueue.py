@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
 from xml.dom import minidom
-from nose.tools import assert_equals
+from nose.tools import assert_equals, assert_not_equals
 from autoqueue import SongBase, AutoQueueBase, Throttle
 
 WAIT_BETWEEN_REQUESTS = timedelta(0,0,10)
@@ -260,6 +260,18 @@ class TestAutoQueue(object):
             (426, u'al jarreau', u'jacaranda bougainvillea'),
             (426, u'jimmy smith and wes montgomery', u'mellow mood')]
         assert_equals(td, similar_tracks[:14])
+
+    def test_ordered(self):
+        artist = 'nina simone'
+        similar_artists = self.autoqueue.get_ordered_similar_artists(artist)
+        self.autoqueue.random = False
+        assert_equals(similar_artists,
+                           self.autoqueue.ordered(similar_artists))
+        # THIS HAS A VERY SMALL CHANCE OF FAILING
+        self.autoqueue.random = True
+        assert_not_equals(similar_artists,
+                           self.autoqueue.ordered(similar_artists))
+        
         
     def test_get_ordered_similar_artists(self):
         artist = 'nina simone'
