@@ -267,7 +267,8 @@ class TestAutoQueue(object):
         self.autoqueue.random = False
         assert_equals(similar_artists,
                            self.autoqueue.ordered(similar_artists))
-        # THIS HAS A VERY SMALL CHANCE OF FAILING
+        # THIS HAS A VERY SMALL CHANCE OF FAILING, I'LL BUY YOU A BEER
+        # IF IT DOES
         self.autoqueue.random = True
         assert_not_equals(similar_artists,
                            self.autoqueue.ordered(similar_artists))
