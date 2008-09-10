@@ -780,17 +780,17 @@ class AutoQueueBase(object):
         connection = self.get_database_connection()
         cursor = connection.cursor()
         cursor.execute(
-            'CREATE TABLE artists (id INTEGER PRIMARY KEY, name'
+            'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name'
             ' VARCHAR(100), updated DATE)')
         cursor.execute(
-            'CREATE TABLE artist_2_artist (artist1 INTEGER, artist2 INTEGER,'
-            ' match INTEGER)')
+            'CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER,'
+            ' artist2 INTEGER, match INTEGER)')
         cursor.execute(
-            'CREATE TABLE tracks (id INTEGER PRIMARY KEY, artist INTEGER,'
-            ' title VARCHAR(100), updated DATE)')
+            'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, artist'
+            ' INTEGER, title VARCHAR(100), updated DATE)')
         cursor.execute(
-            'CREATE TABLE track_2_track (track1 INTEGER, track2 INTEGER,'
-            ' match INTEGER)')
+            'CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, track2'
+            ' INTEGER, match INTEGER)')
         connection.commit()
         if self.in_memory:
             self.connection = connection
