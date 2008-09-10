@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
+import random
 from datetime import datetime, timedelta
 from xml.dom import minidom
 from nose.tools import assert_equals, assert_not_equals
 from autoqueue import SongBase, AutoQueueBase, Throttle
+
 
 WAIT_BETWEEN_REQUESTS = timedelta(0,0,10)
 
@@ -264,14 +266,16 @@ class TestAutoQueue(object):
     def test_ordered(self):
         artist = 'nina simone'
         similar_artists = self.autoqueue.get_ordered_similar_artists(artist)
+        not_similar_artists = similar_artists[:]
+        random.shuffle(not_similar_artists)
         self.autoqueue.random = False
         assert_equals(similar_artists,
-                           self.autoqueue.ordered(similar_artists))
-        # THIS HAS A VERY SMALL CHANCE OF FAILING, I'LL BUY YOU A BEER
-        # IF IT DOES
+                           self.autoqueue.ordered(not_similar_artists))
+        # THE NEXT TEST HAS A VERY SMALL CHANCE OF FAILING, I'LL BUY
+        # YOU A BEER IF IT DOES, OR A NEW RNG IF IT DOES SO RELIABLY
         self.autoqueue.random = True
         assert_not_equals(similar_artists,
-                           self.autoqueue.ordered(similar_artists))
+                           self.autoqueue.ordered(not_similar_artists))
         
         
     def test_get_ordered_similar_artists(self):
