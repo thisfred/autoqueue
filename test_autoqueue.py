@@ -261,9 +261,9 @@ class TestAutoQueue(object):
             (426, u'jimmy smith and wes montgomery', u'mellow mood')]
         assert_equals(td, similar_tracks[:14])
         
-    def test_get_sorted_similar_artists(self):
+    def test_get_ordered_similar_artists(self):
         artist = 'nina simone'
-        similar_artists = self.autoqueue.get_sorted_similar_artists(artist)
+        similar_artists = self.autoqueue.get_ordered_similar_artists(artist)
         td = [
             (10000, u'billie holiday'), (7934, u'ella fitzgerald'),
             (7402, u'sarah vaughan'), (6731, u'dinah washington'),
@@ -284,10 +284,10 @@ class TestAutoQueue(object):
         row = self.autoqueue.get_artist(artist)
         assert_equals((artist, None), row[1:])
 
-    def test_get_sorted_similar_tracks(self):
+    def test_get_ordered_similar_tracks(self):
         artist = 'joni mitchell'
         title = 'carey'
-        similar_tracks = self.autoqueue.get_sorted_similar_tracks(
+        similar_tracks = self.autoqueue.get_ordered_similar_tracks(
             artist, title)
         td = [(838, u'nick drake', u'things behind the sun'),
               (807, u'nick drake', u'horn'),
