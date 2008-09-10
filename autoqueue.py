@@ -625,8 +625,8 @@ class AutoQueueBase(object):
                     " artists ON artist_2_artist.artist2 = artists.id WHERE"
                     " artist_2_artist.artist1 = ?",
                     (artist_id,))
-                return sorted(list(set(cursor.fetchall() + reverse_lookup)),
-                            reverse=True)
+                l = list(set(cursor.fetchall() + reverse_lookup))
+                return self.ordered(l)
         similar_artists = self.get_similar_artists_from_lastfm(artist_name)
         self._artists_to_update[artist_id] = similar_artists
         l = list(set(similar_artists + reverse_lookup))
@@ -669,8 +669,8 @@ class AutoQueueBase(object):
                     " artists.id = tracks.artist WHERE track_2_track.track1"
                     " = ?",
                     (track_id,))
-                return sorted(list(set(cursor.fetchall() + reverse_lookup)),
-                              reverse=True)
+                l = list(set(cursor.fetchall() + reverse_lookup))
+                return self.ordered(l)
         similar_tracks = self.get_similar_tracks_from_lastfm(artist_name, title)
         self._tracks_to_update[track_id] = similar_tracks
         l = list(set(similar_tracks + reverse_lookup))
