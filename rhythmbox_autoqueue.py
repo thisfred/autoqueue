@@ -50,6 +50,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         self.store_blocked_artists = True
         AutoQueueBase.__init__(self)
         self.verbose = True
+        self.random = False
         
     def activate(self, shell):
         self.shell = shell
