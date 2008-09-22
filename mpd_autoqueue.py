@@ -48,6 +48,8 @@ SETTINGS_PATH = '~/.autoqueue/'
 class Song(autoqueue.SongBase):
     '''A MPD song object'''
     def __init__(self, **kwargs):
+        self.title = self.artist = self.album = ''
+        self.time = 0
         self.__dict__.update(**kwargs)
         
     def get_artist(self):
@@ -57,6 +59,10 @@ class Song(autoqueue.SongBase):
     def get_title(self):
         '''return lowercase UNICODE title of song'''
         return self.title.lower()
+
+    def get_album(self):
+        '''return lowercase UNICODE album of song'''
+        return self.album.lower()
 
     def get_tags(self):
         '''return a list of tags for the songs'''
@@ -232,13 +238,15 @@ def main():
         'environment variable or localhost if not available', default=host)
 
     options, args = parser.parse_args()
-    queue = AutoQueuePlugin(options.host, options.port)
-
-if __name__ == '__main__':
-    main()
-    test()
+    '''Example of how to use the system
+    >>> queue = AutoQueuePlugin(options.host, options.port)
+    >>> search = queue.player_construct_artist_search('vangelis', None)
+    >>> print [s for s in queue.player_search(search)]
+    '''
 
 def test():
     import doctest
     doctest.testmod(verbose=True)
 
+if __name__ == '__main__':
+    main()
