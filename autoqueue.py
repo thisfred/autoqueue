@@ -351,6 +351,8 @@ class AutoQueueBase(object):
                 if songs:
                     yield random.choice(songs)
             if self._songs:
+                # If we have backup songs, they are likely better than
+                # a random track by a similar artist.
                 raise StopIteration
         if self.by_artists:
             last_song = self.get_last_song()
