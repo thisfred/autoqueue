@@ -350,6 +350,8 @@ class AutoQueueBase(object):
                 songs = self.player_search(search)
                 if songs:
                     yield random.choice(songs)
+            if self._songs:
+                raise StopIteration
         if self.by_artists:
             last_song = self.get_last_song()
             artist_name = last_song.get_artist()
