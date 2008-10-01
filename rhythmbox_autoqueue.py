@@ -15,8 +15,8 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 
 import os
-import rb
-import rhythmdb
+from time import time
+import rb, rhythmdb
 
 from autoqueue import AutoQueueBase, SongBase
 
@@ -86,10 +86,13 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
     def player_construct_track_search(self, artist, title, restrictions):
         """construct a search that looks for songs with this artist
         and title"""
-        return (rhythmdb.QUERY_PROP_EQUALS, rhythmdb.PROP_ARTIST_FOLDED,
-                artist.encode('utf-8'), rhythmdb.QUERY_PROP_EQUALS,
-                rhythmdb.PROP_TITLE_FOLDED, title.encode('utf-8'))
-    
+        result = (rhythmdb.QUERY_PROP_EQUALS, rhythmdb.PROP_ARTIST_FOLDED,
+                  artist.encode('utf-8'), rhythmdb.QUERY_PROP_EQUALS,
+                  rhythmdb.PROP_TITLE_FOLDED, title.encode('utf-8'))
+        if restrictions:
+            result += restrictions
+        return result
+        
     def player_construct_tag_search(self, tags, exclude_artists, restrictions):
         """construct a search that looks for songs with these
         tags"""
@@ -97,13 +100,21 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
 
     def player_construct_artist_search(self, artist, restrictions):
         """construct a search that looks for songs with this artist"""
-        return (rhythmdb.QUERY_PROP_EQUALS, rhythmdb.PROP_ARTIST_FOLDED,
-                artist.encode('utf-8'))
+        result = (rhythmdb.QUERY_PROP_EQUALS, rhythmdb.PROP_ARTIST_FOLDED,
+                  artist.encode('utf-8'))
+        if restrictions:
+            result += restrictions
+        return result
         
     def player_construct_restrictions(
         self, track_block_time, relaxors, restrictors):
         """contstruct a search to further modify the searches"""
-        return None
+        seconds = track_block_time * 24 * 60 * 60
+        now = time()
+        cutoff = now - seconds
+        self.log("BEFORE: " + str(cutoff))
+        return (
+            rhythmdb.QUERY_PROP_LESS, rhythmdb.PROP_LAST_PLAYED, cutoff)
 
     def player_set_variables_from_config(self):
         """Initialize user settings from the configuration storage"""
