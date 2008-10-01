@@ -34,7 +34,7 @@ except ImportError:
     SQL = False
     
 # If you change even a single character of code, I would ask that you
-# get and use your own (free) api key from last.fm here:
+# get and use your own (free) last.fm api key from here:
 # http://www.last.fm/api/account
 API_KEY = "09d0975a99a4cab235b731d31abf0057"
 
@@ -351,8 +351,6 @@ class AutoQueueBase(object):
                 if songs:
                     yield random.choice(songs)
             if self._songs:
-                # If we have backup songs, they are likely better than
-                # a random track by a similar artist.
                 raise StopIteration
         if self.by_artists:
             last_song = self.get_last_song()
@@ -366,6 +364,8 @@ class AutoQueueBase(object):
                 songs = self.player_search(search)
                 if songs:
                     yield random.choice(songs)
+            if self._songs:
+                raise StopIteration
         if self.by_tags:
             tags = self.get_last_song().get_tags()
             if tags:
