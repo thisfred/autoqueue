@@ -35,6 +35,10 @@ import os
 import sys
 import mpd
 import time
+import errno
+import atexit
+import socket
+import signal
 import optparse
 import autoqueue
 
@@ -44,6 +48,25 @@ On most *n?x systems ~/.autoqueue will be expanded to /home/username/.autoqueue/
 Setting the path to $HOME/.autoqueue/ will usually yield the same result
 '''
 SETTINGS_PATH = '~/.autoqueue/'
+
+'''These settings will be overwritten by the MPD_HOST/MPD_PORT environment
+variables and/or by the commandline arguments'''
+MPD_PORT = 6600
+MPD_HOST = 'localhost'
+
+'''The PID file to see if there are no other instances running'''
+PID_FILE = '/var/run/autoqueue/mpd.pid'
+
+'''Send a KILL signal if the process didn't end KILL_TIMEOUT seconds after
+the TERM signal, check every KILL_CHECK_DELAY seconds if it's still alive
+after sending the TERM signal'''
+KILL_TIMEOUT = 10
+KILL_CHECK_DELAY = 0.1
+
+'''The targets for stdin, stdout and stderr when daemonizing'''
+STDIN = '/dev/null'
+STDOUT = SETTINGS_PATH + 'stdout'
+STDERR = SETTINGS_PATH + 'stderr'
 
 class Song(autoqueue.SongBase):
     '''A MPD song object'''
@@ -186,8 +209,113 @@ class Search(object):
             raise ValueError, 'Empty search queries are not allowed'
         return sum(ret, [])
 
-class AutoQueuePlugin(autoqueue.AutoQueueBase):
-    def __init__(self, host, port):
+class Daemon(object):
+    '''Class to easily create a daemon which transparently handles the saving
+    and removing of the PID file'''
+
+    def __init__(self, pid_file):
+        '''Create a new Daemon
+
+        pid_file -- The file to save the PID in
+        '''
+        self.pid_file = pid_file
+        signal.signal(signal.SIGTERM, lambda *args: self.exit())
+        signal.signal(signal.SIGINT, lambda *args: self.exit())
+        signal.signal(signal.SIGQUIT, lambda *args: self.exit())
+
+    def set_pid_file(self, pid_file):
+        self._pid_file = pid_file
+        open(pid_file, 'w').write('%d' % os.getpid())
+
+    def get_pid_file(self):
+        return self._pid_file
+
+    def del_pid_file(self):
+        try:
+            os.unlink(self._pid_file)
+            print >>sys.stderr, 'Removed PID file'
+        except OSError:
+            print >>sys.stderr, 'Trying to remove non-existing PID file'
+
+    pid_file = property(get_pid_file, set_pid_file, del_pid_file,
+        'The PID file will be written when set and deleted when unset')
+
+    def exit(self):
+        '''Kill the daemon and remove the PID file
+        
+        This method will be called automatically when the process is
+        terminated'''
+        del self.pid_file
+        raise SystemExit
+
+    @classmethod
+    def is_running(cls, pid):
+        try:
+            os.kill(pid, signal.SIG_DFL)
+            return True
+        except OSError, err:
+            return err.errno == errno.EPERM
+
+    @classmethod
+    def kill(cls, pid, pid_file=None):
+        if cls.is_running(pid):
+            print >>sys.stderr, 'Sending TERM signal to process %d' % pid
+            os.kill(pid, signal.SIGTERM)
+            i = KILL_TIMEOUT
+            while i > 0 and cls.is_running(pid):
+                i -= KILL_CHECK_DELAY
+                time.sleep(KILL_CHECK_DELAY)
+            
+            if cls.is_running(pid):
+                print >>sys.stderr, 'Sending KILL signal to process %d' % pid
+                os.kill(pid, signal.SIGKILL)
+
+            time.sleep(1)
+            if cls.is_running(pid):
+                print >>sys.stderr, 'Unable to kill process %d, still running'
+        else:
+            print >>sys.stderr, 'Process %d not running' % pid
+            if pid_file:
+                print >>sys.stderr, 'Removing stale PID file'
+                os.unlink(pid_file)
+
+    @classmethod
+    def daemonize(cls):
+        '''Daemonize using the double fork method so the process keeps running
+        Even after the original shell exits'''
+        stdin_file = expand_file(STDIN)
+        stdout_file = expand_file(STDOUT)
+        stderr_file = expand_file(STDERR)
+        try:
+            pid = os.fork()
+            if pid > 0:
+                sys.exit(0)
+        except OSError, e:
+            print >>sys.stderr, 'Unable to fork: %s' % e
+            sys.exit(1)
+
+        os.chdir('/')
+        os.setsid()
+        os.umask(0)
+
+        try:
+            pid = os.fork()
+            if pid > 0:
+                sys.exit(0)
+        except OSError, e:
+            print >>sys.stderr, 'Unable to fork: %s' % e
+            sys.exit(1)
+
+        '''Redirect stdout, stderr and stdin'''
+        stdin = file(stdin_file, 'r')
+        stdout = file(stdout_file, 'a+')
+        stderr = file(stderr_file, 'a+', 0)
+        os.dup2(stdin.fileno(), sys.stdin.fileno())
+        os.dup2(stdout.fileno(), sys.stdout.fileno())
+        os.dup2(stderr.fileno(), sys.stderr.fileno())
+
+class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
+    def __init__(self, host, port, pid_file):
         self.host, self.port = host, port
         self.client = mpd.MPDClient()
         self.client.connect(host, port)
@@ -195,7 +323,21 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase):
         self.store_blocked_artists = True
         autoqueue.AutoQueueBase.__init__(self)
         self.verbose = True
-        
+        Daemon.__init__(self, pid_file)
+
+    def run(self):
+        while True:
+            print 'Playing', self.player_current_song()
+            time.sleep(1)
+
+    def get_host(self):
+        return self._host
+
+    def set_host(self, host):
+        self._host = socket.gethostbyname(host)
+
+    host = property(get_host, set_host, doc='MPD ip (can be set by ip and hostname)')
+
     def player_construct_track_search(self, artist, title, restrictions):
         '''construct a search that looks for songs with this artist
         and title'''
@@ -220,29 +362,62 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase):
 
     def player_get_userdir(self):
         '''get the application user directory to store files'''
-        path = os.path.expandvars(os.path.expanduser(SETTINGS_PATH))
-        if not os.path.isdir(path):
-            os.mkdir(path)
-        return path
+        return expand_path(SETTINGS_PATH)
+
+    def player_current_song(self):
+        return Song(**self.client.currentsong())
+
+def expand_path(path):
+    path = os.path.expandvars(os.path.expanduser(path))
+    if not os.path.isdir(path):
+        os.mkdir(path)
+    return path
+
+def expand_file(path):
+    path, file_ = os.path.split(path)
+    return os.path.join(expand_path(path), file_)
 
 def main():
     parser = optparse.OptionParser()
-    port = os.environ.get('MPD_PORT', '6600')
-    os.environ['MPD_HOST'] = 'localhost'
-    host = os.environ.get('MPD_HOST', 'localhost')
+    port = os.environ.get('MPD_PORT', MPD_PORT)
+    host = os.environ.get('MPD_HOST', MPD_HOST)
+
+    parser.set_defaults(host=host, port=port, daemonic=True, pid_file=PID_FILE)
+
     parser.add_option('-p', '--port', dest='port', type='int',
         help='The MPD port, defaults to the MPD_PORT environment variable ' \
-        'or 6600 if not available', default=port)
+        'or %d if not available' % MPD_PORT)
     parser.add_option('--host', dest='host', type='string',
         help='The MPD host (ip or hostname), defaults to the MPD_HOST ' \
-        'environment variable or localhost if not available', default=host)
+        'environment variable or %s if not available' % MPD_HOST)
+    parser.add_option('-d', '--daemonic', dest='daemonic',
+        action='store_true', help='Run as a daemon')
+    parser.add_option('-f', '--foreground', dest='daemonic',
+        action='store_false', help='Run as a daemon')
+    parser.add_option('-P', '--pid-file', dest='pid_file',
+        action='store_false', help='Run as a daemon')
+    parser.add_option('-k', '--kill', dest='kill',
+        action='store_true', help='Kill the old process (if available)')
 
     options, args = parser.parse_args()
-    '''Example of how to use the system
-    >>> queue = AutoQueuePlugin(options.host, options.port)
-    >>> search = queue.player_construct_artist_search('vangelis', None)
-    >>> print [s for s in queue.player_search(search)]
-    '''
+    
+    if os.path.isfile(options.pid_file):
+        pid = int(open(options.pid_file).readline())
+        if Daemon.is_running(pid) and not options.kill:
+            print >>sys.stderr, '%s already running (PID: %d)' % (sys.argv[0], pid)
+            sys.exit(2)
+        else:
+            Daemon.kill(pid, options.pid_file)
+            if options.kill:
+                sys.exit(0)
+    elif options.kill:
+        print >>sys.stderr, 'No PID file found, unable to kill'
+        sys.exit(3)
+    
+    if options.daemonic:
+        Daemon.daemonize()
+    plugin = AutoQueuePlugin(options.host, options.port, options.pid_file)
+    plugin.run()
 
 def test():
     import doctest
@@ -250,3 +425,4 @@ def test():
 
 if __name__ == '__main__':
     main()
+
