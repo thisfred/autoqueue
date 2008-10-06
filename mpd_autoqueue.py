@@ -68,11 +68,19 @@ STDIN = '/dev/null'
 STDOUT = SETTINGS_PATH + 'stdout'
 STDERR = SETTINGS_PATH + 'stderr'
 
+'''The interval to refresh the MPD status, the faster this is set, the faster
+the MPD server will be polled to see if the queue is empty'''
+REFRESH_INTERVAL = 10
+
+'''When MPD is not running, should we launch?
+And if MPD exits, should we exit?'''
+EXIT_WITH_MPD = False
+
 class Song(autoqueue.SongBase):
     '''A MPD song object'''
-    def __init__(self, **kwargs):
+    def __init__(self, time=0, **kwargs):
         self.title = self.artist = self.album = ''
-        self.time = 0
+        self.time = time
         self.__dict__.update(**kwargs)
         
     def get_artist(self):
@@ -100,6 +108,14 @@ class Song(autoqueue.SongBase):
             self.duration,
         )
 
+    def get_time(self):
+        return self._time
+
+    def set_time(self, value):
+        self._time = int(value)
+
+    time = property(get_time, set_time, doc='song duration in seconds')
+
     @property
     def duration(self):
         t = time.gmtime(int(self.time))
@@ -108,6 +124,21 @@ class Song(autoqueue.SongBase):
         else:
             fmt = '%M:%S'
         return time.strftime(fmt, t)
+
+    def __int__(self):
+        return self.time
+
+    def __add__(self, other):
+        return Song(time=self.time + other.time)
+
+    def __sub__(self, other):
+        return Song(time=self.time - other.time)
+
+    def __hash__(self):
+        return hash(self.__dict__.get('id'))
+
+    def __cmp__(self, other):
+        return hash(self) == hash(other)
 
 class Search(object):
     '''
@@ -318,17 +349,54 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
     def __init__(self, host, port, pid_file):
         self.host, self.port = host, port
         self.client = mpd.MPDClient()
-        self.client.connect(host, port)
+        self.connect()
         self.use_db = True
         self.store_blocked_artists = True
         autoqueue.AutoQueueBase.__init__(self)
         self.verbose = True
         Daemon.__init__(self, pid_file)
+        self._current_song = None
 
     def run(self):
-        while True:
-            print 'Playing', self.player_current_song()
-            time.sleep(1)
+        running = True
+        while running or not EXIT_WITH_MPD:
+            interval = REFRESH_INTERVAL
+            if running:
+                try:
+                    song = self.player_current_song()
+                    if song != self._current_song:
+                        self._current_song = song
+                        self.on_song_started(song)
+
+                    print '%d seconds remaining, playing: %s' % (
+                        self.player_get_queue_length(), song)
+
+                    interval = min(
+                        REFRESH_INTERVAL,
+                        int(self.player_get_queue_length()) - 5
+                    )
+                    running = True
+                except mpd.ConnectionError:
+                    running = False
+                    self.disconnect()
+            else:
+                running = self.connect()
+            time.sleep(interval)
+        self.exit()
+
+    def connect(self):
+        try:
+            self.client.connect(self.host, self.port)
+            return True
+        except socket.error:
+            return False
+
+    def disconnect(self):
+        try:
+            self.client.disconnect()
+            return True
+        except (socket.error, mpd.ConnectionError):
+            return False
 
     def get_host(self):
         return self._host
@@ -366,6 +434,30 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
 
     def player_current_song(self):
         return Song(**self.client.currentsong())
+    
+    def player_song(self, song_id):
+        return Song(**self.client.playlistid(song_id)[0])
+
+    def player_status(self):
+        return self.client.status()
+
+    def player_playlist(self):
+        return (Song(**x) for x in self.client.playlistid())
+
+    def player_get_songs_in_queue(self):
+        '''return (wrapped) song objects for the songs in the queue'''
+        id = self.player_current_song_id()
+        return [s for i, s in enumerate(self.player_playlist()) if i >= id]
+
+    def player_get_queue_length(self):
+        length = sum(self.player_get_songs_in_queue(), Song(time=0))
+        return int(length) - self.player_current_song_time()
+
+    def player_current_song_id(self):
+        return int(self.player_status().get('songid', 0))
+
+    def player_current_song_time(self):
+        return int(self.player_status().get('time', '0:').split(':')[0])
 
 def expand_path(path):
     path = os.path.expandvars(os.path.expanduser(path))
