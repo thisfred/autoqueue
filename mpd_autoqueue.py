@@ -72,6 +72,15 @@ STDERR = SETTINGS_PATH + 'stderr'
 the MPD server will be polled to see if the queue is empty'''
 REFRESH_INTERVAL = 10
 
+'''The desired length for the queue, do note that this should be kept (a lot)
+lower than the REFRESH_INTERVAL since the result could be an empty queue
+otherwise'''
+DESIRED_QUEUE_LENGTH = 300
+
+'''Make sure we have a little margin before changing the song so the queue
+won't run empty, keeping this at 15 seconds should be safe'''
+QUEUE_MARGIN = 15
+
 '''When MPD is not running, should we launch?
 And if MPD exits, should we exit?'''
 EXIT_WITH_MPD = False
@@ -354,6 +363,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
         self.store_blocked_artists = True
         autoqueue.AutoQueueBase.__init__(self)
         self.verbose = True
+        self.desired_queue_length = DESIRED_QUEUE_LENGTH
         Daemon.__init__(self, pid_file)
         self._current_song = None
 
@@ -368,12 +378,9 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
                         self._current_song = song
                         self.on_song_started(song)
 
-                    print '%d seconds remaining, playing: %s' % (
-                        self.player_get_queue_length(), song)
-
                     interval = min(
                         REFRESH_INTERVAL,
-                        int(self.player_get_queue_length()) - 5
+                        int(self.player_get_queue_length()) - QUEUE_MARGIN
                     )
                     running = True
                 except mpd.ConnectionError:
@@ -381,6 +388,10 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
                     self.disconnect()
             else:
                 running = self.connect()
+
+            if interval <= 0:
+                interval = 1
+                self.fill_queue()
             time.sleep(interval)
         self.exit()
 
@@ -426,7 +437,11 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
 
     def player_search(self, search):
         '''perform a player search'''
-        return (Song(**x) for x in self.client.search(*search.get_parameters()))
+        return [Song(**x) for x in self.client.search(*search.get_parameters())]
+
+    def player_enqueue(self, song):
+        '''Put the song at the end of the queue'''
+        self.client.add(song.file)
 
     def player_get_userdir(self):
         '''get the application user directory to store files'''
@@ -454,7 +469,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
         return int(length) - self.player_current_song_time()
 
     def player_current_song_id(self):
-        return int(self.player_status().get('songid', 0))
+        return int(self.player_status().get('song', 0))
 
     def player_current_song_time(self):
         return int(self.player_status().get('time', '0:').split(':')[0])
