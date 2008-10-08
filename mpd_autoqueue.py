@@ -144,10 +144,10 @@ class Song(autoqueue.SongBase):
         return Song(time=self.time - other.time)
 
     def __hash__(self):
-        return hash(self.__dict__.get('id'))
-
-    def __cmp__(self, other):
-        return hash(self) == hash(other)
+        if 'id' in self.__dict__:
+            return hash(id)
+        else:
+            return id(self)
 
 class Search(object):
     '''
@@ -290,6 +290,8 @@ class Daemon(object):
 
     @classmethod
     def is_running(cls, pid):
+        if not pid:
+            return False
         try:
             os.kill(pid, signal.SIG_DFL)
             return True
@@ -298,6 +300,11 @@ class Daemon(object):
 
     @classmethod
     def kill(cls, pid, pid_file=None):
+        try:
+            pid = int(pid)
+        except (TypeError, ValueError):
+            pid = None
+
         if cls.is_running(pid):
             print >>sys.stderr, 'Sending TERM signal to process %d' % pid
             os.kill(pid, signal.SIGTERM)
@@ -314,7 +321,8 @@ class Daemon(object):
             if cls.is_running(pid):
                 print >>sys.stderr, 'Unable to kill process %d, still running'
         else:
-            print >>sys.stderr, 'Process %d not running' % pid
+            if isinstance(pid, int):
+                print >>sys.stderr, 'Process %d not running' % pid
             if pid_file:
                 print >>sys.stderr, 'Removing stale PID file'
                 os.unlink(pid_file)
@@ -502,14 +510,21 @@ def main():
     parser.add_option('-f', '--foreground', dest='daemonic',
         action='store_false', help='Run as a daemon')
     parser.add_option('-P', '--pid-file', dest='pid_file',
-        action='store_false', help='Run as a daemon')
+        type='string', help='Run as a daemon')
     parser.add_option('-k', '--kill', dest='kill',
         action='store_true', help='Kill the old process (if available)')
 
     options, args = parser.parse_args()
+    options.pid_file = os.path.abspath(options.pid_file)
     
     if os.path.isfile(options.pid_file):
-        pid = int(open(options.pid_file).readline())
+        try:
+            pid = open(options.pid_file).readline()
+            pid = int(pid)
+        except (ValueError, TypeError):
+            print >>sys.stderr, 'PID "%s" invalid, ignoring' % pid
+            pid = None
+
         if Daemon.is_running(pid) and not options.kill:
             print >>sys.stderr, '%s already running (PID: %d)' % (sys.argv[0], pid)
             sys.exit(2)
@@ -519,6 +534,13 @@ def main():
                 sys.exit(0)
     elif options.kill:
         print >>sys.stderr, 'No PID file found, unable to kill'
+        sys.exit(3)
+
+    try:
+        file(options.pid_file, 'a')
+        os.unlink(options.pid_file)
+    except IOError, e:
+        print >>sys.stderr, 'Error: PID file "%s" not writable: %s' % (options.pid_file, e)
         sys.exit(3)
     
     if options.daemonic:
