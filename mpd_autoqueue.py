@@ -75,7 +75,7 @@ REFRESH_INTERVAL = 10
 '''The desired length for the queue, do note that this should be kept (a lot)
 lower than the REFRESH_INTERVAL since the result could be an empty queue
 otherwise'''
-DESIRED_QUEUE_LENGTH = 4400
+DESIRED_QUEUE_LENGTH = 300
 
 '''Make sure we have a little margin before changing the song so the queue
 won't run empty, keeping this at 15 seconds should be safe'''
