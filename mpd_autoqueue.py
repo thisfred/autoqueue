@@ -144,10 +144,7 @@ class Song(autoqueue.SongBase):
         return Song(time=self.time - other.time)
 
     def __hash__(self):
-        if 'id' in self.__dict__:
-            return hash(id)
-        else:
-            return id(self)
+        return hash(getattr(self, 'file', id(self)))
 
 class Search(object):
     '''
