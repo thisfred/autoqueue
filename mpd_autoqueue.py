@@ -75,7 +75,7 @@ REFRESH_INTERVAL = 10
 '''The desired length for the queue, do note that this should be kept (a lot)
 lower than the REFRESH_INTERVAL since the result could be an empty queue
 otherwise'''
-DESIRED_QUEUE_LENGTH = 300
+DESIRED_QUEUE_LENGTH = 4400
 
 '''Make sure we have a little margin before changing the song so the queue
 won't run empty, keeping this at 15 seconds should be safe'''
@@ -94,15 +94,15 @@ class Song(autoqueue.SongBase):
         
     def get_artist(self):
         '''return lowercase UNICODE name of artist'''
-        return self.artist.lower()
+        return unicode(self.artist.lower(), 'utf-8')
 
     def get_title(self):
         '''return lowercase UNICODE title of song'''
-        return self.title.lower()
+        return unicode(self.title.lower(), 'utf-8')
 
     def get_album(self):
         '''return lowercase UNICODE album of song'''
-        return self.album.lower()
+        return unicode(self.album.lower(), 'utf-8')
 
     def get_tags(self):
         '''return a list of tags for the songs'''
@@ -243,7 +243,7 @@ class Search(object):
         '''
         ret = []
         for k, vs in self.parameters.iteritems():
-            ret += [[k, v] for v in vs]
+            ret += [[k, v.encode('utf-8')] for v in vs]
 
         if not ret:
             raise ValueError, 'Empty search queries are not allowed'
@@ -463,7 +463,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
         '''return (wrapped) song objects for the songs in the queue'''
         id = self.player_current_song_id()
         return [s for i, s in enumerate(self.player_playlist()) if i >= id]
-
+        
     def player_get_queue_length(self):
         length = sum(self.player_get_songs_in_queue(), Song(time=0))
         return int(length) - self.player_current_song_time()
