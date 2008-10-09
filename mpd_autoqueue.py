@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Copyright (c) 2008, Rick van Hattem
 All rights reserved.
@@ -72,23 +73,30 @@ STDERR = SETTINGS_PATH + 'stderr'
 the MPD server will be polled to see if the queue is empty'''
 REFRESH_INTERVAL = 10
 
-'''The desired length for the queue, do note that this should be kept (a lot)
-lower than the REFRESH_INTERVAL since the result could be an empty queue
-otherwise'''
-DESIRED_QUEUE_LENGTH = 300
+'''The desired length for the queue, set this to 0 to add a song for every
+finished song or to any other number for the number of seconds to keep the
+queue filled'''
+DESIRED_QUEUE_LENGTH = 0
 
 '''Make sure we have a little margin before changing the song so the queue
-won't run empty, keeping this at 15 seconds should be safe'''
-QUEUE_MARGIN = 15
+won't run empty, keeping this at 15 seconds should be safe
+Do note that when DESIRED_QUEUE_LENGTH = 0 than this would probably work
+better with a value of 0'''
+QUEUE_MARGIN = 0
 
 '''When MPD is not running, should we launch?
 And if MPD exits, should we exit?'''
 EXIT_WITH_MPD = False
 
+'''Allow a search for "spam" to match "eggs spam" aswell
+With proper data this shouldn't be needed'''
+USE_INEXACT_SEARCH = False
+
 class Song(autoqueue.SongBase):
     '''A MPD song object'''
-    def __init__(self, time=0, **kwargs):
+    def __init__(self, file=None, time=0, **kwargs):
         self.title = self.artist = self.album = ''
+        self._file = file
         self.time = time
         self.__dict__.update(**kwargs)
         
@@ -107,6 +115,11 @@ class Song(autoqueue.SongBase):
     def get_tags(self):
         '''return a list of tags for the songs'''
         return []
+
+    @property
+    def file(self):
+        '''file is an immutable attribute that's used for the hash method'''
+        return self._file
 
     def __repr__(self):
         return '<%s: %s - %s - %s (%s)>' % (
@@ -144,7 +157,16 @@ class Song(autoqueue.SongBase):
         return Song(time=self.time - other.time)
 
     def __hash__(self):
-        return hash(getattr(self, 'file', id(self)))
+        if self.file:
+            return hash(self.file)
+        else:
+            return id(self)
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
+    def __ne__(self, other):
+        return hash(self) != hash(other)
 
 class Search(object):
     '''
@@ -394,7 +416,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
             else:
                 running = self.connect()
 
-            if interval <= 0:
+            if interval <= 0 and self.desired_queue_length:
                 interval = 1
                 self.fill_queue()
             time.sleep(interval)
@@ -442,7 +464,10 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
 
     def player_search(self, search):
         '''perform a player search'''
-        return [Song(**x) for x in self.client.search(*search.get_parameters())]
+        results = self.client.find(*search.get_parameters())
+        if USE_INEXACT_SEARCH and not results:
+            results = self.client.search(*search.get_parameters())
+        return [Song(**x) for x in results]
 
     def player_enqueue(self, song):
         '''Put the song at the end of the queue'''
