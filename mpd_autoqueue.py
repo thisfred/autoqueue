@@ -88,10 +88,6 @@ QUEUE_MARGIN = 0
 And if MPD exits, should we exit?'''
 EXIT_WITH_MPD = False
 
-'''Allow a search for "spam" to match "eggs spam" aswell
-With proper data this shouldn't be needed'''
-USE_INEXACT_SEARCH = False
-
 class Song(autoqueue.SongBase):
     '''A MPD song object'''
     def __init__(self, file=None, time=0, **kwargs):
@@ -240,7 +236,7 @@ class Search(object):
         TypeError: "spam" is not a valid field, please choose on from ALLOWED_FIELDS
         '''
         if field in self.ALLOWED_FIELDS:
-            self.parameters.setdefault(field, set()).add(value)
+            self.parameters.setdefault(field, set()).add(value.lower().strip())
         else:
             raise TypeError, '"%s" is not a valid field, please choose ' \
                 'on from ALLOWED_FIELDS' % field
@@ -464,9 +460,20 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
 
     def player_search(self, search):
         '''perform a player search'''
-        results = self.client.find(*search.get_parameters())
-        if USE_INEXACT_SEARCH and not results:
-            results = self.client.search(*search.get_parameters())
+        results = self.client.search(*search.get_parameters())
+
+        '''Make all search results lowercase and strip whitespace'''
+        for r in results:
+            for k, v in r.items():
+                if isinstance(v, basestring):
+                    r['%s_search' % k] = v.strip().lower()
+
+        '''Filter all non-exact matches'''
+        for k, vs in search.parameters.iteritems():
+            for v in vs:
+                results = [r for r in results if r.get('%s_search' % k) == v]
+
+        '''Convert all rows to song objects'''
         return [Song(**x) for x in results]
 
     def player_enqueue(self, song):
