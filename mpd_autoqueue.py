@@ -466,7 +466,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
         for r in results:
             for k, v in r.items():
                 if isinstance(v, basestring):
-                    r['%s_search' % k] = unicode(v).strip().lower()
+                    r['%s_search' % k] = unicode(v, 'utf-8').strip().lower()
 
         '''Filter all non-exact matches'''
         for k, vs in search.parameters.iteritems():
