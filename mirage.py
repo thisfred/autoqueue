@@ -231,7 +231,7 @@ class Matrix(object):
 
         cov = Matrix(mean.rows, mean.rows)
         for i in range(cov.rows):
-            for j in range(i):
+            for j in range(i+1):
                 sum = 0.0
                 for k in range(self.columns):
                     sum += cache.d[i, k] * cache.d[j, k]
@@ -286,7 +286,12 @@ class CovarianceMatrix(object):
             self.d = zeros([(self.dim * self.dim + self.dim) / 2])
         else:
             self.dim = dim_or_matrix.rows
-            self.d = cov(dim_or_matrix.d)
+            self.d = zeros([(self.dim * self.dim + self.dim) / 2])
+            l = 0
+            for i in range(self.dim):
+                for j in range(i, dim_or_matrix.columns):
+                    self.d[l] = dim_or_matrix.d[i,j];
+                    l += 1
         
 class Db(object):
     def __init__(self, dbfile):
@@ -358,6 +363,7 @@ class Mfcc(object):
         mel.d = vf(mel.d)
         mel.d = mel.d + dot(self.filterweights.d, m.d)
         mel.d = vf(mel.d)
+        
         try:
             mfcc = self.dct.multiply(mel)
             t.stop()
@@ -376,10 +382,7 @@ def scms_factory(mfcc):
     s.cov = CovarianceMatrix(full_cov)
     for i in range(s.cov.dim):
         for j in range(i + 1, s.cov.dim):
-            idx = i * s.cov.dim + j - (i * i + i)/2
-            idxy = idx / s.cov.dim
-            idxx = idx % s.cov.dim
-            s.cov.d[idxy,idxx] *= 2
+            s.cov.d[i * s.cov.dim + j - (i * i + i)/2] *= 2
     try:
         full_icov = full_cov.inverse()
         s.icov = CovarianceMatrix(full_icov)
@@ -417,11 +420,8 @@ class Scms(object):
         mdiff = []
         aicov = []
         for i in range(covlen):
-            iy = i / dim
-            ix = i % dim
-            val += s1cov[iy, ix] * s2icov[iy, ix] + s2cov[iy, ix] * s1icov[
-                iy, ix]
-            aicov.append(s1icov[iy, ix] + s2icov[iy, ix])
+            val += s1cov[i] * s2icov[i] + s2cov[i] * s1icov[i]
+            aicov.append(s1icov[i] + s2icov[i])
 
         for i in range(dim):
             mdiff.append(s1mean[i] - s2mean[i])
@@ -511,16 +511,15 @@ class Mir(object):
         return keys
         
 if __name__ == '__main__':
-    #ma = mirageaudio_initialize(
-    #    11025, 120 + 2 * 15, 512)
-    #dec = AudioDecoder(11025, 120, 15, 512)
-    #a = dec.decode('test.mp3')
     mir = Mir()
     scms = mir.analyze('test.mp3')
     scms2 = mir.analyze('test2.mp3')
     scms3 = mir.analyze('test3.ogg')
     scms4 = mir.analyze('test4.ogg')
     scms5 = mir.analyze('test5.ogg')
+    print scms.cov.dim, scms.cov.d
+    print scms.icov.dim, scms.icov.d
+
     t = DbgTimer()
     t.start()
     print scms.distance(scms), scms.distance(scms2), scms.distance(scms3),
