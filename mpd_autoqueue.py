@@ -385,6 +385,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
         self.use_db = True
         self.store_blocked_artists = True
         autoqueue.AutoQueueBase.__init__(self)
+        self.random = True
         self.verbose = True
         self.desired_queue_length = DESIRED_QUEUE_LENGTH
         Daemon.__init__(self, pid_file)

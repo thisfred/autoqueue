@@ -16,6 +16,7 @@
 
 import os
 from time import time
+import gconf
 import rb, rhythmdb
 
 from autoqueue import AutoQueueBase, SongBase
@@ -49,6 +50,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         self.use_db = True
         self.store_blocked_artists = True
         AutoQueueBase.__init__(self)
+        self.gconfclient = gconf.client_get_default()
         self.verbose = True
         self.random = False
         
