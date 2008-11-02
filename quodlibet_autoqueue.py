@@ -14,7 +14,7 @@ from qltk import Frame
 from library import library
 import config
 
-from autoqueue import AutoQueueBase, SongBase, SQL
+from autoqueue import AutoQueueBase, SongBase, SQL, Cache
 
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) api key from last.fm here:
@@ -288,6 +288,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         main.playlist.enqueue([song.song])
         gtk.gdk.threads_leave()
 
+    @Cache(2000)
     def player_search(self, search):
         """perform a player search"""
         try:
