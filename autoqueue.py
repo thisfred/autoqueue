@@ -32,6 +32,12 @@ try:
     SQL = True
 except ImportError:
     SQL = False
+
+#try:
+from mirage import Mir, Db
+MIRAGE = True
+#except ImportError:
+#    MIRAGE = False
     
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) last.fm api key from here:
@@ -166,8 +172,12 @@ class SongBase(object):
         return NotImplemented
 
     def get_tags(self):
-        """return a list of tags for the songs"""
+        """return a list of tags for the song"""
         return []
+
+    def get_filename(self):
+        """return filename for the song"""
+        return NotImplemented
 
 
 class AutoQueueBase(object):
@@ -181,6 +191,7 @@ class AutoQueueBase(object):
         self.track_block_time = 30
         self.desired_queue_length = 0
         self.cache_time = 90
+        self.by_mirage = False
         self.by_tracks = True
         self.by_artists = True
         self.by_tags = False
@@ -336,6 +347,23 @@ class AutoQueueBase(object):
         """yield songs that match the last song in the queue"""
         restrictions = self.player_construct_restrictions(
             self.track_block_time, self.relaxors, self.restrictors)
+        if MIRAGE and self.by_mirage:
+            last_song = self.get_last_song()
+            artist_name = last_song.get_artist()
+            title = last_song.get_title()
+            filename = last_song.get_filename()
+            for match, artist, title in self.get_ordered_mirage_tracks(
+                artist_name, title, filename):
+                if self.is_blocked(artist):
+                    continue
+                self.log("looking for: %s, %s, %s" % (match, artist, title))
+                search = self.player_construct_track_search(
+                    artist, title, restrictions)
+                songs = self.player_search(search)
+                if songs:
+                    yield random.choice(songs)
+            if self._songs:
+                raise StopIteration
         if self.by_tracks:
             last_song = self.get_last_song()
             artist_name = last_song.get_artist()
@@ -614,6 +642,26 @@ class AutoQueueBase(object):
             (artist_id, title))
         return cursor.fetchone()
 
+    @Cache(2000)
+    def get_artist_and_title(self, track_id):
+        self.connection.commit()
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "SELECT artists.name, tracks.title FROM tracks INNER JOIN artists"
+            " ON tracks.artist = artists.id WHERE tracks.id = ?",
+            (track_id, ))
+        row = cursor.fetchone()
+        return row[0], row[1]
+
+    def get_artist_tracks(self, artist_id):
+        self.connection.commit()
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "SELECT tracks.id FROM tracks INNER JOIN artists"
+            " ON tracks.artist = artists.id WHERE artists.id = ?",
+            (artists_id, ))
+        return [row[0] for row in cursor.fetchall()]
+        
     def get_ordered_similar_artists(self, artist_name):
         """get similar artists from the database sorted by descending
         match score"""
@@ -621,6 +669,7 @@ class AutoQueueBase(object):
             l = list(set(self.get_similar_artists_from_lastfm(artist_name)))
             self.reorder(l)
             return l
+        self.connection.commit()
         artist = self.get_artist(artist_name)
         artist_id, updated = artist[0], artist[2]
         cursor = self.connection.cursor()
@@ -655,7 +704,36 @@ class AutoQueueBase(object):
             random.shuffle(unordered_list)
         else:
             unordered_list.sort(reverse=True)
-    
+
+    def get_ordered_mirage_tracks(self, artist_name, title, filename):
+        """get similar tracks from mirage acoustic analysis"""
+        self.log("Getting similar tracks from last.fm for: %s - %s" % (
+            artist_name, title))
+        if not self.use_db:
+            return []
+        track = self.get_track(artist_name, title)
+        track_id, artist_id, updated = track[0], track[1], track[3]
+        self.log(repr(track))
+        db = Db(self.connection)
+        tracks = []
+        for match, track_id in db.get_neighbours(track_id):
+            track_artist, track_title = self.get_artist_and_title(track_id)
+            tracks.append(match, track_artist, track_title)
+        if tracks:
+            return tracks
+        if db.get_track(track_id):
+            return []
+        self.log("no mirage data found, analyzing track")
+        exclude_ids = self.get_artist_tracks(artist_id)
+        mir = Mir()
+        scms = mir.analyze(filename)
+        db.add_and_compare(track_id, scms,exclude_ids=exclude_ids)
+        tracks = []
+        for match, track_id in db.get_neighbours(track_id):
+            track_artist, track_title = self.get_artist_and_title(track_id)
+            tracks.append(match, track_artist, track_title)
+        return tracks
+
     def get_ordered_similar_tracks(self, artist_name, title):
         """get similar tracks from the database sorted by descending
         match score"""

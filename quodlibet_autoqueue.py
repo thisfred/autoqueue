@@ -42,6 +42,9 @@ BOOL_SETTINGS = {
     'cache': {
         'value': SQL and True,
         'label': 'caching'},
+    'by_mirage': {
+        'value': False,
+        'label': 'use mirage'},
     'by_tracks': {
         'value': True,
         'label': 'by track'},
@@ -89,6 +92,11 @@ class Song(SongBase):
         """return a list of tags for the songs"""
         return self.song.list("grouping")
 
+    def get_filename(self):
+        """return a list of tags for the songs"""
+        return self.song("~filename")
+
+        
 class AutoQueue(EventPlugin, AutoQueueBase):
     """The actual plugin class"""
     PLUGIN_ID = "AutoQueue"
@@ -103,7 +111,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         self.threaded = True
         EventPlugin.__init__(self)
         AutoQueueBase.__init__(self)
-               
+        
     def enabled(self):
         """user enabled the plugin"""
         self.log("enabled")
