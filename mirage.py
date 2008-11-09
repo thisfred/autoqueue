@@ -7,6 +7,7 @@ from cStringIO import StringIO
 from ctypes import *
 from scipy import *
 import gst, gobject
+import sqlite3
 
 DEBUG = True
 
@@ -170,7 +171,7 @@ class AudioDecoder(object):
             startframe = frames.value / 2 - (frames_requested / 2)
             copyframes = frames_requested
 
-        print "Mirage: decoded frames=%s,size=%s" % (frames, size)
+        write_line("Mirage: decoded frames=%s,size=%s" % (frames, size))
             
         stft = Matrix(size.value, copyframes)
         for i in range(size.value):
@@ -299,36 +300,38 @@ class Db(object):
         cursor = self.connection.cursor()
         cursor.execute("CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER "
                        "PRIMARY KEY, scms BLOB)")
-        cursor.commit()
+        self.connection.commit()
 
     def add_track(self, trackid, scms):
         cursor = self.connection.cursor()
         cursor.execute("INSERT INTO mirage (trackid, scms) VALUES (?, ?)",
                        (trackid,
                         sqlite3.Binary(instance_to_picklestring(scms))))
-        cursor.commit()
+        self.connection.commit()
 
     def remove_track(self, trackid):
         cursor = self.connection.cursor()
         cursor.execute("DELETE FROM mirage WHERE trackid = ?", (trackid,))
-        cursor.commit()
+        self.connection.commit()
 
     def remove_tracks(self, trackids):
         cursor = self.connection.cursor()
         cursor.execute("DELETE FROM mirage WHERE trackid IN ?", (
             ','.join(trackids),))
-        cursor.commit()
+        self.connection.commit()
 
     def get_track(self, trackid):
         cursor = self.connection.cursor()
         cursor.execute("SELECT scms FROM mirage WHERE trackid = ?", (trackid,))
-        picklestring = cursor.fetchone[0]
-        return instance_from_picklestring(picklestring)
+        row = cursor.fetchone()
+        return instance_from_picklestring(row[0])
 
-    def get_tracks(self, exclude_ids):
+    def get_tracks(self, exclude_ids=None):
+        if not exclude_ids:
+            exclude_ids = []
         cursor = self.connection.cursor()
         cursor.execute("SELECT scms, trackid FROM mirage WHERE trackid"
-                       " NOT IN ?", (','.join(exclude_ids),))
+                       " NOT IN (%s);" % ','.join(exclude_ids))
         return cursor
 
     def get_all_track_ids(self):
@@ -339,7 +342,7 @@ class Db(object):
     def reset(self):
         cursor = self.connection.cursor()
         cursor.execute("DELETE FROM mirage")
-        cursor.commit()
+        self.connection.commit()
 
 
 class Mfcc(object):
@@ -398,7 +401,7 @@ def instance_from_picklestring(picklestring):
 
 def instance_to_picklestring(instance):
     f = StringIO()
-    pickle.dump(scms, f)
+    pickle.dump(instance, f)
     return f.getvalue()
     
 class Scms(object):
@@ -460,7 +463,6 @@ class Mir(object):
         self.ad.cancel_decode()
 
     def analyze(self, filename):
-        #try:
         t = DbgTimer()
         t.start()
 
@@ -469,12 +471,7 @@ class Mir(object):
         scms = scms_factory(mfccdata)
 
         t.stop()
-        write_line("Mirage: Total Execution Time: %s" % t.time)
         return scms
-        #except:
-        #    # AudioDecoderErrorException, AudioDecoderCanceledException,
-        #    # MfccFailedException, ScmsImpossibleException, Exception:
-        #    raise MirAnalysisImpossibleException
         
     def similar_tracks(ids, exclude, db):
         seed_scms = []
@@ -509,58 +506,24 @@ class Mir(object):
         t.stop()
         write_line("Mirage: playlist in: %s" % t.time)
         return keys
-        
-if __name__ == '__main__':
-    mir = Mir()
-    scms = mir.analyze('test.mp3')
-    scms2 = mir.analyze('test2.mp3')
-    scms3 = mir.analyze('test3.ogg')
-    scms4 = mir.analyze('test4.ogg')
-    scms5 = mir.analyze('test5.ogg')
-    print scms.cov.dim, scms.cov.d
-    print scms.icov.dim, scms.icov.d
 
-    t = DbgTimer()
-    t.start()
-    print scms.distance(scms), scms.distance(scms2), scms.distance(scms3),
-    print scms.distance(scms4), scms.distance(scms5)
-    print scms2.distance(scms), scms2.distance(scms2), scms2.distance(scms3),
-    print scms2.distance(scms4),scms2.distance(scms5)
-    print scms3.distance(scms), scms3.distance(scms2), scms3.distance(scms3),
-    print scms3.distance(scms4), scms3.distance(scms5)
-    print scms4.distance(scms), scms4.distance(scms2), scms4.distance(scms3),
-    print scms4.distance(scms4), scms4.distance(scms5)
-    print scms5.distance(scms), scms5.distance(scms2), scms5.distance(scms3),
-    print scms5.distance(scms4), scms5.distance(scms5)
-    t.stop()
-    print "comparison in %s" % t.time
-    
-    #a.mprint(10, 10)
-    ## a = Matrix(3,4)
-    ## a1 = mat(zeros([3,4]))
-    ## a.d[1,1] = 1.0
-    ## a1[1,1] = 1.0
-    ## b = Matrix(4,3)
-    ## b1 = mat(zeros([4,3]))
-    ## b.d[1,0] = 2.0
-    ## b1[1,0] = 2.0
-    ## b.d[0,1] = 3.0
-    ## b1[0,1] = 3.0 
-    ## c = a.multiply(b)
-    ## c1 = a1 * b1
-    ## c.mprint(3,3)
-    ## #c.print_turn(2,2)
-    ## print repr(c1)
-    ## a.mean().mprint(3,1)
-    ## print a1.mean(1)
-    ## b.mean().mprint(4,1)
-    ## print b1.mean(1)
-    ## c.covariance(c.mean()).mprint(3,3)
-    ## print cov(c1)
-    ## d = Matrix(5, 5)
-    ## t = mat([random.random() for i in range(25)])
-    ## d.d = t.reshape(5,5)
-    ## print d.d
-    ## print d.inverse().d
-    ## e = CovarianceMatrix(d)
-    ## print e.d
+## if __name__ == '__main__':
+    ## mir = Mir()
+    ## scms = mir.analyze('testfiles/test.mp3')
+    ## scms2 = mir.analyze('testfiles/test2.mp3')
+    ## scms3 = mir.analyze('testfiles/test3.ogg')
+    ## scms4 = mir.analyze('testfiles/test4.ogg')
+    ## scms5 = mir.analyze('testfiles/test5.ogg')
+    ## scmses = [scms, scms2, scms3, scms4, scms5]
+
+    ## testdb = Db(":memory:")
+    ## for i, scms in enumerate(scmses):
+    ##     testdb.add_track(i, scms)
+        
+    ## print sorted(
+    ##     [id for (scms, id) in testdb.get_tracks(exclude_ids=['3','4'])]) # [0,1,2]
+
+    ## scms3_db = testdb.get_track('3')
+    ## scms4_db = testdb.get_track('4')
+
+    ## print int(scms3_db.distance(scms4_db) * 100) # 9647

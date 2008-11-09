@@ -1,15 +1,20 @@
 from numpy import array, zeros
 from nose.tools import assert_equals
-from mirage import Mir, CovarianceMatrix, Matrix, Vector
+from mirage import Mir, CovarianceMatrix, Matrix, Vector, Db
 from decimal import Decimal, getcontext
 
 def decimize(f):
     return Decimal(str(f))
 
-class TestMir(object):
-    def setup(self):
-        self.mir = Mir()
+mir = Mir()
+scms = mir.analyze('testfiles/test.mp3')
+scms2 = mir.analyze('testfiles/test2.mp3')
+scms3 = mir.analyze('testfiles/test3.ogg')
+scms4 = mir.analyze('testfiles/test4.ogg')
+scms5 = mir.analyze('testfiles/test5.ogg')
+scmses = [scms, scms2, scms3, scms4, scms5]
 
+class TestMir(object):
     def test_covariance_matrix(self):
         cov = CovarianceMatrix(10)
         assert_equals(cov.dim, 10)
@@ -74,42 +79,79 @@ class TestMir(object):
              0.0, 2.71666666667, 5.43333333333, 8.15, 2.5, 5.0, 7.5,
              4.85555555556, 7.28333333333, 7.175]]
             )
-
+            
     def test_analysis(self):
-        mir = Mir()
-        scms = mir.analyze('testfiles/test.mp3')
-        scms2 = mir.analyze('testfiles/test2.mp3')
-        scms3 = mir.analyze('testfiles/test3.ogg')
-        scms4 = mir.analyze('testfiles/test4.ogg')
-        scms5 = mir.analyze('testfiles/test5.ogg')
+        assert_equals(
+            int(scms.distance(scms) * 100), 3999)
+        assert_equals(
+            int(scms.distance(scms2) * 100), 6004)
+        assert_equals(
+            int(scms.distance(scms3) * 100), 6977)
+        assert_equals(
+            int(scms.distance(scms4) * 100), 6993)
+        assert_equals(
+            int(scms.distance(scms5) * 100), 6443)
 
-        assert_equals(decimize(scms.distance(scms)), decimize(40.0))
-        assert_equals(decimize(scms.distance(scms2)), decimize(60.0410784026))
-        assert_equals(decimize(scms.distance(scms3)), decimize(69.7778050071))
-        assert_equals(decimize(scms.distance(scms4)), decimize(69.9353307839))
-        assert_equals(decimize(scms.distance(scms5)), decimize(64.4393694913))
+        assert_equals(
+            int(scms2.distance(scms) * 100), 6004)
+        assert_equals(
+            int(scms2.distance(scms2) * 100), 4000)
+        assert_equals(
+            int(scms2.distance(scms3) * 100), 6777)
+        assert_equals(
+            int(scms2.distance(scms4) * 100), 6539)
+        assert_equals(
+            int(scms2.distance(scms5) * 100), 7326)
 
-        assert_equals(decimize(scms2.distance(scms)), decimize(60.0410784026))
-        assert_equals(decimize(scms2.distance(scms2)), decimize(40.0))
-        assert_equals(decimize(scms2.distance(scms3)), decimize(67.7742869702))
-        assert_equals(decimize(scms2.distance(scms4)), decimize(65.3971024652))
-        assert_equals(decimize(scms2.distance(scms5)), decimize(73.2605282954))
+        assert_equals(
+            int(scms3.distance(scms) * 100), 6977)
+        assert_equals(
+            int(scms3.distance(scms2) * 100), 6777)
+        assert_equals(
+            int(scms3.distance(scms3) * 100), 4000)
+        assert_equals(
+            int(scms3.distance(scms4) * 100), 7252)
+        assert_equals(
+            int(scms3.distance(scms5) * 100), 10454)
 
-        assert_equals(decimize(scms3.distance(scms)), decimize(69.7778050071))
-        assert_equals(decimize(scms3.distance(scms2)), decimize(67.7742869702))
-        assert_equals(decimize(scms3.distance(scms3)), decimize(40.0))
-        assert_equals(decimize(scms3.distance(scms4)), decimize(72.5249084377))
-        assert_equals(decimize(scms3.distance(scms5)), decimize(104.545284935))
+        assert_equals(
+            int(scms4.distance(scms) * 100), 6993)
+        assert_equals(
+            int(scms4.distance(scms2) * 100), 6539)
+        assert_equals(
+            int(scms4.distance(scms3) * 100), 7252)
+        assert_equals(
+            int(scms4.distance(scms4) * 100), 4000)
+        assert_equals(
+            int(scms4.distance(scms5) * 100), 9674)
 
-        assert_equals(decimize(scms4.distance(scms)), decimize(69.9353307839))
-        assert_equals(decimize(scms4.distance(scms2)), decimize(65.3971024652))
-        assert_equals(decimize(scms4.distance(scms3)), decimize(72.5249084377))
-        assert_equals(decimize(scms4.distance(scms4)), decimize(40.0))
-        assert_equals(decimize(scms4.distance(scms5)), decimize(96.7413449229))
+        assert_equals(
+            int(scms5.distance(scms) * 100), 6443)
+        assert_equals(
+            int(scms5.distance(scms2) * 100), 7326)
+        assert_equals(
+            int(scms5.distance(scms3) * 100), 10454)
+        assert_equals(
+            int(scms5.distance(scms4) * 100), 9674)
+        assert_equals(
+            int(scms5.distance(scms5) * 100), 4000)
 
-        assert_equals(decimize(scms5.distance(scms)), decimize(64.4393694913))
-        assert_equals(decimize(scms5.distance(scms2)), decimize(73.2605282954))
-        assert_equals(decimize(scms5.distance(scms3)), decimize(104.545284935))
-        assert_equals(decimize(scms5.distance(scms4)), decimize(96.7413449229))
-        assert_equals(decimize(scms5.distance(scms5)), decimize(40.0))
+    def test_add_track(self):
+        testdb = Db(":memory:")
+        for i, scms in enumerate(scmses):
+            testdb.add_track(i, scms)
+        
+        assert_equals(
+            [0,1,2],
+            sorted([id for (scms, id) in
+                    testdb.get_tracks(exclude_ids=['3','4'])]))
 
+    def test_get_track(self):
+        testdb = Db(":memory:")
+        for i, testscms in enumerate(scmses):
+            testdb.add_track(i, testscms)
+        scms3_db = testdb.get_track('3')
+        scms4_db = testdb.get_track('4')
+
+        assert_equals(9674, int(scms3_db.distance(scms4_db) * 100))
+        
