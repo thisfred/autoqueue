@@ -1,3 +1,4 @@
+import sqlite3
 from numpy import array, zeros
 from nose.tools import assert_equals
 from mirage import Mir, CovarianceMatrix, Matrix, Vector, Db
@@ -137,7 +138,8 @@ class TestMir(object):
             int(scms5.distance(scms5) * 100), 4000)
 
     def test_add_track(self):
-        testdb = Db(":memory:")
+        connection = sqlite3.connect(":memory:")
+        testdb = Db(connection)
         for i, scms in enumerate(scmses):
             testdb.add_track(i, scms)
         
@@ -147,11 +149,35 @@ class TestMir(object):
                     testdb.get_tracks(exclude_ids=['3','4'])]))
 
     def test_get_track(self):
-        testdb = Db(":memory:")
+        connection = sqlite3.connect(":memory:")
+        testdb = Db(connection)
         for i, testscms in enumerate(scmses):
             testdb.add_track(i, testscms)
         scms3_db = testdb.get_track('3')
         scms4_db = testdb.get_track('4')
 
         assert_equals(9674, int(scms3_db.distance(scms4_db) * 100))
+
+    def test_add_and_compare(self):
+        connection = sqlite3.connect(":memory:")
+        testdb = Db(connection)
+        for i, testscms in enumerate(scmses):
+            testdb.add_and_compare(i, testscms)
+        cursor = testdb.connection.cursor()
+        distances = [row for row in cursor.execute("SELECT * FROM distance")]
+        assert_equals(
+            [(1, 0, 6004), (2, 0, 6977), (2, 1, 6777), (3, 0, 6993),
+             (3, 1, 6539), (4, 0, 6443)],
+            distances)
+
+    def test_get_neighbours(self):
+        connection = sqlite3.connect(":memory:")
+        testdb = Db(connection)
+        for i, testscms in enumerate(scmses):
+            testdb.add_and_compare(i, testscms)
+        assert_equals(
+            [(6004, 1), (6443, 4), (6977, 2), (6993, 3)],
+            testdb.get_neighbours(0))
+        
+        
         

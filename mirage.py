@@ -7,7 +7,6 @@ from cStringIO import StringIO
 from ctypes import *
 from scipy import *
 import gst, gobject
-import sqlite3
 
 DEBUG = True
 
@@ -295,11 +294,13 @@ class CovarianceMatrix(object):
                     l += 1
         
 class Db(object):
-    def __init__(self, dbfile):
-        self.connection = sqlite3.connect(dbfile)
+    def __init__(self, connection):
+        self.connection = connection
         cursor = self.connection.cursor()
         cursor.execute("CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER "
                        "PRIMARY KEY, scms BLOB)")
+        cursor.execute("CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, "
+                       "track_2 INTEGER, distance INTEGER)")
         self.connection.commit()
 
     def add_track(self, trackid, scms):
@@ -344,7 +345,39 @@ class Db(object):
         cursor.execute("DELETE FROM mirage")
         self.connection.commit()
 
-
+    def add_and_compare(self, trackid, scms, cutoff=7000, exclude_ids=None):
+        if not exclude_ids:
+            exclude_ids = []
+        self.add_track(trackid, scms)
+        cursor = self.connection.cursor()
+        for buf, otherid in self.get_tracks(
+            exclude_ids=exclude_ids):
+            if trackid == otherid:
+                continue
+            other = instance_from_picklestring(buf)
+            distance = int(scms.distance(other) * 100)
+            if distance < cutoff:
+                cursor.execute(
+                    "INSERT INTO distance (track_1, track_2, distance) "
+                    "VALUES (?, ?, ?)",
+                    (trackid, otherid, distance))
+        self.connection.commit()
+        
+    def get_neighbours(self, trackid):
+        cursor = self.connection.cursor()
+        neighbours1 = [row for row in cursor.execute(
+            "SELECT distance, track_2 FROM distance WHERE track_1 = ? "
+            "ORDER BY distance DESC LIMIT 100",
+            (trackid,))]
+        neighbours2 = [row for row in cursor.execute(
+            "SELECT distance, track_1 FROM distance WHERE track_2 = ? "
+            "ORDER BY distance DESC LIMIT 100",
+            (trackid,))]
+        
+        neighbours1.extend(neighbours2)
+        neighbours1.sort()
+        return neighbours1
+            
 class Mfcc(object):
     def __init__(self, winsize, srate, filters, cc):
         self.dct = Matrix(1,1)
