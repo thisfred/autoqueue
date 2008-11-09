@@ -659,7 +659,7 @@ class AutoQueueBase(object):
         cursor.execute(
             "SELECT tracks.id FROM tracks INNER JOIN artists"
             " ON tracks.artist = artists.id WHERE artists.id = ?",
-            (artists_id, ))
+            (artist_id, ))
         return [row[0] for row in cursor.fetchall()]
         
     def get_ordered_similar_artists(self, artist_name):
@@ -707,7 +707,7 @@ class AutoQueueBase(object):
 
     def get_ordered_mirage_tracks(self, artist_name, title, filename):
         """get similar tracks from mirage acoustic analysis"""
-        self.log("Getting similar tracks from last.fm for: %s - %s" % (
+        self.log("Getting similar tracks from mirage for: %s - %s" % (
             artist_name, title))
         if not self.use_db:
             return []
