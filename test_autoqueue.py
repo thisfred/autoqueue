@@ -11,19 +11,19 @@ WAIT_BETWEEN_REQUESTS = timedelta(0,0,10)
 fake_responses = {
     'http://ws.audioscrobbler.com/2.0/?method=track.getsimilar&artist='
     'joni+mitchell&track=carey&api_key=09d0975a99a4cab235b731d31abf0057':
-    'test1.xml',
+    'testfiles/test1.xml',
     'http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist='
     'nina+simone&api_key=09d0975a99a4cab235b731d31abf0057':
-    'test2.xml',
+    'testfiles/test2.xml',
     'http://ws.audioscrobbler.com/2.0/?method=track.getsimilar&artist='
     'nina+simone&track=i+think+it%27s+going+to+rain+today'
-    '&api_key=09d0975a99a4cab235b731d31abf0057': 'test3.xml',
+    '&api_key=09d0975a99a4cab235b731d31abf0057': 'testfiles/test3.xml',
     'http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist='
     'joni+mitchell&api_key=09d0975a99a4cab235b731d31abf0057':
-    'test4.xml',
+    'testfiles/test4.xml',
     'http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist='
     'habib+koit%C3%A9+%26+bamada&api_key=09d0975a99a4cab235b731d31abf0057':
-    'test5.xml'
+    'testfiles/test5.xml'
     }
 
 class MockPlayer(object):

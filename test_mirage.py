@@ -77,14 +77,39 @@ class TestMir(object):
 
     def test_analysis(self):
         mir = Mir()
-        scms = mir.analyze('test.mp3')
-        scms2 = mir.analyze('test2.mp3')
-        scms3 = mir.analyze('test3.ogg')
-        scms4 = mir.analyze('test4.ogg')
-        scms5 = mir.analyze('test5.ogg')
+        scms = mir.analyze('testfiles/test.mp3')
+        scms2 = mir.analyze('testfiles/test2.mp3')
+        scms3 = mir.analyze('testfiles/test3.ogg')
+        scms4 = mir.analyze('testfiles/test4.ogg')
+        scms5 = mir.analyze('testfiles/test5.ogg')
 
         assert_equals(decimize(scms.distance(scms)), decimize(40.0))
-        assert_equals(decimize(scms.distance(scms2)), decimize(107.116340072))
-        assert_equals(decimize(scms.distance(scms3)), decimize(93.5086602732))
-        assert_equals(decimize(scms.distance(scms4)), decimize(76.0295345553))
-        assert_equals(decimize(scms.distance(scms5)),decimize(65.7467376324)))
+        assert_equals(decimize(scms.distance(scms2)), decimize(60.0410784026))
+        assert_equals(decimize(scms.distance(scms3)), decimize(69.7778050071))
+        assert_equals(decimize(scms.distance(scms4)), decimize(69.9353307839))
+        assert_equals(decimize(scms.distance(scms5)), decimize(64.4393694913))
+
+        assert_equals(decimize(scms2.distance(scms)), decimize(60.0410784026))
+        assert_equals(decimize(scms2.distance(scms2)), decimize(40.0))
+        assert_equals(decimize(scms2.distance(scms3)), decimize(67.7742869702))
+        assert_equals(decimize(scms2.distance(scms4)), decimize(65.3971024652))
+        assert_equals(decimize(scms2.distance(scms5)), decimize(73.2605282954))
+
+        assert_equals(decimize(scms3.distance(scms)), decimize(69.7778050071))
+        assert_equals(decimize(scms3.distance(scms2)), decimize(67.7742869702))
+        assert_equals(decimize(scms3.distance(scms3)), decimize(40.0))
+        assert_equals(decimize(scms3.distance(scms4)), decimize(72.5249084377))
+        assert_equals(decimize(scms3.distance(scms5)), decimize(104.545284935))
+
+        assert_equals(decimize(scms4.distance(scms)), decimize(69.9353307839))
+        assert_equals(decimize(scms4.distance(scms2)), decimize(65.3971024652))
+        assert_equals(decimize(scms4.distance(scms3)), decimize(72.5249084377))
+        assert_equals(decimize(scms4.distance(scms4)), decimize(40.0))
+        assert_equals(decimize(scms4.distance(scms5)), decimize(96.7413449229))
+
+        assert_equals(decimize(scms5.distance(scms)), decimize(64.4393694913))
+        assert_equals(decimize(scms5.distance(scms2)), decimize(73.2605282954))
+        assert_equals(decimize(scms5.distance(scms3)), decimize(104.545284935))
+        assert_equals(decimize(scms5.distance(scms4)), decimize(96.7413449229))
+        assert_equals(decimize(scms5.distance(scms5)), decimize(40.0))
+
