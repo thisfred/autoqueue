@@ -5,6 +5,7 @@ from operator import itemgetter
 import cPickle as pickle
 from cStringIO import StringIO
 from ctypes import *
+import sqlite3
 from scipy import *
 import gst, gobject
 
@@ -325,6 +326,8 @@ class Db(object):
         cursor = self.connection.cursor()
         cursor.execute("SELECT scms FROM mirage WHERE trackid = ?", (trackid,))
         row = cursor.fetchone()
+        if not row:
+            return None
         return instance_from_picklestring(row[0])
 
     def get_tracks(self, exclude_ids=None):
@@ -380,10 +383,11 @@ class Db(object):
             
 class Mfcc(object):
     def __init__(self, winsize, srate, filters, cc):
+        here = os.path.dirname( __file__)
         self.dct = Matrix(1,1)
-        self.dct.load(os.path.join('res', 'dct.filter'))
+        self.dct.load(os.path.join(here, 'res', 'dct.filter'))
         self.filterweights = Matrix(1,1)
-        self.filterweights.load(os.path.join('res', 'filterweights.filter'))
+        self.filterweights.load(os.path.join(here, 'res', 'filterweights.filter'))
 
     def apply(self, m):
         def f(x):
