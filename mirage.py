@@ -335,7 +335,8 @@ class Db(object):
             exclude_ids = []
         cursor = self.connection.cursor()
         cursor.execute("SELECT scms, trackid FROM mirage WHERE trackid"
-                       " NOT IN (%s);" % ','.join(exclude_ids))
+                       " NOT IN (%s);" % ','.join([str(ex) for ex in
+                                                   exclude_ids]))
         return cursor
 
     def get_all_track_ids(self):
