@@ -731,7 +731,7 @@ class AutoQueueBase(object):
         tracks = []
         for match, track_id in db.get_neighbours(track_id):
             track_artist, track_title = self.get_artist_and_title(track_id)
-            tracks.append(match, track_artist, track_title)
+            tracks.append((match, track_artist, track_title))
         return tracks
 
     def get_ordered_similar_tracks(self, artist_name, title):
