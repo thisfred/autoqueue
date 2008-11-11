@@ -718,7 +718,7 @@ class AutoQueueBase(object):
         tracks = []
         for match, track_id in db.get_neighbours(track_id):
             track_artist, track_title = self.get_artist_and_title(track_id)
-            tracks.append(match, track_artist, track_title)
+            tracks.append((match, track_artist, track_title))
         if tracks:
             return tracks
         if db.get_track(track_id):
