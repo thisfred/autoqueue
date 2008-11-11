@@ -716,8 +716,8 @@ class AutoQueueBase(object):
         self.log(repr(track))
         db = Db(self.connection)
         tracks = []
-        for match, track_id in db.get_neighbours(track_id):
-            track_artist, track_title = self.get_artist_and_title(track_id)
+        for match, mtrack_id in db.get_neighbours(track_id):
+            track_artist, track_title = self.get_artist_and_title(mtrack_id)
             tracks.append((match, track_artist, track_title))
         if tracks:
             return tracks
@@ -729,8 +729,8 @@ class AutoQueueBase(object):
         scms = mir.analyze(filename)
         db.add_and_compare(track_id, scms,exclude_ids=exclude_ids)
         tracks = []
-        for match, track_id in db.get_neighbours(track_id):
-            track_artist, track_title = self.get_artist_and_title(track_id)
+        for match, mtrack_id in db.get_neighbours(track_id):
+            track_artist, track_title = self.get_artist_and_title(mtrack_id)
             tracks.append((match, track_artist, track_title))
         return tracks
 
