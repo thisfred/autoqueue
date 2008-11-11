@@ -371,11 +371,11 @@ class Db(object):
         cursor = self.connection.cursor()
         neighbours1 = [row for row in cursor.execute(
             "SELECT distance, track_2 FROM distance WHERE track_1 = ? "
-            "ORDER BY distance DESC LIMIT 100",
+            "ORDER BY distance ASC LIMIT 100",
             (trackid,))]
         neighbours2 = [row for row in cursor.execute(
             "SELECT distance, track_1 FROM distance WHERE track_2 = ? "
-            "ORDER BY distance DESC LIMIT 100",
+            "ORDER BY distance ASC LIMIT 100",
             (trackid,))]
         
         neighbours1.extend(neighbours2)
