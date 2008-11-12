@@ -179,7 +179,10 @@ class SongBase(object):
         """return filename for the song"""
         return NotImplemented
 
-
+    def get_length(self):
+        """return length in seconds"""
+        return NotImplemented
+    
 class AutoQueueBase(object):
     """Generic base class for autoqueue plugins."""
     use_db = False
@@ -349,11 +352,8 @@ class AutoQueueBase(object):
             self.track_block_time, self.relaxors, self.restrictors)
         if MIRAGE and self.by_mirage:
             last_song = self.get_last_song()
-            artist_name = last_song.get_artist()
-            title = last_song.get_title()
-            filename = last_song.get_filename()
             for match, artist, title in self.get_ordered_mirage_tracks(
-                artist_name, title, filename):
+                last_song):
                 if self.is_blocked(artist):
                     continue
                 self.log("looking for: %s, %s, %s" % (match, artist, title))
@@ -705,8 +705,12 @@ class AutoQueueBase(object):
         else:
             unordered_list.sort(reverse=True)
 
-    def get_ordered_mirage_tracks(self, artist_name, title, filename):
+    def get_ordered_mirage_tracks(self, song):
         """get similar tracks from mirage acoustic analysis"""
+        artist_name = song.get_artist()
+        title = song.get_title()
+        filename = song.get_filename()
+        length = song.get_length()
         self.log("Getting similar tracks from mirage for: %s - %s" % (
             artist_name, title))
         if not self.use_db:
@@ -722,6 +726,9 @@ class AutoQueueBase(object):
         if tracks:
             return tracks
         if db.get_track(track_id):
+            return []
+        if length < 60:
+            self.log("song too short to analyze")
             return []
         self.log("no mirage data found, analyzing track")
         exclude_ids = self.get_artist_tracks(artist_id)
