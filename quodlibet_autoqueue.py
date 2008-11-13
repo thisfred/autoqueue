@@ -8,7 +8,6 @@ published by the Free Software Foundation"""
 
 import const, gtk
 from plugins.events import EventPlugin
-from plugins.songsmenu import SongsMenuPlugin
 from widgets import main
 from parse import Query
 from qltk import Frame
@@ -315,17 +314,3 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         """return (wrapped) song objects for the songs in the queue"""
         return [Song(song) for song in main.playlist.q.get()]
 
-
-
-class MirageSongsPlugin(SongsMenuPlugin):
-    PLUGIN_ID = "Mirage Analysis"
-    PLUGIN_NAME = _("Mirage Analysis")
-    PLUGIN_DESC = _("Do Mirage Analysis for the selected songs.")
-    PLUGIN_ICON = "gtk-find-and-replace"
-    PLUGIN_VERSION = "0.1"
-
-    def plugin_song(self, songs):
-        pass
-        ## dbpath = os.path.join(self.player_get_userdir(), "similarity.db")
-        ## connection = sqlite3.connect(dbpath)
-        ## db = Db(self.connection)
