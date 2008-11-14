@@ -42,7 +42,13 @@ class Song(SongBase):
     def get_tags(self):
         """return a list of tags for the songs"""
         return []
-    
+
+    def get_length(self):
+        return self.db.entry_get(self.song, rhythmdb.PROP_DURATION))
+
+    def get_filename(self):
+        return self.db.entry_get(self.song, rhythmdb.PROP_LOCATION))
+
 
 class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
     def __init__(self):

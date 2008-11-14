@@ -351,6 +351,7 @@ class AutoQueueBase(object):
         restrictions = self.player_construct_restrictions(
             self.track_block_time, self.relaxors, self.restrictors)
         if MIRAGE and self.by_mirage:
+            self.analyze_track(self.song)
             last_song = self.get_last_song()
             for match, artist, title in self.get_ordered_mirage_tracks(
                 last_song):
@@ -705,12 +706,30 @@ class AutoQueueBase(object):
         else:
             unordered_list.sort(reverse=True)
 
-    def get_ordered_mirage_tracks(self, song):
-        """get similar tracks from mirage acoustic analysis"""
+    def analyze_track(self, song):
         artist_name = song.get_artist()
         title = song.get_title()
         filename = song.get_filename()
         length = song.get_length()
+        track = self.get_track(artist_name, title)
+        track_id, artist_id = track[0], track[1]
+        db = Db(self.connection)
+        if db.get_track(track_id):
+            return False
+        if length < 60:
+            self.log("song too short to analyze")
+            return False
+        self.log("no mirage data found, analyzing track")
+        exclude_ids = self.get_artist_tracks(artist_id)
+        mir = Mir()
+        scms = mir.analyze(filename)
+        db.add_and_compare(track_id, scms,exclude_ids=exclude_ids)
+        return True
+    
+    def get_ordered_mirage_tracks(self, song):
+        """get similar tracks from mirage acoustic analysis"""
+        artist_name = song.get_artist()
+        title = song.get_title()
         self.log("Getting similar tracks from mirage for: %s - %s" % (
             artist_name, title))
         if not self.use_db:
@@ -725,16 +744,8 @@ class AutoQueueBase(object):
             tracks.append((match, track_artist, track_title))
         if tracks:
             return tracks
-        if db.get_track(track_id):
+        if not self.analyze_track(song):
             return []
-        if length < 60:
-            self.log("song too short to analyze")
-            return []
-        self.log("no mirage data found, analyzing track")
-        exclude_ids = self.get_artist_tracks(artist_id)
-        mir = Mir()
-        scms = mir.analyze(filename)
-        db.add_and_compare(track_id, scms,exclude_ids=exclude_ids)
         tracks = []
         for match, mtrack_id in db.get_neighbours(track_id):
             track_artist, track_title = self.get_artist_and_title(mtrack_id)

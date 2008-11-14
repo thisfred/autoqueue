@@ -32,10 +32,11 @@ class MirageSongsPlugin(SongsMenuPlugin):
         dbpath = os.path.join(self.player_get_userdir(), "similarity.db")
         self.connection = sqlite3.connect(dbpath)
         db = Db(self.connection)
-        for song in songs:
+        l = len(songs)
+        for i, song in enumerate(songs):
             artist_name = song.comma("artist").lower()
             title = get_title(song)
-            print "%s - %s" % (artist_name, title)
+            print "%03d/%03d %s - %s" % (i + 1, l, artist_name, title)
             filename = song("~filename")
             if song("~#length") < 60:
                 continue
