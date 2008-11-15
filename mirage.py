@@ -147,6 +147,10 @@ class AudioDecoder(object):
         self.ma = mirageaudio_initialize(
             c_int(rate), c_int(seconds + 2 * skipseconds),
             c_int(winsize))
+
+    def __del__(self):
+        mirageaudio_destroy(self.ma)
+        self.ma = None
         
     def decode(self, filename):
         frames = c_int(0)
@@ -178,10 +182,6 @@ class AudioDecoder(object):
             for j in range(copyframes):
                 stft.d[i, j] = data[i*frames.value+j+startframe]
         return stft
-    
-    def free_decoder(self):
-        mirageaudio_destroy(self.ma)
-        self.ma = None
 
     def cancel_decode(self):
         mirageaudio_canceldecode(self.ma)
