@@ -718,9 +718,6 @@ class AutoQueueBase(object):
         db = Db(self.connection)
         if db.get_track(track_id):
             return False
-        if length < 60:
-            self.log("song too short to analyze")
-            return False
         self.log("no mirage data found, analyzing track")
         exclude_ids = self.get_artist_tracks(artist_id)
         scms = self.mir.analyze(filename)

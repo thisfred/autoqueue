@@ -1,4 +1,4 @@
-import os, struct, math
+import os, struct, math, sys
 from decimal import Decimal
 from datetime import datetime, timedelta
 from operator import itemgetter
@@ -47,6 +47,37 @@ mirageaudio_decode = libmirageaudio.mirageaudio_decode
 mirageaudio_decode.restype = POINTER(c_float)
 mirageaudio_destroy = libmirageaudio.mirageaudio_destroy
 mirageaudio_canceldecode = libmirageaudio.mirageaudio_canceldecode
+
+def distance(scms1, scms2, scmsconf):
+    val = 0.0
+    dim = scmsconf.get_dimension()
+    covlen = (dim * dim + dim) / 2
+    s1cov = scms1.cov.d
+    s2icov = scms2.icov.d
+    s1icov = scms1.icov.d
+    s2cov = scms2.cov.d
+    s1mean = scms1.mean.d
+    s2mean = scms2.mean.d
+
+    for i in range(covlen):
+        val += s1cov[i] * s2icov[i] + s2cov[i] * s1icov[i]
+        scmsconf.aicov[i] = s1icov[i] + s2icov[i]
+
+    for i in range(dim):
+        scmsconf.mdiff[i] = s1mean[i] - s2mean[i]
+
+    for i in range(dim):
+        idx = i - dim
+        tmp1 = 0
+        for k in range(i + 1):
+            idx += dim - k
+            tmp1 += scmsconf.aicov[idx] * scmsconf.mdiff[k]
+        for k in range(i + 1, dim):
+            idx += 1
+            tmp1 += scmsconf.aicov[idx] * scmsconf.mdiff[k]
+        val += tmp1 * scmsconf.mdiff[i]
+    val = val/2 - scms1.cov.dim
+    return val
 
 def gauss_jordan(a, n, b, m):
     icol = 0
@@ -140,13 +171,12 @@ class DbgTimer(object):
 
 
 class AudioDecoder(object):
-    def __init__(self, rate, seconds, skipseconds, winsize):
+    def __init__(self, rate, seconds, winsize):
         self.seconds = seconds
         self.rate = rate
         self.winsize = winsize
         self.ma = mirageaudio_initialize(
-            c_int(rate), c_int(seconds + 2 * skipseconds),
-            c_int(winsize))
+            c_int(rate), c_int(seconds), c_int(winsize))
 
     def __del__(self):
         mirageaudio_destroy(self.ma)
@@ -167,20 +197,22 @@ class AudioDecoder(object):
         elif frames <= 0 or size <= 0:
             raise AudioDecoderErrorException
 
-
-        if frames <= frames_requested:
-            startframe = 0
-            copyframes = frames
-        else:
-            startframe = frames.value / 2 - (frames_requested / 2)
-            copyframes = frames_requested
-
         write_line("Mirage: decoded frames=%s,size=%s" % (frames, size))
-            
+
+        # build a list of tuples with (value, position), then sort
+        # it according to value.
+        frameselection = [0.0] * frames.value
+        for j in range(frames.value):
+            for i in range(size.value):
+                frameselection[j] += data[i*frames.value+j]
+        frameselection = [(frame, i) for i, frame in enumerate(frameselection)]
+        frameselection.sort()
+        copyframes = frames.value / 2
         stft = Matrix(size.value, copyframes)
-        for i in range(size.value):
-            for j in range(copyframes):
-                stft.d[i, j] = data[i*frames.value+j+startframe]
+        for j in range(copyframes):
+            for i in range(size.value):
+                stft.d[i, j] = data[
+                    i*frames.value+frameselection[copyframes+j][1]]
         return stft
 
     def cancel_decode(self):
@@ -195,6 +227,7 @@ class Matrix(object):
 
     def multiply(self, m2):
         if self.columns != m2.rows:
+            print self.columns, m2.rows
             raise MatrixDimensionMismatchException
         m3 = Matrix(self.rows, m2.columns)
         m3.d = dot(self.d, m2.d)
@@ -349,22 +382,23 @@ class Db(object):
         cursor.execute("DELETE FROM mirage")
         self.connection.commit()
 
-    def add_and_compare(self, trackid, scms, cutoff=7000, exclude_ids=None):
+    def add_and_compare(self, trackid, scms, cutoff=2000, exclude_ids=None):
         if not exclude_ids:
             exclude_ids = []
         self.add_track(trackid, scms)
         cursor = self.connection.cursor()
+        c = ScmsConfiguration(20)
         for buf, otherid in self.get_tracks(
             exclude_ids=exclude_ids):
             if trackid == otherid:
                 continue
             other = instance_from_picklestring(buf)
-            distance = int(scms.distance(other) * 100)
-            if distance < cutoff:
+            dist = int(distance(scms, other, c) * 100)
+            if dist < cutoff:
                 cursor.execute(
                     "INSERT INTO distance (track_1, track_2, distance) "
                     "VALUES (?, ?, ?)",
-                    (trackid, otherid, distance))
+                    (trackid, otherid, dist))
         self.connection.commit()
         
     def get_neighbours(self, trackid):
@@ -441,61 +475,48 @@ def instance_to_picklestring(instance):
     f = StringIO()
     pickle.dump(instance, f)
     return f.getvalue()
-    
+
+class ScmsConfiguration(object):
+    def __init__(self, dimension):
+        self.dim = dimension
+        self.covlen = (self.dim * self.dim + self.dim) / 2
+        self.mdiff = zeros([self.dim])
+        self.aicov = zeros([self.covlen])
+
+    def get_dimension(self):
+        return self.dim
+
+    def get_covariance_length(self):
+        return self.covlen
+
+    def get_add_inverse_covariance(self):
+        return self.aicov
+
+    def get_mean_diff(self):
+        return self.mdiff
+
+
 class Scms(object):
-    mean = None
-    cov = None
-    icov = None
-           
-    def distance(self, scms2):
-        val = 0.0
-        dim = self.cov.dim
-        covlen = (dim * dim + dim) / 2
-        s1cov = self.cov.d
-        s2icov = scms2.icov.d
-        s1icov = self.icov.d
-        s2cov = scms2.cov.d
-        s1mean = self.mean.d
-        s2mean = scms2.mean.d
+    def __init__(self):
+        self.mean = None
+        self.cov = None
+        self.icov = None
 
-        mdiff = []
-        aicov = []
-        for i in range(covlen):
-            val += s1cov[i] * s2icov[i] + s2cov[i] * s1icov[i]
-            aicov.append(s1icov[i] + s2icov[i])
-
-        for i in range(dim):
-            mdiff.append(s1mean[i] - s2mean[i])
-
-        for i in range(dim):
-            idx = i - dim
-            tmp1 = 0
-            for k in range(i + 1):
-                idx += dim - k
-                tmp1 += aicov[idx] * mdiff[k]
-            for k in range(i + 1, dim):
-                idx += 1
-                tmp1 += aicov[idx] * mdiff[k]
-            val += tmp1 * mdiff[i]
-
-        return val
-        
     
 class Mir(object):
 
     def __init__(self):
-        self.samplingrate = 11025
-        self.windowsize = 512
+        self.samplingrate = 22050
+        self.windowsize = 1024
         self.melcoefficients = 36
         self.mfcccoefficients = 20
         self.secondstoanalyze = 120
-        self.secondstoskip = 15
+
         self.mfcc = Mfcc(
             self.windowsize, self.samplingrate, self.melcoefficients,
             self.mfcccoefficients)
         self.ad = AudioDecoder(
-            self.samplingrate, self.secondstoanalyze, self.secondstoskip,
-            self.windowsize)
+            self.samplingrate, self.secondstoanalyze, self.windowsize)
 
     def cancel_analyze(self):
         self.ad.cancel_decode()
@@ -511,17 +532,18 @@ class Mir(object):
         t.stop()
         return scms
         
-    def similar_tracks(ids, exclude, db):
+    def similar_tracks(ids, exclude, db, length=0):
         seed_scms = []
         for i in range(len(ids)):
             seed_scms.append(db.get_track(ids[i]))
         ht = {}
-        scmss = []
         mapping = []
         read = 1
 
         t = DbgTimer()
         t.start()
+
+        c = ScmsConfiguration(self.mfcccoefficients)
 
         cursor = db.get_tracks(exclude)
         for row in cursor.fetchall():
@@ -530,38 +552,43 @@ class Mir(object):
             d = 0.0        
             count = 0.0
             for j in range(len(seed_scms)):
-                dcur = seed_scms[j].distance()
+                dcur = distance(seed_scms[j], cur_scms, c)
                 if dcur >= 0:
                     d += dcur
                     count += 1
                 else:
                     write_line(
                         "Mirage: Faulty SCMS id=" + mapping[i] + "d=" + d)
+                    # XXX Almost certainly wrong
+                    d = float(sys.maxint)
                     break
             if d >= 0:
                 ht[mapping[i]] = d/count
         keys = [key for (key, value) in sorted(ht.items(), key=itemgetter(1))]
+        if length:
+            keys = keys[:length]
         t.stop()
         write_line("Mirage: playlist in: %s" % t.time)
         return keys
 
 ## if __name__ == '__main__':
-    ## mir = Mir()
-    ## scms = mir.analyze('testfiles/test.mp3')
-    ## scms2 = mir.analyze('testfiles/test2.mp3')
-    ## scms3 = mir.analyze('testfiles/test3.ogg')
-    ## scms4 = mir.analyze('testfiles/test4.ogg')
-    ## scms5 = mir.analyze('testfiles/test5.ogg')
-    ## scmses = [scms, scms2, scms3, scms4, scms5]
+##     mir = Mir()
+##     scms = mir.analyze('testfiles/test.mp3')
+##     scms2 = mir.analyze('testfiles/test2.mp3')
+##     scms3 = mir.analyze('testfiles/test3.ogg')
+##     scms4 = mir.analyze('testfiles/test4.ogg')
+##     scms5 = mir.analyze('testfiles/test5.ogg')
+##     scmses = [scms, scms2, scms3, scms4, scms5]
 
-    ## testdb = Db(":memory:")
-    ## for i, scms in enumerate(scmses):
-    ##     testdb.add_track(i, scms)
+##     testdb = Db(":memory:")
+##     for i, scms in enumerate(scmses):
+##         testdb.add_track(i, scms)
         
-    ## print sorted(
-    ##     [id for (scms, id) in testdb.get_tracks(exclude_ids=['3','4'])]) # [0,1,2]
+##     print sorted(
+##         [id for (scms, id) in testdb.get_tracks(exclude_ids=['3','4'])]) # [0,1,2]
 
-    ## scms3_db = testdb.get_track('3')
-    ## scms4_db = testdb.get_track('4')
+##     scms3_db = testdb.get_track('3')
+##     scms4_db = testdb.get_track('4')
+##     c = ScmsConfiguration(20)
+##     print int(distance(scms3_db, scms4_db, c) * 100) # 9647
 
-    ## print int(scms3_db.distance(scms4_db) * 100) # 9647

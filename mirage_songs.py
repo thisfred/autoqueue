@@ -42,8 +42,6 @@ class MirageSongsPlugin(SongsMenuPlugin):
             title = get_title(song)
             print "%03d/%03d %s - %s" % (i + 1, l, artist_name, title)
             filename = song("~filename")
-            if song("~#length") < 60:
-                continue
             track = self.get_track(artist_name, title)
             track_id, artist_id = track[0], track[1]
             if db.get_track(track_id):

@@ -1,7 +1,8 @@
 import sqlite3
 from numpy import array, zeros
 from nose.tools import assert_equals
-from mirage import Mir, CovarianceMatrix, Matrix, Vector, Db
+from mirage import Mir, CovarianceMatrix, Matrix, Vector, Db, ScmsConfiguration
+from mirage import distance
 from decimal import Decimal, getcontext
 
 def decimize(f):
@@ -82,60 +83,70 @@ class TestMir(object):
             )
             
     def test_analysis(self):
-        assert_equals(
-            int(scms.distance(scms) * 100), 3999)
-        assert_equals(
-            int(scms.distance(scms2) * 100), 6004)
-        assert_equals(
-            int(scms.distance(scms3) * 100), 6977)
-        assert_equals(
-            int(scms.distance(scms4) * 100), 6993)
-        assert_equals(
-            int(scms.distance(scms5) * 100), 6443)
+        c = ScmsConfiguration(20)
 
-        assert_equals(
-            int(scms2.distance(scms) * 100), 6004)
-        assert_equals(
-            int(scms2.distance(scms2) * 100), 4000)
-        assert_equals(
-            int(scms2.distance(scms3) * 100), 6777)
-        assert_equals(
-            int(scms2.distance(scms4) * 100), 6539)
-        assert_equals(
-            int(scms2.distance(scms5) * 100), 7326)
+        assert_equals(0, int(distance(scms, scms, c)))
+        assert_equals(18, int(distance(scms, scms2, c)))
+        assert_equals(31, int(distance(scms, scms3, c)))
+        assert_equals(33, int(distance(scms, scms4, c)))
+        assert_equals(86, int(distance(scms, scms5, c)))
 
-        assert_equals(
-            int(scms3.distance(scms) * 100), 6977)
-        assert_equals(
-            int(scms3.distance(scms2) * 100), 6777)
-        assert_equals(
-            int(scms3.distance(scms3) * 100), 4000)
-        assert_equals(
-            int(scms3.distance(scms4) * 100), 7252)
-        assert_equals(
-            int(scms3.distance(scms5) * 100), 10454)
+        assert_equals(18, int(distance(scms2, scms, c)))
+        assert_equals(0, int(distance(scms2, scms2, c)))
+        assert_equals(19, int(distance(scms2, scms3, c)))
+        assert_equals(21, int(distance(scms2, scms4, c)))
+        assert_equals(57, int(distance(scms2, scms5, c)))
 
-        assert_equals(
-            int(scms4.distance(scms) * 100), 6993)
-        assert_equals(
-            int(scms4.distance(scms2) * 100), 6539)
-        assert_equals(
-            int(scms4.distance(scms3) * 100), 7252)
-        assert_equals(
-            int(scms4.distance(scms4) * 100), 4000)
-        assert_equals(
-            int(scms4.distance(scms5) * 100), 9674)
+        assert_equals(31, int(distance(scms3, scms, c)))
+        assert_equals(19, int(distance(scms3, scms2, c)))
+        assert_equals(0, int(distance(scms3, scms3, c)))
+        assert_equals(29, int(distance(scms3, scms4, c)))
+        assert_equals(112, int(distance(scms3, scms5, c)))
 
-        assert_equals(
-            int(scms5.distance(scms) * 100), 6443)
-        assert_equals(
-            int(scms5.distance(scms2) * 100), 7326)
-        assert_equals(
-            int(scms5.distance(scms3) * 100), 10454)
-        assert_equals(
-            int(scms5.distance(scms4) * 100), 9674)
-        assert_equals(
-            int(scms5.distance(scms5) * 100), 4000)
+        assert_equals(33, int(distance(scms4, scms, c)))
+        assert_equals(21, int(distance(scms4, scms2, c)))
+        assert_equals(29, int(distance(scms4, scms3, c)))
+        assert_equals(0, int(distance(scms4, scms4, c)))
+        assert_equals(117, int(distance(scms4, scms5, c)))
+
+        assert_equals(86, int(distance(scms5, scms, c)))
+        assert_equals(57, int(distance(scms5, scms2, c)))
+        assert_equals(112, int(distance(scms5, scms3, c)))
+        assert_equals(117, int(distance(scms5, scms4, c)))
+        assert_equals(0, int(distance(scms5, scms5, c)))
+
+        ## assert_equals(
+        ##     int(scms3.distance(scms) * 100), 6977)
+        ## assert_equals(
+        ##     int(scms3.distance(scms2) * 100), 6777)
+        ## assert_equals(
+        ##     int(scms3.distance(scms3) * 100), 4000)
+        ## assert_equals(
+        ##     int(scms3.distance(scms4) * 100), 7252)
+        ## assert_equals(
+        ##     int(scms3.distance(scms5) * 100), 10454)
+
+        ## assert_equals(
+        ##     int(scms4.distance(scms) * 100), 6993)
+        ## assert_equals(
+        ##     int(scms4.distance(scms2) * 100), 6539)
+        ## assert_equals(
+        ##     int(scms4.distance(scms3) * 100), 7252)
+        ## assert_equals(
+        ##     int(scms4.distance(scms4) * 100), 4000)
+        ## assert_equals(
+        ##     int(scms4.distance(scms5) * 100), 9674)
+
+        ## assert_equals(
+        ##     int(scms5.distance(scms) * 100), 6443)
+        ## assert_equals(
+        ##     int(scms5.distance(scms2) * 100), 7326)
+        ## assert_equals(
+        ##     int(scms5.distance(scms3) * 100), 10454)
+        ## assert_equals(
+        ##     int(scms5.distance(scms4) * 100), 9674)
+        ## assert_equals(
+        ##     int(scms5.distance(scms5) * 100), 4000)
 
     def test_add_track(self):
         connection = sqlite3.connect(":memory:")
@@ -155,8 +166,8 @@ class TestMir(object):
             testdb.add_track(i, testscms)
         scms3_db = testdb.get_track('3')
         scms4_db = testdb.get_track('4')
-
-        assert_equals(9674, int(scms3_db.distance(scms4_db) * 100))
+        c = ScmsConfiguration(20)
+        assert_equals(117, int(distance(scms3_db, scms4_db, c)))
 
     def test_add_and_compare(self):
         connection = sqlite3.connect(":memory:")
@@ -166,8 +177,8 @@ class TestMir(object):
         cursor = testdb.connection.cursor()
         distances = [row for row in cursor.execute("SELECT * FROM distance")]
         assert_equals(
-            [(1, 0, 6004), (2, 0, 6977), (2, 1, 6777), (3, 0, 6993),
-             (3, 1, 6539), (4, 0, 6443)],
+            [(1, 0, 1820), (2, 0, 3103), (2, 1, 1912), (3, 0, 3338),
+             (3, 1, 2130), (3, 2, 2937), (4, 1, 5725)],
             distances)
 
     def test_get_neighbours(self):
@@ -176,7 +187,7 @@ class TestMir(object):
         for i, testscms in enumerate(scmses):
             testdb.add_and_compare(i, testscms)
         assert_equals(
-            [(6004, 1), (6443, 4), (6977, 2), (6993, 3)],
+            [(1820, 1), (3103, 2), (3338, 3)],
             testdb.get_neighbours(0))
         
         
