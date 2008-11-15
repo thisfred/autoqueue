@@ -216,6 +216,8 @@ class AutoQueueBase(object):
             self.get_blocked_artists_pickle()
         if self.use_db:
             self.check_db()
+        if MIRAGE:
+            self.mir = Mir()
 
     def player_get_userdir(self):
         """get the application user directory to store files"""
@@ -721,8 +723,7 @@ class AutoQueueBase(object):
             return False
         self.log("no mirage data found, analyzing track")
         exclude_ids = self.get_artist_tracks(artist_id)
-        mir = Mir()
-        scms = mir.analyze(filename)
+        scms = self.mir.analyze(filename)
         db.add_and_compare(track_id, scms,exclude_ids=exclude_ids)
         return True
     

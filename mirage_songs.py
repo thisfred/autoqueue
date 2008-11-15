@@ -21,6 +21,10 @@ class MirageSongsPlugin(SongsMenuPlugin):
     PLUGIN_ICON = "gtk-find-and-replace"
     PLUGIN_VERSION = "0.1"
 
+    def __init__(self, *args):
+        super(MirageSongsPlugin, self).__init__(*args)
+        self.mir = Mir()
+
     def player_get_userdir(self):
         """get the application user directory to store files"""
         try:
@@ -45,9 +49,7 @@ class MirageSongsPlugin(SongsMenuPlugin):
             if db.get_track(track_id):
                 continue
             exclude_ids = self.get_artist_tracks(artist_id)
-            mir = Mir()
-
-            scms = mir.analyze(filename)
+            scms = self.mir.analyze(filename)
             db.add_and_compare(track_id, scms,exclude_ids=exclude_ids)
             yield True
         print "done"
