@@ -177,8 +177,7 @@ class TestMir(object):
         cursor = testdb.connection.cursor()
         distances = [row for row in cursor.execute("SELECT * FROM distance")]
         assert_equals(
-            [(1, 0, 1820), (2, 0, 3103), (2, 1, 1912), (3, 0, 3338),
-             (3, 1, 2130), (3, 2, 2937), (4, 1, 5725)],
+            [(1, 0, 18207), (2, 1, 19128)],
             distances)
 
     def test_get_neighbours(self):
@@ -187,7 +186,7 @@ class TestMir(object):
         for i, testscms in enumerate(scmses):
             testdb.add_and_compare(i, testscms)
         assert_equals(
-            [(1820, 1), (3103, 2), (3338, 3)],
+            [(18207, 1)],
             testdb.get_neighbours(0))
         
         

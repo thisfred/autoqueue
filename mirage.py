@@ -382,7 +382,7 @@ class Db(object):
         cursor.execute("DELETE FROM mirage")
         self.connection.commit()
 
-    def add_and_compare(self, trackid, scms, cutoff=2000, exclude_ids=None):
+    def add_and_compare(self, trackid, scms, cutoff=20000, exclude_ids=None):
         if not exclude_ids:
             exclude_ids = []
         self.add_track(trackid, scms)
@@ -393,7 +393,7 @@ class Db(object):
             if trackid == otherid:
                 continue
             other = instance_from_picklestring(buf)
-            dist = int(distance(scms, other, c) * 100)
+            dist = int(distance(scms, other, c) * 1000)
             if dist < cutoff:
                 cursor.execute(
                     "INSERT INTO distance (track_1, track_2, distance) "
