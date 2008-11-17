@@ -417,7 +417,6 @@ class AutoQueueBase(object):
         """yield songs that match the last song in the queue"""
         generators = []
         last_song = self.get_last_song()
-
         if MIRAGE and self.by_mirage:
             self.analyze_track(self.song)
             generators.append(self.get_ordered_mirage_tracks(last_song))
@@ -438,6 +437,7 @@ class AutoQueueBase(object):
         found = []
         generator = self.song_generator()
         while len(found) < 2:
+            blocked = self.get_blocked_artists()
             try:
                 score, result = generator.next()
                 if self._songs:
@@ -445,16 +445,20 @@ class AutoQueueBase(object):
                         break
                 self.log("looking for: %s, %s" % (score, repr(result)))
                 search = self.player_construct_search(result, restrictions)
+                artist = result.get('artist')
+                if artist:
+                    if artist in blocked:
+                        continue
                 songs = self.player_search(search)
                 if songs:
                     song = random.choice(songs)
                     songs.remove(song)
                     while (
-                        song.get_artist() in self.get_blocked_artists()
+                        song.get_artist() in blocked
                         and songs):
                         song = random.choice(songs)
                         songs.remove(song)
-                    if not song.get_artist() in self.get_blocked_artists():
+                    if not song.get_artist() in blocked:
                         found.append((score, song))
             except StopIteration:
                 break
