@@ -218,7 +218,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             version =  split[-1].strip()[:-1]
             versioned = '&(artist = "%s", title = "%s", version="%s")' % (
                 escape(artist),
-                escape(title),
+                escape(vtitle),
                 escape(version))
         if versioned:
             search = "|(%s, %s)" % (search, versioned)
