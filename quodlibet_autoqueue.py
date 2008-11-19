@@ -12,6 +12,7 @@ from widgets import main
 from parse import Query
 from qltk import Frame
 from library import library
+from quodlibet.util import copool
 import config
 
 from autoqueue import AutoQueueBase, SongBase, SQL, Cache
@@ -111,7 +112,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     def __init__(self):
         self.use_db = True
         self.store_blocked_artists = True
-        self.threaded = True
         EventPlugin.__init__(self)
         AutoQueueBase.__init__(self)
         
@@ -130,7 +130,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         we start looking for new songs to queue."""
         if song:
             song = Song(song)
-            self.on_song_started(song)
+            copool.add(self.on_song_started, song)
         
     def PluginPreferences(self, parent):
         def bool_changed(widget):

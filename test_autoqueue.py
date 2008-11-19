@@ -106,7 +106,6 @@ class MockAutoQueue(AutoQueueBase):
         self.player = MockPlayer(self.on_song_started)
         self.use_db = True
         self.in_memory = True
-        self.threaded = False
         super(MockAutoQueue, self).__init__() 
         self.by_tags = True
         self.verbose = True

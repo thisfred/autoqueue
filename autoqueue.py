@@ -22,7 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 from collections import deque
 from datetime import datetime, timedelta
 from time import strptime, sleep
-import urllib, threading
+import urllib
 import random, os, heapq
 from xml.dom import minidom
 from cPickle import Pickler, Unpickler
@@ -237,7 +237,6 @@ class AutoQueueBase(object):
     use_db = False
     store_blocked_artists = False
     in_memory = False 
-    threaded = False
     def __init__(self):
         self.max_track_match = 10000
         self.max_artist_match = 10000
@@ -381,17 +380,11 @@ class AutoQueueBase(object):
         # add the artist to the blocked list, so their songs won't be
         # played for a determined time
         self.block_artist(artist_name)
-        # if a thread is already running, do nothing
         if self.running:
             return
-        #start a new thread to look up songs if necessary
         if self.desired_queue_length == 0 or self.queue_needs_songs():
-            if self.threaded:
-                background = threading.Thread(None, self.fill_queue) 
-                background.setDaemon(True)
-                background.start()
-            else:
-                self.fill_queue()
+            yield
+            self.fill_queue()
 
     def cleanup(self, songs, next_artist=''):
         ret = []
@@ -486,6 +479,8 @@ class AutoQueueBase(object):
                 score,
                 bsong.get_artist(),
                 bsong.get_title()) for score, bsong in list(self._songs)])))
+        for song in generator:
+            pass
         if found:
             return True
         else:
@@ -750,7 +745,6 @@ class AutoQueueBase(object):
             raise StopIteration
         track = self.get_track(artist_name, title)
         track_id, artist_id, updated = track[0], track[1], track[3]
-        self.log(repr(track))
         db = Db(self.connection)
         yielded = False
         for match, mtrack_id in db.get_neighbours(track_id):
