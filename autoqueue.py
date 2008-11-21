@@ -738,7 +738,7 @@ class AutoQueueBase(object):
 
     def get_ordered_mirage_tracks(self, song):
         """get similar tracks from mirage acoustic analysis"""
-        maximum = 20000
+        maximum = 15000
         scale_to = 10000
         artist_name = song.get_artist()
         title = song.get_title()
@@ -943,6 +943,7 @@ class AutoQueueBase(object):
     def _update_similar_artists(self, artist_id, similar_artists):
         """write similar artist information to the database"""
         for artist in similar_artists:
+            print "updating database: ", repr(artist)
             id2 = self.get_artist(artist['artist'])[0]
             if self._get_artist_match(artist_id, id2):
                 self._update_artist_match(artist_id, id2, artist['match'])
@@ -953,6 +954,7 @@ class AutoQueueBase(object):
     def _update_similar_tracks(self, track_id, similar_tracks):
         """write similar track information to the database"""
         for track in similar_tracks:
+            print "updating database: ", repr(track)
             id2 = self.get_track(track['artist'], track['title'])[0]
             if self._get_track_match(track_id, id2):
                 self._update_track_match(track_id, id2, track['match'])
