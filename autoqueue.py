@@ -729,7 +729,10 @@ class AutoQueueBase(object):
             return False
         self.log("no mirage data found, analyzing track")
         exclude_ids = self.get_artist_tracks(artist_id)
-        scms = self.mir.analyze(filename)
+        try:
+            scms = self.mir.analyze(filename)
+        except:
+            return False
         db.add_and_compare(track_id, scms,exclude_ids=exclude_ids)
         return True
 

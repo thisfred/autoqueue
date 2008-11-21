@@ -47,7 +47,10 @@ class MirageSongsPlugin(SongsMenuPlugin):
             if db.get_track(track_id):
                 continue
             exclude_ids = self.get_artist_tracks(artist_id)
-            scms = self.mir.analyze(filename)
+            try:
+                scms = self.mir.analyze(filename)
+            except:
+                return
             db.add_and_compare(track_id, scms,exclude_ids=exclude_ids)
             yield True
         print "done"
