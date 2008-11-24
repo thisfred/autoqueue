@@ -273,7 +273,7 @@ class AutoQueueBase(object):
         """get the application user directory to store files"""
         return NotImplemented
 
-    def player_construct_search(self, result, restrictions):
+    def player_construct_search(self, result, restrictions=None):
         artist = result.get('artist')
         title = result.get('title')
         tags = result.get('tags')
@@ -287,16 +287,16 @@ class AutoQueueBase(object):
             return self.player_construct_tag_search(
                 tags, restrictions)
             
-    def player_construct_track_search(self, artist, title, restrictions):
+    def player_construct_track_search(self, artist, title, restrictions=None):
         """construct a search that looks for songs with this artist
         and title"""
         return NotImplemented
 
-    def player_construct_artist_search(self, artist, restrictions):
+    def player_construct_artist_search(self, artist, restrictions=None):
         """construct a search that looks for songs with this artist"""
         return NotImplemented
     
-    def player_construct_tag_search(self, tags, restrictions):
+    def player_construct_tag_search(self, tags, restrictions=None):
         """construct a search that looks for songs with these
         tags"""
         return NotImplemented
@@ -738,7 +738,7 @@ class AutoQueueBase(object):
 
     def get_ordered_mirage_tracks(self, song):
         """get similar tracks from mirage acoustic analysis"""
-        maximum = 15000
+        maximum = 10000
         scale_to = 10000
         artist_name = song.get_artist()
         title = song.get_title()
@@ -943,7 +943,6 @@ class AutoQueueBase(object):
     def _update_similar_artists(self, artist_id, similar_artists):
         """write similar artist information to the database"""
         for artist in similar_artists:
-            print "updating database: ", repr(artist)
             id2 = self.get_artist(artist['artist'])[0]
             if self._get_artist_match(artist_id, id2):
                 self._update_artist_match(artist_id, id2, artist['match'])
@@ -954,7 +953,6 @@ class AutoQueueBase(object):
     def _update_similar_tracks(self, track_id, similar_tracks):
         """write similar track information to the database"""
         for track in similar_tracks:
-            print "updating database: ", repr(track)
             id2 = self.get_track(track['artist'], track['title'])[0]
             if self._get_track_match(track_id, id2):
                 self._update_track_match(track_id, id2, track['match'])
@@ -990,26 +988,72 @@ class AutoQueueBase(object):
         if self.in_memory:
             self.connection = connection
             
-    def prune_db(self):
+    def prune_db(self, songs):
         """clean up the database: remove tracks and artists that are
         never played"""
         connection = self.get_database_connection()
+        artists = []
+        titles = []
+        for song in songs:
+            artists.append(song.get_artist())
+            titles.append(song.get_title())
+        artists = set(artists)
+        titles = set(titles)
+        cursor = connection.cursor()
+        before = {
+            'tracks':
+            cursor.execute('SELECT count(*) from tracks;').fetchone()[0],
+            'track_2_track':
+            cursor.execute('SELECT count(*) from track_2_track;').fetchone()[0],
+            'mirage':
+            cursor.execute('SELECT count(*) from mirage;').fetchone()[0],
+            'distance':
+            cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
+        self.log('before: %s' % repr(before))
+        rows = []
+        for name in artists:
+            cursor.execute(
+                'SELECT artists.name, tracks.title, tracks.id FROM tracks'
+                ' INNER JOIN artists ON tracks.artist = artists.id WHERE '
+                'artists.name = ?;', (name,))
+            rows.extend( cursor.fetchall())
+        for title in titles:
+            cursor.execute(
+                'SELECT artists.name, tracks.title, tracks.id FROM tracks '
+                'INNER JOIN artists ON tracks.artist = artists.id WHERE '
+                'tracks.title = ?;', (title,))
+            rows.extend(cursor.fetchall())
+        cursor = None
+        for i, item in enumerate(rows):
+            search = self.player_construct_search(
+                {'artist': item[0], 'title': item[1]})
+            songs = self.player_search(search)
+            if not songs:
+                self.log("removing: %07d %s - %s" % (i, item[0], item[1]))
+                self.delete_track_from_db(item[2])
+            yield
+        cursor = connection.cursor()
+        after = {
+            'tracks':
+            cursor.execute('SELECT count(*) from tracks;').fetchone()[0],
+            'track_2_track':
+            cursor.execute('SELECT count(*) from track_2_track;').fetchone()[0],
+            'mirage':
+            cursor.execute('SELECT count(*) from mirage;').fetchone()[0],
+            'distance':
+            cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
+        self.log('after: %s' % repr(after))
+
+    def delete_track_from_db(self, track_id):
+        connection = self.get_database_connection()
         cursor = connection.cursor()
         cursor.execute(
-            'DELETE FROM tracks WHERE updated IS NULL AND tracks.id NOT IN'
-            ' (SELECT track1 FROM track_2_track);')
-        connection.commit()
+            'DELETE FROM distance WHERE track_1 = ? OR track_2 = ?;',
+            (track_id, track_id))
+        cursor.execute('DELETE FROM mirage WHERE trackid = ?;', (track_id,))
         cursor.execute(
-            'DELETE FROM track_2_track WHERE track2 NOT IN (SELECT '
-            'id FROM tracks);')
+            'DELETE FROM track_2_track WHERE track1 = ? OR track2 = ?;',
+            (track_id, track_id))
+        cursor.execute('DELETE FROM tracks WHERE id = ?;', (track_id,))
         connection.commit()
-        cursor.execute(
-            'DELETE FROM artists WHERE updated IS NULL AND artists.id NOT '
-            'IN (SELECT tracks.artist FROM tracks) AND artists.id NOT IN '
-            '(SELECT artist1 FROM artist_2_artist);'
-            )
-        cursor.execute(
-            'DELETE FROM artist_2_artist WHERE artist2 NOT IN (SELECT '
-            'id FROM artists);'
-            )
-        connection.commit()
+        

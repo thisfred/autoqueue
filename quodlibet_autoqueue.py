@@ -131,6 +131,9 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         if song:
             song = Song(song)
             copool.add(self.on_song_started, song)
+
+    def plugin_on_song_ended(self, song, skipped):
+        copool.add(self.prune_db, Song(song))
         
     def PluginPreferences(self, parent):
         def bool_changed(widget):
@@ -206,7 +209,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         except AttributeError:
             return const.DIR
     
-    def player_construct_track_search(self, artist, title, restrictions):
+    def player_construct_track_search(self, artist, title, restrictions=None):
         """construct a search that looks for songs with this artist
         and title"""
         search = '&(artist = "%s", title = "%s")' % (
@@ -222,11 +225,11 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 escape(version))
         if versioned:
             search = "|(%s, %s)" % (search, versioned)
-        if search:
+        if restrictions:
             search = "&(%s, %s)" % (search, restrictions)
         return search
     
-    def player_construct_tag_search(self, tags, restrictions):
+    def player_construct_tag_search(self, tags, restrictions=None):
         """construct a search that looks for songs with these
         tags"""
         search = ''
@@ -245,14 +248,19 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 'grouping = "%s"' % stripped,
                 'grouping = "artist:%s"' % stripped,
                 'grouping = "album:%s"' % stripped])
-        search = "&(|(%s),%s,%s)" % (
-            ",".join(search_tags), excluding, restrictions)
+        if restrictions:
+            search = "&(|(%s),%s,%s)" % (
+                ",".join(search_tags), excluding, restrictions)
+        else:
+            search = "&(|(%s),%s)" % (
+                ",".join(search_tags), excluding)
         return search
     
-    def player_construct_artist_search(self, artist, restrictions):
+    def player_construct_artist_search(self, artist, restrictions=None):
         """construct a search that looks for songs with this artist"""
         search = 'artist = "%s"' % escape(artist)
-        search = "&(%s, %s)" % (search, restrictions)
+        if restrictions:
+            search = "&(%s, %s)" % (search, restrictions)
         return search
 
     def player_construct_restrictions(

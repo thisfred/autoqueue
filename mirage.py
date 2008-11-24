@@ -382,7 +382,7 @@ class Db(object):
         cursor.execute("DELETE FROM mirage")
         self.connection.commit()
 
-    def add_and_compare(self, trackid, scms, cutoff=15000, exclude_ids=None):
+    def add_and_compare(self, trackid, scms, cutoff=10000, exclude_ids=None):
         if not exclude_ids:
             exclude_ids = []
         self.add_track(trackid, scms)
