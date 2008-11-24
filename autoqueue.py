@@ -988,17 +988,12 @@ class AutoQueueBase(object):
         if self.in_memory:
             self.connection = connection
             
-    def prune_db(self, songs):
+    def prune_db(self, prunes):
         """clean up the database: remove tracks and artists that are
         never played"""
+        if not prunes:
+            return
         connection = self.get_database_connection()
-        artists = []
-        titles = []
-        for song in songs:
-            artists.append(song.get_artist())
-            titles.append(song.get_title())
-        artists = set(artists)
-        titles = set(titles)
         cursor = connection.cursor()
         before = {
             'tracks':
@@ -1011,17 +1006,16 @@ class AutoQueueBase(object):
             cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
         self.log('before: %s' % repr(before))
         rows = []
-        for name in artists:
+        for prune in prunes:
             cursor.execute(
                 'SELECT artists.name, tracks.title, tracks.id FROM tracks'
                 ' INNER JOIN artists ON tracks.artist = artists.id WHERE '
-                'artists.name = ?;', (name,))
+                'artists.name = ?;', (prune['artist'],))
             rows.extend( cursor.fetchall())
-        for title in titles:
             cursor.execute(
                 'SELECT artists.name, tracks.title, tracks.id FROM tracks '
                 'INNER JOIN artists ON tracks.artist = artists.id WHERE '
-                'tracks.title = ?;', (title,))
+                'tracks.title = ?;', (prune['title'],))
             rows.extend(cursor.fetchall())
         cursor = None
         for i, item in enumerate(rows):

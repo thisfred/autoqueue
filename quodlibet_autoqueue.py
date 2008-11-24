@@ -112,6 +112,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     def __init__(self):
         self.use_db = True
         self.store_blocked_artists = True
+        self.to_prune = {}
         EventPlugin.__init__(self)
         AutoQueueBase.__init__(self)
         
@@ -129,12 +130,20 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         """Triggered when a song start. If the right conditions apply,
         we start looking for new songs to queue."""
         if song:
-            song = Song(song)
-            self.to_prune = song
-            copool.add(self.on_song_started, song)
+            ssong = Song(song)
+            self.to_prune = [{
+                'artist': ssong.get_artist(),
+                'title': ssong.get_title()}]
+            copool.add(self.on_song_started, ssong)
 
     def plugin_on_song_ended(self, song, skipped):
         copool.add(self.prune_db, self.to_prune)
+
+    def plugin_on_removed(self, songs):
+        rsongs = [
+            {'artist': Song(song).get_artist(),
+             'title': Song(song).get_title()} for song in songs]
+        copool.add(self.prune_db, rsongs)
         
     def PluginPreferences(self, parent):
         def bool_changed(widget):
