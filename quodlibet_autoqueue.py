@@ -130,10 +130,11 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         we start looking for new songs to queue."""
         if song:
             song = Song(song)
+            self.to_prune = song
             copool.add(self.on_song_started, song)
 
     def plugin_on_song_ended(self, song, skipped):
-        copool.add(self.prune_db, Song(song))
+        copool.add(self.prune_db, self.to_prune)
         
     def PluginPreferences(self, parent):
         def bool_changed(widget):
