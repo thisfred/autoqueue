@@ -809,6 +809,10 @@ class AutoQueueBase(object):
                     (track_id,))
                 generators.append(
                     scale_transformer(cursor2, self.max_track_match, scale_to))
+            else:
+                generators.append(
+                    self.get_similar_tracks_from_lastfm(
+                    artist_name, title, track_id))
         else:
             generators.append(
                 self.get_similar_tracks_from_lastfm(
@@ -855,6 +859,9 @@ class AutoQueueBase(object):
                 generators.append(
                     scale_transformer(
                     cursor2, self.max_artist_match, scale_to, offset=10000))
+            else:
+                generators.append(
+                    self.get_similar_artists_from_lastfm(artist_name, artist_id))
         else:
             generators.append(
                 self.get_similar_artists_from_lastfm(artist_name, artist_id))
