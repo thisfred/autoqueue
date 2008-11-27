@@ -739,7 +739,7 @@ class AutoQueueBase(object):
     def get_ordered_mirage_tracks(self, song):
         """get similar tracks from mirage acoustic analysis"""
         maximum = 10000
-        scale_to = 10000
+        scale_to = 5000
         artist_name = song.get_artist()
         title = song.get_title()
         self.log("Getting similar tracks from mirage for: %s - %s" % (
