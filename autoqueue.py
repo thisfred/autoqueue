@@ -429,7 +429,7 @@ class AutoQueueBase(object):
         self.unblock_artists()
         found = []
         generator = self.song_generator()
-        while len(found) < 2:
+        while len(found) + len(self._songs) < 12:
             blocked = self.get_blocked_artists()
             try:
                 score, result = generator.next()
@@ -467,7 +467,7 @@ class AutoQueueBase(object):
         else:
             self.player_enqueue(found[0][1])
         if len(found) > 1:
-            songs = [found[1]] + list(self._songs)
+            songs = found[1:] + list(self._songs)
             clean = self.cleanup(songs, found[0][1].get_artist())
             self._songs = deque(clean)
             if len(self._songs) > 10:
