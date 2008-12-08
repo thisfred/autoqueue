@@ -283,9 +283,9 @@ class Matrix(object):
     def load(self, filename):
         f = open(filename, 'rb')
         bytes = f.read(4)
-        self.rows = struct.unpack('l', bytes)[0]
+        self.rows = struct.unpack('=l', bytes)[0]
         bytes = f.read(4)
-        self.columns = struct.unpack('l', bytes)[0]
+        self.columns = struct.unpack('=l', bytes)[0]
         arr = fromfile(file=f, dtype=single)
         self.d = arr.reshape(self.rows, self.columns)
 
