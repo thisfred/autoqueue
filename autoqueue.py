@@ -50,7 +50,7 @@ ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
              "&artist=%s&api_key=" + API_KEY
 
 # be nice to last.fm
-WAIT_BETWEEN_REQUESTS = timedelta(0, 0, 0, 5) 
+WAIT_BETWEEN_REQUESTS = timedelta(0, 1) 
 
 def transform_trackresult(tresult):
     score = tresult[0]
@@ -429,7 +429,7 @@ class AutoQueueBase(object):
         self.unblock_artists()
         found = []
         generator = self.song_generator()
-        while len(found) + len(self._songs) < 12:
+        while len(found) < 12:
             blocked = self.get_blocked_artists()
             try:
                 score, result = generator.next()
@@ -470,7 +470,7 @@ class AutoQueueBase(object):
             songs = found[1:] + list(self._songs)
             clean = self.cleanup(songs, found[0][1].get_artist())
             self._songs = deque(clean)
-            if len(self._songs) > 10:
+            while len(self._songs) > 10:
                 self._songs.pop()
         if self._songs:
             self.log("%s backup songs: \n%s" % (
