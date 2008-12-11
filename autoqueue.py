@@ -751,10 +751,9 @@ class AutoQueueBase(object):
         db = Db(self.connection)
         yielded = False
         for match, mtrack_id in db.get_neighbours(track_id):
-            match = scale(match, maximum, scale_to)
             track_artist, track_title = self.get_artist_and_title(mtrack_id)
             yield(scale(match, maximum, scale_to),
-                  {'distance': scale(match, maximum, scale_to),
+                  {'distance': match,
                    'artist': track_artist,
                    'title': track_title})
             yielded = True
