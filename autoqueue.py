@@ -461,7 +461,7 @@ class AutoQueueBase(object):
                 score, song = self._songs.popleft()
                 while self.is_blocked(
                     song.get_artist()) and self._songs:
-                    score, song = self._songs.pop()
+                    score, song = self._songs.popleft()
                 if not self.is_blocked(song.get_artist()):
                     self.player_enqueue(song)
         else:
