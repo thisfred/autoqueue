@@ -59,6 +59,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         self.gconfclient = gconf.client_get_default()
         self.verbose = True
         self.random = False
+        self.by_mirage = True
         
     def activate(self, shell):
         self.shell = shell

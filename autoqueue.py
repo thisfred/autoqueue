@@ -56,12 +56,14 @@ def transform_trackresult(tresult):
     score = tresult[0]
     result = {
         'artist': tresult[1],
-        'title': tresult[2]}
+        'title': tresult[2],
+        'db_score': tresult[3],}
     return (score, result)
 
 def transform_artistresult(aresult):
     score = aresult[0]
-    result = {'artist': aresult[1]}
+    result = {'artist': aresult[1],
+              'db_score': aresult[2]}
     return (score, result)
 
 def scale(score, max, scale_to, offset=0, invert=False):
@@ -73,7 +75,7 @@ def scale(score, max, scale_to, offset=0, invert=False):
 def scale_transformer(orig, maximum, scale_to, offset=0):
     for result in orig:
         yield (scale(result[0], maximum, scale_to,
-                    offset=offset, invert=True),) + result[1:]
+                    offset=offset, invert=True),) + result[1:] + (result[0],)
 
 def merge(*subsequences):
     # prepare a priority queue whose items are pairs of the form
@@ -616,7 +618,7 @@ class AutoQueueBase(object):
                     and match is not None):
                     break
             result = {
-                'match': match,
+                'lastfm_match': match,
                 'artist': similar_artist,
                 'title': similar_title,}
             if self.use_db:
@@ -642,7 +644,7 @@ class AutoQueueBase(object):
             if matchnode:
                 match = int(float(matchnode[0].firstChild.nodeValue) * 100)
             result = {
-                'match': match,
+                'lastfm_match': match,
                 'artist': name,}
             if self.use_db:
                 self._artists_to_update.setdefault(artist_id, []).append(result)
@@ -753,7 +755,7 @@ class AutoQueueBase(object):
         for match, mtrack_id in db.get_neighbours(track_id):
             track_artist, track_title = self.get_artist_and_title(mtrack_id)
             yield(scale(match, maximum, scale_to),
-                  {'distance': match,
+                  {'mirage_distance': match,
                    'artist': track_artist,
                    'title': track_title})
             yielded = True
@@ -765,7 +767,7 @@ class AutoQueueBase(object):
             distance = scale(match, maximum, scale_to)
             track_artist, track_title = self.get_artist_and_title(mtrack_id)
             yield(scale(match, maximum, scale_to),
-                  {'distance': scale(distance, maximum, scale_to),
+                  {'mirage_distance': scale(distance, maximum, scale_to),
                    'artist': track_artist,
                    'title': track_title})
 
@@ -951,9 +953,10 @@ class AutoQueueBase(object):
         for artist in similar_artists:
             id2 = self.get_artist(artist['artist'])[0]
             if self._get_artist_match(artist_id, id2):
-                self._update_artist_match(artist_id, id2, artist['match'])
+                self._update_artist_match(
+                    artist_id, id2, artist['lastfm_match'])
                 continue
-            self._insert_artist_match(artist_id, id2, artist['match'])
+            self._insert_artist_match(artist_id, id2, artist['lastfm_match'])
         self._update_artist(artist_id)
         
     def _update_similar_tracks(self, track_id, similar_tracks):
@@ -961,9 +964,9 @@ class AutoQueueBase(object):
         for track in similar_tracks:
             id2 = self.get_track(track['artist'], track['title'])[0]
             if self._get_track_match(track_id, id2):
-                self._update_track_match(track_id, id2, track['match'])
+                self._update_track_match(track_id, id2, track['lastfm_match'])
                 continue
-            self._insert_track_match(track_id, id2, track['match'])
+            self._insert_track_match(track_id, id2, track['lastfm_match'])
         self._update_track(track_id)
 
     def log(self, msg):
