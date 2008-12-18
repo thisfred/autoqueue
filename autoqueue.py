@@ -396,10 +396,8 @@ class AutoQueueBase(object):
         for (score, song) in songs:
             artist = song.get_artist()
             if artist in seen:
-                print "%s in %s" %(artist, repr(seen))
                 continue
             if self.is_blocked(artist):
-                print "%s is blocked" % artist
                 continue
             seen.append(artist)
             ret.append((score, song))
@@ -472,15 +470,7 @@ class AutoQueueBase(object):
             self.player_enqueue(found[0][1])
         if len(found) > 1:
             songs = found[1:] + list(self._songs)
-            print "cleaning:\n%s\n---\n%s" % (
-                found[0][1].get_artist(),
-                "\n".join(["%05d %s - %s" % (
-                score, bsong.get_artist(), bsong.get_title()) for score, bsong
-                in songs]))
             clean = self.cleanup(songs, found[0][1].get_artist())
-            print "cleaned:\n" + "\n".join(["%05d %s - %s" % (
-                score, bsong.get_artist(), bsong.get_title()) for score, bsong
-                in clean])
             self._songs = deque(clean)
             while len(self._songs) > 10:
                 self._songs.pop()
