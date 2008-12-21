@@ -37,9 +37,13 @@ class MirageMiximizePlugin(SongsMenuPlugin):
     def player_enqueue(self, songs):
         """Put the song at the end of the queue"""
         gtk.gdk.threads_enter()
-        main.playlist.enqueue(songs)
-        print songs
-        gtk.gdk.threads_leave()
+        # XXX: main is None here sometimes, for some reason I haven't
+        # yet figured out. This stops execution completely, so I put
+        # in this ugly hack.
+        if main:
+            main.playlist.enqueue(songs)
+            print songs
+            gtk.gdk.threads_leave()
 
     def plugin_songs(self, songs):
         copool.add(self.do_stuff, songs)
