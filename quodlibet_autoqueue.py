@@ -318,7 +318,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         main.playlist.enqueue([song.song])
         gtk.gdk.threads_leave()
 
-    @Cache(2000)
     def player_search(self, search):
         """perform a player search"""
         try:
