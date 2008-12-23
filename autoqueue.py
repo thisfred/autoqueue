@@ -811,13 +811,14 @@ class AutoQueueBase(object):
                 generators.append(
                     scale_transformer(cursor2, self.max_track_match, scale_to))
             else:
-                self.connection.commit()
-                cursor2 = self.connection.cursor()
-                cursor2.execute(
-                    "DELETE FROM track_2_track WHERE "
-                    "track_2_track.track1 = ?;",
-                    (track_id,)
-                    )
+                ## self.connection.commit()
+                ## cursor2 = self.connection.cursor()
+                ## cursor2.execute(
+                ##     "DELETE FROM track_2_track WHERE "
+                ##     "track_2_track.track1 = ?;",
+                ##     (track_id,)
+                ##     )
+                ## self.connection.commit()
                 generators.append(
                     self.get_similar_tracks_from_lastfm(
                     artist_name, title, track_id))
@@ -868,13 +869,14 @@ class AutoQueueBase(object):
                     scale_transformer(
                     cursor2, self.max_artist_match, scale_to, offset=10000))
             else:
-                self.connection.commit()
-                cursor2 = self.connection.cursor()
-                cursor2.execute(
-                    "DELETE FROM artist_2_artist WHERE "
-                    "artist_2_artist.artist1 = ?;",
-                    (artist_id,)
-                    )
+                ## self.connection.commit()
+                ## cursor2 = self.connection.cursor()
+                ## cursor2.execute(
+                ##     "DELETE FROM artist_2_artist WHERE "
+                ##     "artist_2_artist.artist1 = ?;",
+                ##     (artist_id,)
+                ##     )
+                ## self.connection.commit()
                 generators.append(
                     self.get_similar_artists_from_lastfm(artist_name, artist_id)
                     )
