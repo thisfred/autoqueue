@@ -506,9 +506,9 @@ class TestAutoQueue(object):
             pass
         artist = 'joni mitchell'
         artist2 =  'paul simon'
-        cursor = self.autoqueue.connection.cursor()
-        cursor.execute("SELECT * FROM artist_2_artist INNER JOIN artists ON "
-                       "artists.id = artist_2_artist.artist2;")
+        ## cursor = self.autoqueue.connection.cursor()
+        ## cursor.execute("SELECT * FROM artist_2_artist INNER JOIN artists ON "
+        ##                "artists.id = artist_2_artist.artist2;")
         ## for row in cursor:
         ##     print row
         assert_equals(
