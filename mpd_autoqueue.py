@@ -482,10 +482,6 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
         '''Put the song at the end of the queue'''
         self.client.add(song.file)
 
-    def player_get_userdir(self):
-        '''get the application user directory to store files'''
-        return expand_path(SETTINGS_PATH)
-
     def player_current_song(self):
         return Song(**self.client.currentsong())
     

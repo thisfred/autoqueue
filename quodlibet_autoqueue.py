@@ -212,13 +212,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     # Implement the player specific methods needed by autoqueue
 
-    def player_get_userdir(self):
-        """get the application user directory to store files"""
-        try:
-            return const.USERDIR
-        except AttributeError:
-            return const.DIR
-    
     def player_construct_track_search(self, artist, title, restrictions=None):
         """construct a search that looks for songs with this artist
         and title"""

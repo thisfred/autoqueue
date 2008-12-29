@@ -28,13 +28,6 @@ class MirageMiximizePlugin(SongsMenuPlugin):
         super(MirageMiximizePlugin, self).__init__(*args)
         self.mir = Mir()
 
-    def player_get_userdir(self):
-        """get the application user directory to store files"""
-        try:
-            return const.USERDIR
-        except AttributeError:
-            return const.DIR
-
     def player_enqueue(self, songs):
         """Put the song at the end of the queue"""
         gtk.gdk.threads_enter()

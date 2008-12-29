@@ -53,6 +53,12 @@ ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
 # be nice to last.fm
 WAIT_BETWEEN_REQUESTS = timedelta(0, 1) 
 
+def get_userdir():
+    """get the application user directory to store files"""
+    userdir = os.path.join(os.path.expanduser("~"), '.autoqueue')
+    if not os.path.exists(userdir):
+        os.mkdir(path)
+
 def transform_trackresult(tresult):
     score = tresult[0]
     result = {
@@ -342,10 +348,6 @@ class AutoQueueBase(object):
     def db_stop(self):
         execSQL(DbCmd(StopCmd))
         
-    def player_get_userdir(self):
-        """get the application user directory to store files"""
-        return NotImplemented
-
     def player_construct_search(self, result, restrictions=None):
         artist = result.get('artist')
         title = result.get('title')
@@ -424,7 +426,7 @@ class AutoQueueBase(object):
 
     def get_blocked_artists_pickle(self):
         dump = os.path.join(
-            self.player_get_userdir(), "autoqueue_block_cache")
+            self.get_userdir(), "autoqueue_block_cache")
         try:
             pickle = open(dump, 'r')
             try:
@@ -444,7 +446,7 @@ class AutoQueueBase(object):
     def get_db_path(self):
         if self.in_memory:
             return ":memory:"
-        return os.path.join(self.player_get_userdir(), "similarity.db")
+        return os.path.join(self.get_userdir(), "similarity.db")
     
     def on_song_started(self, song):
         """Should be called by the plugin when a new song starts. If
@@ -597,7 +599,7 @@ class AutoQueueBase(object):
             len(self._blocked_artists)))
         if self.store_blocked_artists:
             dump = os.path.join(
-                self.player_get_userdir(), "autoqueue_block_cache")
+                self.get_userdir(), "autoqueue_block_cache")
             try:
                 os.remove(dump)
             except OSError:

@@ -3,7 +3,7 @@ import const
 from plugins.songsmenu import SongsMenuPlugin
 from autoqueue.mirage import Mir, MirDb
 from quodlibet.util import copool
-from autoqueue.autoqueue import get_track, get_artist_tracks
+from autoqueue.autoqueue import get_track, get_artist_tracks, get_userdir
 
 def get_title(song):
     """return lowercase UNICODE title of song"""
@@ -25,15 +25,8 @@ class MirageSongsPlugin(SongsMenuPlugin):
         super(MirageSongsPlugin, self).__init__(*args)
         self.mir = Mir()
 
-    def player_get_userdir(self):
-        """get the application user directory to store files"""
-        try:
-            return const.USERDIR
-        except AttributeError:
-            return const.DIR
-
     def do_stuff(self, songs):
-        dbpath = os.path.join(self.player_get_userdir(), "similarity.db")
+        dbpath = os.path.join(get_userdir(), "similarity.db")
         db = MirDb(dbpath)
         l = len(songs)
         for i, song in enumerate(songs):
