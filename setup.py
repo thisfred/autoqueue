@@ -13,7 +13,8 @@ setup(
     extras_require = {
     'mirage': ['ctypes', 'scipy'],
     },
-    packages=find_packages('src', exclude=['ez_setup']),
+    package_dir={'': 'src'},
+    packages=['autoqueue'],
     include_package_data = True,
     zip_safe=False,
 
