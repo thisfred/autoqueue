@@ -67,7 +67,6 @@ class DbWrapper(Thread):
 def execSQL(s):
     if s.cmd == ConnectCmd:
         global qthreads
-        print "%s thread(s)" % str(qthreads)
         _threadex.acquire()
         qthreads += 1
         _threadex.release()
