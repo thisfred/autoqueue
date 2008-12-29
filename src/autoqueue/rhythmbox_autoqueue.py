@@ -44,10 +44,10 @@ class Song(SongBase):
         return []
 
     def get_length(self):
-        return self.db.entry_get(self.song, rhythmdb.PROP_DURATION))
+        return self.db.entry_get(self.song, rhythmdb.PROP_DURATION)
 
     def get_filename(self):
-        return self.db.entry_get(self.song, rhythmdb.PROP_LOCATION))
+        return self.db.entry_get(self.song, rhythmdb.PROP_LOCATION)
 
 
 class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
