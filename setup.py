@@ -13,6 +13,8 @@ setup(
     extras_require = {
     'mirage': ['ctypes', 'scipy'],
     },
-    package_dir = {'': 'src'},
+    packages=find_packages('src', exclude=['ez_setup']),
     include_package_data = True,
+    zip_safe=False,
+
 )
