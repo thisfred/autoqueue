@@ -4,7 +4,8 @@ from collections import deque
 from datetime import datetime, timedelta
 from xml.dom import minidom
 from nose.tools import assert_equals, assert_not_equals
-from autoqueue import SongBase, AutoQueueBase, Throttle
+from autoqueue import SongBase, AutoQueueBase, Throttle, get_artist, get_track
+from autoqueue import get_tag_match
 
 
 WAIT_BETWEEN_REQUESTS = timedelta(0,0,10)
@@ -189,35 +190,32 @@ def throttled_method():
 def unthrottled_method():
     return
 
+
 class TestAutoQueue(object):
     def setup(self):
         self.autoqueue = MockAutoQueue()
-    
+
+    def teardown(self):
+        self.autoqueue.db_stop()
+
     def test_in_memory(self):
         assert_equals(True, self.autoqueue.in_memory)
-
-    def test_get_database_connection(self):
-        connection = self.autoqueue.get_database_connection()
-        cursor = connection.cursor()
-        cursor.execute("SELECT * FROM tracks;")
-        rows = cursor.fetchall()
-        assert_equals([], rows)
-
+        
     def test_get_artist(self):
         artist = 'joni mitchell'
-        row = self.autoqueue.get_artist(artist)
-        assert_equals((artist, None), row[1:])
+        row = get_artist(artist)
+        assert_equals(artist, row[1])
 
     def test_get_track(self):
         artist = "nina simone"
         title = "i think it's going to rain today"
-        artist_id = self.autoqueue.get_artist(artist)[0]
-        row = self.autoqueue.get_track(artist, title)
+        artist_id = get_artist(artist)[0]
+        row = get_track(artist, title)
         assert_equals((artist_id, title, None), row[1:])
 
     def test_get_similar_artists_from_lastfm(self):
         artist = 'joni mitchell'
-        artist_id = self.autoqueue.get_artist(artist)
+        artist_id = get_artist(artist)
         similar_artists = self.autoqueue.get_similar_artists_from_lastfm(
             artist, artist_id)
         td = [
@@ -248,13 +246,13 @@ class TestAutoQueue(object):
         sim = [track for track in similar_artists][:22]
         assert_equals(td, sim)
         artist = u'habib koité & bamada'
-        row = self.autoqueue.get_artist(artist)
+        row = get_artist(artist)
         artist_id = row[0]
         similar_artists = self.autoqueue.get_similar_artists_from_lastfm(
             artist, artist_id)
         sim = [track for track in similar_artists][:22]
         td = [
-            (10000, {'lastfm_match': 10000, 'artist': u'salif keita'}),
+	    (10000, {'lastfm_match': 10000, 'artist': u'salif keita'}),
             (10463, {'lastfm_match': 9536, 'artist': u'mamou sidib\xe9'}),
             (10669,
              {'lastfm_match': 9330, 'artist': u'k\xe9l\xe9tigui diabat\xe9'}),
@@ -286,7 +284,7 @@ class TestAutoQueue(object):
     def test_get_similar_tracks_from_lastfm(self):
         artist = 'nina simone'
         title = "i think it's going to rain today"
-        track = self.autoqueue.get_track(artist, title)
+        track = get_track(artist, title)
         track_id = track[0]
         similar_tracks = self.autoqueue.get_similar_tracks_from_lastfm(
             artist, title, track_id)
@@ -354,10 +352,10 @@ class TestAutoQueue(object):
             (15113, {'lastfm_match': 4887, 'artist': u'blossom dearie'})]
         for i, item in enumerate(td):
             assert_equals(td[i], similar_artists.next())
-        row = self.autoqueue.get_artist(artist)
+        row = get_artist(artist)
         assert_equals((artist, None), row[1:])
         artist = 'dionne warwick'
-        row = self.autoqueue.get_artist(artist)
+        row = get_artist(artist)
         assert_equals((artist, None), row[1:])
 
     def test_get_ordered_similar_tracks(self):
@@ -409,13 +407,13 @@ class TestAutoQueue(object):
               'artist': u'judee sill'})]
         sim = [track for track in similar_tracks][:14]
         assert_equals(td, sim)
-        artist_id = self.autoqueue.get_artist(artist)[0]
-        row = self.autoqueue.get_track(artist, title)
+        artist_id = get_artist(artist)[0]
+        row = get_track(artist, title)
         assert_equals((artist_id, title, None), row[1:])
         artist = 'leonard cohen'
         title = 'suzanne'
-        artist_id = self.autoqueue.get_artist(artist)[0]
-        row = self.autoqueue.get_track(artist, title)
+        artist_id = get_artist(artist)[0]
+        row = get_track(artist, title)
         assert_equals((artist_id, title, None), row[1:])
 
     def test_queue_needs_songs(self):
@@ -506,11 +504,6 @@ class TestAutoQueue(object):
             pass
         artist = 'joni mitchell'
         artist2 =  'paul simon'
-        ## cursor = self.autoqueue.connection.cursor()
-        ## cursor.execute("SELECT * FROM artist_2_artist INNER JOIN artists ON "
-        ##                "artists.id = artist_2_artist.artist2;")
-        ## for row in cursor:
-        ##     print row
         assert_equals(
             6705,
             self.autoqueue.get_artist_match(artist, artist2))
@@ -519,7 +512,7 @@ class TestAutoQueue(object):
         tags1 = [
             'artist:lowlands 2006', 'artist:sxsw 2005', 'modernity', 'love']
         tags2 = ['covers', 'bloc party', 'modernity', 'love', 'live']
-        assert_equals(2, self.autoqueue.get_tag_match(tags1, tags2))
+        assert_equals(2, get_tag_match(tags1, tags2))
 
         
 class TestThrottle(object):

@@ -1,8 +1,10 @@
 import sqlite3
 from numpy import array, zeros
 from nose.tools import assert_equals
-from mirage import Mir, CovarianceMatrix, Matrix, Vector, Db, ScmsConfiguration
+from mirage import Mir, CovarianceMatrix, Matrix, Vector, MirDb
+from mirage import ScmsConfiguration
 from mirage import distance
+from db_thread import execSQL, DbCmd, SqlCmd
 from decimal import Decimal, getcontext
 
 def decimize(f):
@@ -149,8 +151,7 @@ class TestMir(object):
         ##     int(scms5.distance(scms5) * 100), 4000)
 
     def test_add_track(self):
-        connection = sqlite3.connect(":memory:")
-        testdb = Db(connection)
+        testdb = MirDb(":memory:")
         for i, scms in enumerate(scmses):
             testdb.add_track(i, scms)
         
@@ -160,8 +161,7 @@ class TestMir(object):
                     testdb.get_tracks(exclude_ids=['3','4'])]))
 
     def test_get_track(self):
-        connection = sqlite3.connect(":memory:")
-        testdb = Db(connection)
+        testdb = MirDb(":memory:")
         for i, testscms in enumerate(scmses):
             testdb.add_track(i, testscms)
         scms3_db = testdb.get_track('3')
@@ -170,19 +170,17 @@ class TestMir(object):
         assert_equals(117, int(distance(scms3_db, scms4_db, c)))
 
     def test_add_and_compare(self):
-        connection = sqlite3.connect(":memory:")
-        testdb = Db(connection)
+        testdb = MirDb(":memory:")
         for i, testscms in enumerate(scmses):
             testdb.add_and_compare(i, testscms)
-        cursor = testdb.connection.cursor()
-        distances = [row for row in cursor.execute("SELECT * FROM distance")]
+        distances = execSQL(DbCmd(SqlCmd, ("SELECT * FROM distance" ,)))
+        testdb.reset() 
         assert_equals(
             [(1, 0, 18207), (2, 1, 19128)],
             distances)
 
     def test_get_neighbours(self):
-        connection = sqlite3.connect(":memory:")
-        testdb = Db(connection)
+        testdb = MirDb(":memory:")
         for i, testscms in enumerate(scmses):
             testdb.add_and_compare(i, testscms)
         assert_equals(

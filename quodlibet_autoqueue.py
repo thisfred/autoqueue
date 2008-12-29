@@ -15,7 +15,7 @@ from library import library
 from quodlibet.util import copool
 import config
 
-from autoqueue import AutoQueueBase, SongBase, SQL, Cache
+from autoqueue.autoqueue import AutoQueueBase, SongBase, SQL, Cache
 
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) api key from last.fm here:
