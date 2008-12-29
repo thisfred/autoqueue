@@ -335,7 +335,6 @@ class MirDb(object):
             create = True
         elif not os.path.exists(path):
             create = True
-        execSQL(DbCmd(ConnectCmd, path))
         if not create:
             return
         execSQL(DbCmd(
@@ -347,9 +346,6 @@ class MirDb(object):
             ("CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
              "INTEGER, distance INTEGER)",)))
 
-    def __del__(self):
-        execSQL(DbCmd(StopCmd))
-        
     def add_track(self, trackid, scms):
         execSQL(DbCmd(
             SqlCmd,
