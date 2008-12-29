@@ -401,7 +401,6 @@ class MirDb(object):
                 continue
             other = instance_from_picklestring(buf)
             dist = int(distance(scms, other, c) * 1000)
-            print dist, cutoff
             if dist < cutoff:
                 execSQL(DbCmd(
                     SqlCmd,
