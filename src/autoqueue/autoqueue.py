@@ -58,6 +58,7 @@ def get_userdir():
     userdir = os.path.join(os.path.expanduser("~"), '.autoqueue')
     if not os.path.exists(userdir):
         os.mkdir(path)
+    return userdir
 
 def transform_trackresult(tresult):
     score = tresult[0]
