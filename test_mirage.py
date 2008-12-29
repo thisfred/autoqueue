@@ -117,39 +117,6 @@ class TestMir(object):
         assert_equals(58, int(distance(scms5, scms4, c)))
         assert_equals(0, int(distance(scms5, scms5, c)))
 
-        ## assert_equals(
-        ##     int(scms3.distance(scms) * 100), 6977)
-        ## assert_equals(
-        ##     int(scms3.distance(scms2) * 100), 6777)
-        ## assert_equals(
-        ##     int(scms3.distance(scms3) * 100), 4000)
-        ## assert_equals(
-        ##     int(scms3.distance(scms4) * 100), 7252)
-        ## assert_equals(
-        ##     int(scms3.distance(scms5) * 100), 10454)
-
-        ## assert_equals(
-        ##     int(scms4.distance(scms) * 100), 6993)
-        ## assert_equals(
-        ##     int(scms4.distance(scms2) * 100), 6539)
-        ## assert_equals(
-        ##     int(scms4.distance(scms3) * 100), 7252)
-        ## assert_equals(
-        ##     int(scms4.distance(scms4) * 100), 4000)
-        ## assert_equals(
-        ##     int(scms4.distance(scms5) * 100), 9674)
-
-        ## assert_equals(
-        ##     int(scms5.distance(scms) * 100), 6443)
-        ## assert_equals(
-        ##     int(scms5.distance(scms2) * 100), 7326)
-        ## assert_equals(
-        ##     int(scms5.distance(scms3) * 100), 10454)
-        ## assert_equals(
-        ##     int(scms5.distance(scms4) * 100), 9674)
-        ## assert_equals(
-        ##     int(scms5.distance(scms5) * 100), 4000)
-
     def test_add_track(self):
         testdb = MirDb(":memory:")
         for i, scms in enumerate(scmses):
