@@ -426,7 +426,7 @@ class AutoQueueBase(object):
 
     def get_blocked_artists_pickle(self):
         dump = os.path.join(
-            self.get_userdir(), "autoqueue_block_cache")
+            get_userdir(), "autoqueue_block_cache")
         try:
             pickle = open(dump, 'r')
             try:
@@ -446,7 +446,7 @@ class AutoQueueBase(object):
     def get_db_path(self):
         if self.in_memory:
             return ":memory:"
-        return os.path.join(self.get_userdir(), "similarity.db")
+        return os.path.join(get_userdir(), "similarity.db")
     
     def on_song_started(self, song):
         """Should be called by the plugin when a new song starts. If
@@ -599,7 +599,7 @@ class AutoQueueBase(object):
             len(self._blocked_artists)))
         if self.store_blocked_artists:
             dump = os.path.join(
-                self.get_userdir(), "autoqueue_block_cache")
+                get_userdir(), "autoqueue_block_cache")
             try:
                 os.remove(dump)
             except OSError:
