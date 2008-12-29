@@ -88,33 +88,33 @@ class TestMir(object):
         c = ScmsConfiguration(20)
 
         assert_equals(0, int(distance(scms, scms, c)))
-        assert_equals(18, int(distance(scms, scms2, c)))
-        assert_equals(31, int(distance(scms, scms3, c)))
-        assert_equals(33, int(distance(scms, scms4, c)))
-        assert_equals(86, int(distance(scms, scms5, c)))
+        assert_equals(67, int(distance(scms, scms2, c)))
+        assert_equals(43, int(distance(scms, scms3, c)))
+        assert_equals(113, int(distance(scms, scms4, c)))
+        assert_equals(80, int(distance(scms, scms5, c)))
 
-        assert_equals(18, int(distance(scms2, scms, c)))
+        assert_equals(67, int(distance(scms2, scms, c)))
         assert_equals(0, int(distance(scms2, scms2, c)))
-        assert_equals(19, int(distance(scms2, scms3, c)))
-        assert_equals(21, int(distance(scms2, scms4, c)))
-        assert_equals(57, int(distance(scms2, scms5, c)))
+        assert_equals(27, int(distance(scms2, scms3, c)))
+        assert_equals(88, int(distance(scms2, scms4, c)))
+        assert_equals(60, int(distance(scms2, scms5, c)))
 
-        assert_equals(31, int(distance(scms3, scms, c)))
-        assert_equals(19, int(distance(scms3, scms2, c)))
+        assert_equals(43, int(distance(scms3, scms, c)))
+        assert_equals(27, int(distance(scms3, scms2, c)))
         assert_equals(0, int(distance(scms3, scms3, c)))
-        assert_equals(29, int(distance(scms3, scms4, c)))
-        assert_equals(112, int(distance(scms3, scms5, c)))
+        assert_equals(86, int(distance(scms3, scms4, c)))
+        assert_equals(63, int(distance(scms3, scms5, c)))
 
-        assert_equals(33, int(distance(scms4, scms, c)))
-        assert_equals(21, int(distance(scms4, scms2, c)))
-        assert_equals(29, int(distance(scms4, scms3, c)))
+        assert_equals(113, int(distance(scms4, scms, c)))
+        assert_equals(88, int(distance(scms4, scms2, c)))
+        assert_equals(86, int(distance(scms4, scms3, c)))
         assert_equals(0, int(distance(scms4, scms4, c)))
-        assert_equals(117, int(distance(scms4, scms5, c)))
+        assert_equals(58, int(distance(scms4, scms5, c)))
 
-        assert_equals(86, int(distance(scms5, scms, c)))
-        assert_equals(57, int(distance(scms5, scms2, c)))
-        assert_equals(112, int(distance(scms5, scms3, c)))
-        assert_equals(117, int(distance(scms5, scms4, c)))
+        assert_equals(80, int(distance(scms5, scms, c)))
+        assert_equals(60, int(distance(scms5, scms2, c)))
+        assert_equals(63, int(distance(scms5, scms3, c)))
+        assert_equals(58, int(distance(scms5, scms4, c)))
         assert_equals(0, int(distance(scms5, scms5, c)))
 
         ## assert_equals(
@@ -167,24 +167,26 @@ class TestMir(object):
         scms3_db = testdb.get_track('3')
         scms4_db = testdb.get_track('4')
         c = ScmsConfiguration(20)
-        assert_equals(117, int(distance(scms3_db, scms4_db, c)))
+        assert_equals(58, int(distance(scms3_db, scms4_db, c)))
 
     def test_add_and_compare(self):
         testdb = MirDb(":memory:")
         for i, testscms in enumerate(scmses):
-            testdb.add_and_compare(i, testscms)
+            testdb.add_and_compare(i, testscms, cutoff=100000)
         distances = execSQL(DbCmd(SqlCmd, ("SELECT * FROM distance" ,)))
         testdb.reset() 
         assert_equals(
-            [(1, 0, 18207), (2, 1, 19128)],
+            [(1, 0, 67616), (2, 0, 43465), (2, 1, 27516), (3, 1, 88447),
+             (3, 2, 86641), (4, 0, 80452), (4, 1, 60046), (4, 2, 63272),
+             (4, 3, 58181)],
             distances)
 
     def test_get_neighbours(self):
         testdb = MirDb(":memory:")
         for i, testscms in enumerate(scmses):
-            testdb.add_and_compare(i, testscms)
+            testdb.add_and_compare(i, testscms, cutoff=100000)
         assert_equals(
-            [(18207, 1)],
+            [(43465, 2), (67616, 1), (80452, 4)],
             testdb.get_neighbours(0))
         
         
