@@ -2,7 +2,6 @@ from setuptools import setup, find_packages
 setup(
     name = "autoqueue",
     version = "0.3",
-    package_data = {'': ['*.filter'],},
     # metadata for upload to PyPI
     author = "Eric Casteleijn",
     author_email = "thisfred@gmail.com",
@@ -15,6 +14,7 @@ setup(
     },
     package_dir={'': 'src'},
     packages=['autoqueue'],
+    package_data={"autoqueue": ["res/*.filter"]},
     include_package_data = True,
     zip_safe=False,
 
