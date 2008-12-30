@@ -111,7 +111,7 @@ class Song(SongBase):
     def get_filename(self):
         # XXX obviously needs to be changed. can we ask mpd for its
         # music directory?
-        return "/var/lib/mpd/music" + self.file
+        return "/var/lib/mpd/music/" + self.file
         
     def get_tags(self):
         """return a list of tags for the songs"""
@@ -411,7 +411,6 @@ class AutoQueuePlugin(AutoQueueBase, Daemon):
             if running:
                 try:
                     song = self.player_current_song()
-                    print repr(song.file)
                     if song != self._current_song:
                         self._current_song = song
                         self.on_song_started(song)

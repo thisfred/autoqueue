@@ -1,6 +1,10 @@
 import sqlite3, heapq, os
+from time import sleep
 from collections import deque
 from datetime import datetime, timedelta
+from threading import Lock
+
+lock = Lock()
 
 def get_userdir():
     """get the application user directory to store files"""
@@ -181,15 +185,17 @@ class DbManager(object):
         self.con = sqlite3.connect(path)
         
     def sql_query(self, sql):
-        if self.dirty:
-            self.con.commit()
-            self.dirty = False
-        for row in self.con.execute(*sql):
-            yield row
+        cur = self.con.cursor()
+        return cur.execute(*sql)
 
     def sql_statement(self, sql):
-        self.con.execute(*sql)
-        self.dirty = True
+        lock.acquire()
+        try:
+            cur = self.con.cursor()
+            cur.execute(*sql)
+            self.con.commit()
+        finally:
+            lock.release()
         
     def create_db(self):
         """ Set up a database for the artist and track similarity scores

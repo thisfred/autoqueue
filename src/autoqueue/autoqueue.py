@@ -285,7 +285,6 @@ class AutoQueueBase(object):
         if self.running:
             return
         if self.desired_queue_length == 0 or self.queue_needs_songs():
-            yield
             self.fill_queue()
 
     def cleanup(self, songs, next_artist=''):
@@ -635,9 +634,9 @@ class AutoQueueBase(object):
                 generators.append(
                     scale_transformer(gen, self.max_track_match, scale_to))
             else:
-                aq_db.sql_statement(
-                    ("DELETE FROM track_2_track WHERE track_2_track.track1 = "
-                      "?;", (track_id,)))
+                ## aq_db.sql_statement(
+                ##     ("DELETE FROM track_2_track WHERE track_2_track.track1 = "
+                ##       "?;", (track_id,)))
                 generators.append(
                     self.get_similar_tracks_from_lastfm(
                     artist_name, title, track_id))
@@ -685,10 +684,9 @@ class AutoQueueBase(object):
                     scale_transformer(
                     gen, self.max_artist_match, scale_to, offset=10000))
             else:
-                sql_statement(DbCmd(
-                    SqlCmd,
-                    ("DELETE FROM artist_2_artist WHERE "
-                      "artist_2_artist.artist1 = ?;", (artist_id,))))
+                ## aq_db.sql_statement(
+                ##     ("DELETE FROM artist_2_artist WHERE "
+                ##       "artist_2_artist.artist1 = ?;", (artist_id,)))
                 generators.append(
                     self.get_similar_artists_from_lastfm(artist_name, artist_id)
                     )
