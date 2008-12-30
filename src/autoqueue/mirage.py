@@ -10,13 +10,12 @@ import gst, gobject
 from db_thread import DbCmd, execSQL, qthreads, ConnectCmd, SqlCmd, StopCmd
 
 DEBUG = True
+cdll.LoadLibrary("/usr/lib/banshee-1/Extensions/libmirageaudio.so")
+libmirageaudio = CDLL("libmirageaudio.so")
 
 
 class MirageAudio(Structure):
     pass
-
-cdll.LoadLibrary("/usr/lib/banshee-1/Extensions/libmirageaudio.so")
-libmirageaudio = CDLL("libmirageaudio.so")
 
 
 class MatrixDimensionMismatchException(Exception):
@@ -313,6 +312,7 @@ class Vector(Matrix):
     def __init__(self, rows):
         super(Vector, self).__init__(rows, 1)
 
+
 class CovarianceMatrix(object):
     def __init__(self, dim_or_matrix):
         from_matrix = isinstance(dim_or_matrix, Matrix)
@@ -420,7 +420,8 @@ class MirDb(object):
         neighbours1.extend(neighbours2)
         neighbours1.sort()
         return neighbours1
-            
+
+
 class Mfcc(object):
     def __init__(self, winsize, srate, filters, cc):
         here = os.path.dirname( __file__)
@@ -576,25 +577,3 @@ class Mir(object):
         t.stop()
         write_line("Mirage: playlist in: %s" % t.time)
         return keys
-
-## if __name__ == '__main__':
-##     mir = Mir()
-##     scms = mir.analyze('testfiles/test.mp3')
-##     scms2 = mir.analyze('testfiles/test2.mp3')
-##     scms3 = mir.analyze('testfiles/test3.ogg')
-##     scms4 = mir.analyze('testfiles/test4.ogg')
-##     scms5 = mir.analyze('testfiles/test5.ogg')
-##     scmses = [scms, scms2, scms3, scms4, scms5]
-
-##     testdb = Db(":memory:")
-##     for i, scms in enumerate(scmses):
-##         testdb.add_track(i, scms)
-        
-##     print sorted(
-##         [id for (scms, id) in testdb.get_tracks(exclude_ids=['3','4'])]) # [0,1,2]
-
-##     scms3_db = testdb.get_track('3')
-##     scms4_db = testdb.get_track('4')
-##     c = ScmsConfiguration(20)
-##     print int(distance(scms3_db, scms4_db, c) * 100) # 9647
-
