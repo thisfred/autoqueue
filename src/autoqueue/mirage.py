@@ -351,7 +351,7 @@ class MirDb(object):
             SqlCmd,
             ("INSERT INTO mirage (trackid, scms) VALUES (?, ?)",
              (trackid,
-              sqlite3.Binary(instance_to_picklestring(scms))))))
+              sqlite3.Binary(scms.to_picklestring())))))
 
     def remove_track(self, trackid):
         execSQL(DbCmd(
@@ -477,10 +477,6 @@ def instance_from_picklestring(picklestring):
     f = StringIO(picklestring)
     return pickle.load(f)
 
-def instance_to_picklestring(instance):
-    f = StringIO()
-    pickle.dump(instance, f)
-    return f.getvalue()
 
 class ScmsConfiguration(object):
     def __init__(self, dimension):
@@ -507,6 +503,12 @@ class Scms(object):
         self.mean = None
         self.cov = None
         self.icov = None
+
+    def to_picklestring(self, instance):
+        f = StringIO()
+        pickle.dump(self, f)
+        return f.getvalue()
+
 
     
 class Mir(object):
