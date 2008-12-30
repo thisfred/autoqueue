@@ -26,7 +26,6 @@ import urllib
 import random, os, heapq
 from xml.dom import minidom
 from cPickle import Pickler, Unpickler
-from db_thread import DbCmd, execSQL, qthreads, ConnectCmd, SqlCmd, StopCmd
 
 try:
     import sqlite3
@@ -110,6 +109,49 @@ def merge(*subsequences):
         else:
             # subseq has been exhausted, therefore remove it from the queue
             heapq.heappop(heap)
+
+class DbManager(object):
+    def __init__(self):
+        self.con = None
+        self.dirty = False
+        
+    def set_path(self, path):
+        self.con = sqlite3.connect(path)
+        
+    def sql_query(self, sql):
+        if self.dirty:
+            self.con.commit()
+            self.dirty = False
+        for row in self.con.execute(*sql):
+            yield row
+
+    def sql_statement(self, sql):
+        self.con.execute(*sql)
+        self.dirty = True
+        
+    def create_db(self):
+        """ Set up a database for the artist and track similarity scores
+        """
+        self.sql_statement(
+            ("CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, "
+             "name VARCHAR(100), updated DATE);",))
+        self.sql_statement(
+            ("CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER, "
+             "artist2 INTEGER, match INTEGER);",))
+        self.sql_statement(
+            ("CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, "
+             "artist INTEGER, title VARCHAR(100), updated DATE);",))
+        self.sql_statement(
+            ("CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, "
+             "track2 INTEGER, match INTEGER);",))
+        self.sql_statement(
+            ("CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, "
+             "scms BLOB)",))
+        self.sql_statement(
+            ("CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
+             "INTEGER, distance INTEGER);",))
+
+aq_db = DbManager()
 
 
 class Throttle(object):
@@ -253,15 +295,14 @@ class SongBase(object):
 def get_artist(artist_name):
     """get artist information from the database"""
     artist_name = artist_name.encode("UTF-8")
-    for row in execSQL(DbCmd(
-        SqlCmd, ("SELECT * FROM artists WHERE name = ?", (artist_name,)))):
+    for row in aq_db.sql_query(
+        ("SELECT * FROM artists WHERE name = ?", (artist_name,))):
+        yielded = True
         return row
-    execSQL(DbCmd(
-        SqlCmd,
-        ("INSERT INTO artists (name) VALUES (?)", (artist_name,))))
-    for row in execSQL(DbCmd(
-        SqlCmd,
-        ("SELECT * FROM artists WHERE name = ?", (artist_name,)))):
+    aq_db.sql_statement(
+        ("INSERT INTO artists (name) VALUES (?)", (artist_name,)))
+    for row in aq_db.sql_query(
+        ("SELECT * FROM artists WHERE name = ?", (artist_name,))):
         return row
 
 @Cache(2000)
@@ -269,36 +310,31 @@ def get_track(artist_name, title):
     """get track information from the database"""
     title = title.encode("UTF-8")
     artist_id = get_artist(artist_name)[0]
-    for row in execSQL(DbCmd(
-        SqlCmd,
+    for row in aq_db.sql_query(
         ("SELECT * FROM tracks WHERE artist = ? AND title = ?",
-         (artist_id, title)))):
+         (artist_id, title))):
         return row
-    execSQL(DbCmd(
-        SqlCmd,
+    aq_db.sql_statement(
         ("INSERT INTO tracks (artist, title) VALUES (?, ?)",
-        (artist_id, title))))
-    for row in execSQL(DbCmd(
-        SqlCmd,
+        (artist_id, title)))
+    for row in aq_db.sql_query(
         ("SELECT * FROM tracks WHERE artist = ? AND title = ?",
-         (artist_id, title)))):
+         (artist_id, title))):
         return row
 
 @Cache(2000)
 def get_artist_and_title(track_id):
-    for row in execSQL(DbCmd(
-        SqlCmd,
+    for row in aq_db.sql_query(
         ("SELECT artists.name, tracks.title FROM tracks INNER JOIN artists"
         " ON tracks.artist = artists.id WHERE tracks.id = ?",
-        (track_id, )))):
+        (track_id, ))):
         return row[:2]
 
 def get_artist_tracks(artist_id):
-    for row in execSQL(DbCmd(
-        SqlCmd,
+    for row in aq_db.sql_query(
         ("SELECT tracks.id FROM tracks INNER JOIN artists"
           " ON tracks.artist = artists.id WHERE artists.id = ?",
-          (artist_id, )))):
+          (artist_id, ))):
         yield row[0]
 
 def get_tag_match(tags1, tags2):
@@ -343,12 +379,6 @@ class AutoQueueBase(object):
         if MIRAGE:
             self.mir = Mir()
 
-    def __del__(self):
-        self.db_stop()
-
-    def db_stop(self):
-        execSQL(DbCmd(StopCmd))
-        
     def player_construct_search(self, result, restrictions=None):
         artist = result.get('artist')
         title = result.get('title')
@@ -412,18 +442,16 @@ class AutoQueueBase(object):
             return None
 
     def connect_db(self):
-        global qthreads
-        if qthreads:
-            return
+        path = self.get_db_path()
+        aq_db.set_path(path)
         create = False
         if self.in_memory:
             create = True
-        elif not os.path.exists(self.get_db_path()):
+        elif not os.path.exists(path):
             create = True
-        execSQL(DbCmd(ConnectCmd, self.get_db_path()))
         if not create:
             return
-        self.create_db()
+        aq_db.create_db()
 
     def get_blocked_artists_pickle(self):
         dump = os.path.join(
@@ -734,7 +762,7 @@ class AutoQueueBase(object):
         length = song.get_length()
         track = get_track(artist_name, title)
         track_id, artist_id = track[0], track[1]
-        db = MirDb(self.get_db_path())
+        db = MirDb(aq_db)
         if db.get_track(track_id):
             return False
         self.log("no mirage data found, analyzing track")
@@ -758,7 +786,7 @@ class AutoQueueBase(object):
             raise StopIteration
         track = get_track(artist_name, title)
         track_id, artist_id, updated = track[0], track[1], track[3]
-        db = MirDb(self.get_db_path())
+        db = MirDb(aq_db)
         yielded = False
         for match, mtrack_id in db.get_neighbours(track_id):
             track_artist, track_title = get_artist_and_title(mtrack_id)
@@ -793,36 +821,33 @@ class AutoQueueBase(object):
                 artist_name, title, track_id), self.max_track_match, scale_to):
                 yield result 
         generators = []
-        rows = execSQL(DbCmd(
-            SqlCmd,      
+        gen = aq_db.sql_query(
             ("SELECT track_2_track.match, artists.name, tracks.title FROM "
               "track_2_track INNER JOIN tracks ON track_2_track.track1 = "
               "tracks.id INNER JOIN artists ON artists.id = tracks.artist "
               "WHERE track_2_track.track2 = ? ORDER BY track_2_track.match "
               "DESC",
-              (track_id,))))
+              (track_id,)))
         generators.append(
-            scale_transformer(rows, self.max_track_match, scale_to))
+            scale_transformer(gen, self.max_track_match, scale_to))
         if updated:
             updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
             if updated + timedelta(self.cache_time) > self.now:
                 self.log("Getting similar tracks from db for: %s - %s" % (
                     artist_name, title))
-                rows = execSQL(DbCmd(
-                    SqlCmd,      
+                gen = aq_db.sql_query(
                     ("SELECT track_2_track.match, artists.name, tracks.title "
                       "FROM track_2_track INNER JOIN tracks ON "
                       "track_2_track.track2 = tracks.id INNER JOIN artists ON "
                       "artists.id = tracks.artist WHERE track_2_track.track1 "
                       "= ? ORDER BY track_2_track.match DESC",
-                      (track_id,))))
+                      (track_id,)))
                 generators.append(
-                    scale_transformer(rows, self.max_track_match, scale_to))
+                    scale_transformer(gen, self.max_track_match, scale_to))
             else:
-                execSQL(DbCmd(
-                    SqlCmd,
+                aq_db.sql_statement(
                     ("DELETE FROM track_2_track WHERE track_2_track.track1 = "
-                      "?;", (track_id,))))
+                      "?;", (track_id,)))
                 generators.append(
                     self.get_similar_tracks_from_lastfm(
                     artist_name, title, track_id))
@@ -847,32 +872,30 @@ class AutoQueueBase(object):
                 artist_name, artist_id):
                 yield result
         generators = []
-        rows = execSQL(DbCmd(
-            SqlCmd,
+        gen = aq_db.sql_query(
             ("SELECT match, name  FROM artist_2_artist INNER JOIN "
               "artists ON artist_2_artist.artist1 = artists.id WHERE "
               "artist_2_artist.artist2 = ? ORDER BY match DESC",
-              (artist_id,))))
+              (artist_id,)))
         generators.append(
             scale_transformer(
-            rows, self.max_artist_match, scale_to, offset=10000))
+            gen, self.max_artist_match, scale_to, offset=10000))
         if updated:
             updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
             if updated + timedelta(self.cache_time) > self.now:
                 self.log(
                     "Getting similar artists from db for: %s " %
                     artist_name)
-                rows = execSQL(DbCmd(
-                    SqlCmd,
+                gen = aq_db.sql_query(
                     ("SELECT match, name  FROM artist_2_artist INNER JOIN "
                       "artists ON artist_2_artist.artist2 = artists.id WHERE "
                       "artist_2_artist.artist1 = ? ORDER BY match DESC; ",
-                      (artist_id,))))
+                      (artist_id,)))
                 generators.append(
                     scale_transformer(
-                    rows, self.max_artist_match, scale_to, offset=10000))
+                    gen, self.max_artist_match, scale_to, offset=10000))
             else:
-                execSQL(DbCmd(
+                sql_statement(DbCmd(
                     SqlCmd,
                     ("DELETE FROM artist_2_artist WHERE "
                       "artist_2_artist.artist1 = ?;", (artist_id,))))
@@ -895,65 +918,55 @@ class AutoQueueBase(object):
         
     def _get_artist_match(self, artist1, artist2):
         """get artist match score from database"""
-        rows = execSQL(DbCmd(
-            SqlCmd,
+        for row in aq_db.sql_query(
             ("SELECT match FROM artist_2_artist WHERE artist1 = ? AND artist2 "
-              "= ?", (artist1, artist2))))
-        for row in rows:
+             "= ?", (artist1, artist2))):
             return row[0]
         return 0
 
     def _get_track_match(self, track1, track2):
         """get track match score from database"""
-        rows = execSQL(DbCmd(
-            SqlCmd,
+        for row in aq_db.sql_query(
             ("SELECT match FROM track_2_track WHERE track1 = ? AND track2 = ?",
-            (track1, track2))))
-        for row in rows:
+             (track1, track2))):
             return row[0]
         return 0
 
     def _update_artist_match(self, artist1, artist2, match):
         """write match score to the database"""
-        execSQL(DbCmd(
-            SqlCmd,
+        aq_db.sql_statement(
             ("UPDATE artist_2_artist SET match = ? WHERE artist1 = ? AND "
-              "artist2 = ?", (match, artist1, artist2))))
+             "artist2 = ?", (match, artist1, artist2)))
 
     def _update_track_match(self, track1, track2, match):
         """write match score to the database"""
-        execSQL(DbCmd(
-            SqlCmd,
+        aq_db.sql_statement(
             ("UPDATE track_2_track SET match = ? WHERE track1 = ? AND track2 "
-              "= ?", (match, track1, track2))))
+             "= ?", (match, track1, track2)))
 
     def _insert_artist_match(self, artist1, artist2, match):
         """write match score to the database"""
-        execSQL(DbCmd(
-            SqlCmd,
+        aq_db.sql_statement(
             ("INSERT INTO artist_2_artist (artist1, artist2, match) VALUES "
-              "(?, ?, ?)", (artist1, artist2, match))))
+             "(?, ?, ?)", (artist1, artist2, match)))
 
     def _insert_track_match(self, track1, track2, match):
         """write match score to the database"""
-        execSQL(DbCmd(
-            SqlCmd,
+        aq_db.sql_statement(
             ("INSERT INTO track_2_track (track1, track2, match) VALUES "
-              "(?, ?, ?)", (track1, track2, match))))
+             "(?, ?, ?)", (track1, track2, match)))
 
     def _update_artist(self, artist_id):
         """write artist information to the database"""
-        execSQL(DbCmd(
-            SqlCmd,
+        aq_db.sql_statement(
             ("UPDATE artists SET updated = DATETIME('now') WHERE id = ?",
-              (artist_id,))))
+             (artist_id,)))
 
     def _update_track(self, track_id):
         """write track information to the database"""
-        execSQL(DbCmd(
-            SqlCmd,
+        aq_db.sql_statement(
             ("UPDATE tracks SET updated = DATETIME('now') WHERE id = ?",
-              (track_id,))))
+             (track_id,)))
         
     def _update_similar_artists(self, artist_id, similar_artists):
         """write similar artist information to the database"""
@@ -982,40 +995,15 @@ class AutoQueueBase(object):
             return
         print "[autoqueue]", msg.encode('utf-8')
 
-    def create_db(self):
-        """ Set up a database for the artist and track similarity scores
-        """
-        self.log("create_db")
-        execSQL(DbCmd(
-            SqlCmd,
-            ("CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, "
-              "name VARCHAR(100), updated DATE)",)))
-        execSQL(DbCmd(
-            SqlCmd,
-            ("CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER, "
-              "artist2 INTEGER, match INTEGER)",)))
-        execSQL(DbCmd(
-            SqlCmd,
-            ("CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, "
-              "artist INTEGER, title VARCHAR(100), updated DATE)",)))
-        execSQL(DbCmd(
-            SqlCmd,
-            ("CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, "
-              "track2 INTEGER, match INTEGER)",)))
-
     def log_db_stats(self, msg):
-        tracks = execSQL(DbCmd(
-            SqlCmd,
-            ("SELECT count(*) from tracks;",)))[0][0]
-        t2t = execSQL(DbCmd(
-            SqlCmd,
-            ("SELECT count(*) from track_2_track;",)))[0][0]
-        mirage = execSQL(DbCmd(
-            SqlCmd,
-            ("SELECT count(*) from mirage;",)))[0][0]
-        distance = execSQL(DbCmd(
-            SqlCmd,
-            ("SELECT count(*) from distance;",)))[0][0]
+        tracks = aq_db.sql_query(
+            ("SELECT count(*) from tracks;",)).next()[0]
+        t2t = aq_db.sql_query(
+            ("SELECT count(*) from track_2_track;",)).next()[0]
+        mirage = aq_db.sql_query(
+            ("SELECT count(*) from mirage;",)).next()[0]
+        distance = aq_db.sql_query(
+            ("SELECT count(*) from distance;",)).next()[0]
         self.log("%s:: tracks: %s, t2t: %s, mirage: %s, distance: %s" %
                  (msg, tracks, t2t, mirage, distance))
         
@@ -1032,17 +1020,15 @@ class AutoQueueBase(object):
             if not artist in artists:
                 artists.append(artist)
                 rows.extend(
-                    [row for row in execSQL(DbCmd(
-                    SqlCmd,
+                    [row for row in aq_db.sql_query(
                     ("SELECT artists.name, tracks.title, tracks.id FROM tracks "
                      "INNER JOIN artists ON tracks.artist = artists.id WHERE "
-                     "artists.name = ?;", (artist,))))])
+                     "artists.name = ?;", (artist,)))])
             rows.extend(
-                [row for row in execSQL(DbCmd(
-                SqlCmd,
+                [row for row in aq_db.sql_query(
                 ("SELECT artists.name, tracks.title, tracks.id FROM tracks "
                   "INNER JOIN artists ON tracks.artist = artists.id WHERE "
-                  "tracks.title = ?;", (prune['title'],))))])
+                  "tracks.title = ?;", (prune['title'],)))])
         for i, item in enumerate(rows):
             search = self.player_construct_search(
                 {'artist': item[0], 'title': item[1]})
@@ -1054,18 +1040,14 @@ class AutoQueueBase(object):
         self.log_db_stats('after')
 
     def delete_track_from_db(self, track_id):
-        execSQL(DbCmd(
-            SqlCmd,
+        aq_db.sql_statement(
             ("DELETE FROM distance WHERE track_1 = ? OR track_2 = ?;",
-              (track_id, track_id))))
-        execSQL(DbCmd(
-            SqlCmd,
-            ("DELETE FROM mirage WHERE trackid = ?;", (track_id,))))
-        execSQL(DbCmd(
-            SqlCmd,
+             (track_id, track_id)))
+        aq_db.sql_statement(
+            ("DELETE FROM mirage WHERE trackid = ?;", (track_id,)))
+        aq_db.sql_statement(
             ("DELETE FROM track_2_track WHERE track1 = ? OR track2 = ?;",
-              (track_id, track_id))))
-        execSQL(DbCmd(
-            SqlCmd,
-            ("DELETE FROM tracks WHERE id = ?;", (track_id,))))
+              (track_id, track_id)))
+        aq_db.sql_statement(
+            ("DELETE FROM tracks WHERE id = ?;", (track_id,)))
         

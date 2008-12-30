@@ -126,6 +126,9 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         self.log("disabled")
         self.__enabled = False
 
+    def destroy(self):
+        self.db_stop()
+        
     def plugin_on_song_started(self, song):
         """Triggered when a song start. If the right conditions apply,
         we start looking for new songs to queue."""

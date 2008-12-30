@@ -4,7 +4,7 @@ from nose.tools import assert_equals
 from mirage import Mir, CovarianceMatrix, Matrix, Vector, MirDb
 from mirage import ScmsConfiguration
 from mirage import distance
-from db_thread import execSQL, DbCmd, SqlCmd
+from autoqueue import aq_db
 from decimal import Decimal, getcontext
 
 def decimize(f):
@@ -19,6 +19,7 @@ scms5 = mir.analyze('testfiles/test5.ogg')
 scmses = [scms, scms2, scms3, scms4, scms5]
 
 class TestMir(object):
+    
     def test_covariance_matrix(self):
         cov = CovarianceMatrix(10)
         assert_equals(cov.dim, 10)
@@ -118,7 +119,9 @@ class TestMir(object):
         assert_equals(0, int(distance(scms5, scms5, c)))
 
     def test_add_track(self):
-        testdb = MirDb(":memory:")
+        aq_db.set_path(":memory:")
+        aq_db.create_db()
+        testdb = MirDb(aq_db)
         for i, scms in enumerate(scmses):
             testdb.add_track(i, scms)
         
@@ -128,7 +131,9 @@ class TestMir(object):
                     testdb.get_tracks(exclude_ids=['3','4'])]))
 
     def test_get_track(self):
-        testdb = MirDb(":memory:")
+        aq_db.set_path(":memory:")
+        aq_db.create_db()
+        testdb = MirDb(aq_db)
         for i, testscms in enumerate(scmses):
             testdb.add_track(i, testscms)
         scms3_db = testdb.get_track('3')
@@ -137,11 +142,13 @@ class TestMir(object):
         assert_equals(58, int(distance(scms3_db, scms4_db, c)))
 
     def test_add_and_compare(self):
-        testdb = MirDb(":memory:")
+        aq_db.set_path(":memory:")
+        aq_db.create_db()
+        testdb = MirDb(aq_db)
         for i, testscms in enumerate(scmses):
             testdb.add_and_compare(i, testscms, cutoff=100000)
-        distances = execSQL(DbCmd(SqlCmd, ("SELECT * FROM distance" ,)))
-        testdb.reset() 
+        distances = [row for row in aq_db.sql_query(
+            ("SELECT * FROM distance" ,))]
         assert_equals(
             [(1, 0, 67616), (2, 0, 43465), (2, 1, 27516), (3, 1, 88447),
              (3, 2, 86641), (4, 0, 80452), (4, 1, 60046), (4, 2, 63272),
@@ -149,12 +156,11 @@ class TestMir(object):
             distances)
 
     def test_get_neighbours(self):
-        testdb = MirDb(":memory:")
+        aq_db.set_path(":memory:")
+        aq_db.create_db()
+        testdb = MirDb(aq_db)
         for i, testscms in enumerate(scmses):
             testdb.add_and_compare(i, testscms, cutoff=100000)
         assert_equals(
             [(43465, 2), (67616, 1), (80452, 4)],
-            testdb.get_neighbours(0))
-        
-        
-        
+            [a for a in testdb.get_neighbours(0)])

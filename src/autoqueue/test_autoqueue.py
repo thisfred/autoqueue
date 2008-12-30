@@ -7,7 +7,6 @@ from nose.tools import assert_equals, assert_not_equals
 from autoqueue import SongBase, AutoQueueBase, Throttle, get_artist, get_track
 from autoqueue import get_tag_match
 
-
 WAIT_BETWEEN_REQUESTS = timedelta(0,0,10)
 
 fake_responses = {
@@ -194,9 +193,6 @@ def unthrottled_method():
 class TestAutoQueue(object):
     def setup(self):
         self.autoqueue = MockAutoQueue()
-
-    def teardown(self):
-        self.autoqueue.db_stop()
 
     def test_in_memory(self):
         assert_equals(True, self.autoqueue.in_memory)
