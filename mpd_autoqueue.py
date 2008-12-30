@@ -56,7 +56,7 @@ MPD_PORT = 6600
 MPD_HOST = 'localhost'
 
 # The PID file to see if there are no other instances running
-PID_FILE = '/var/run/autoqueue/mpd.pid'
+PID_FILE = os.path.join(SETTINGS_PATH, 'mpd.pid')
 
 # Send a KILL signal if the process didn't end KILL_TIMEOUT seconds
 # after the TERM signal, check every KILL_CHECK_DELAY seconds if it's
@@ -88,7 +88,7 @@ QUEUE_MARGIN = 0
 # we exit?
 EXIT_WITH_MPD = False
 
-class Song(autoqueue.SongBase):
+class Song(SongBase):
     """A MPD song object"""
     def __init__(self, file=None, time=0, **kwargs):
         self.title = self.artist = self.album = ''
@@ -109,7 +109,9 @@ class Song(autoqueue.SongBase):
         return unicode(self.album.lower(), 'utf-8')
 
     def get_filename(self):
-        return self.file
+        # XXX obviously needs to be changed. can we ask mpd for its
+        # music directory?
+        return "/var/lib/mpd/music" + self.file
         
     def get_tags(self):
         """return a list of tags for the songs"""
@@ -165,10 +167,15 @@ class Song(autoqueue.SongBase):
             return id(self)
 
     def __eq__(self, other):
-        return hash(self) == hash(other)
+        if not hasattr(other, 'file'):
+            return False
+        return self.file == other.file
 
     def __ne__(self, other):
-        return hash(self) != hash(other)
+        if not hasattr(other, 'file'):
+            return True
+        return self.file != other.file
+
 
 class Search(object):
     """
@@ -383,15 +390,15 @@ class Daemon(object):
         os.dup2(stdout.fileno(), sys.stdout.fileno())
         os.dup2(stderr.fileno(), sys.stderr.fileno())
 
-class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
+class AutoQueuePlugin(AutoQueueBase, Daemon):
     def __init__(self, host, port, pid_file):
         self.host, self.port = host, port
         self.client = mpd.MPDClient()
         self.connect()
         self.use_db = True
         self.store_blocked_artists = True
-        autoqueue.AutoQueueBase.__init__(self)
-        self.by_mirage = False
+        AutoQueueBase.__init__(self)
+        self.by_mirage = True
         self.verbose = True
         self.desired_queue_length = DESIRED_QUEUE_LENGTH
         Daemon.__init__(self, pid_file)
@@ -404,6 +411,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
             if running:
                 try:
                     song = self.player_current_song()
+                    print repr(song.file)
                     if song != self._current_song:
                         self._current_song = song
                         self.on_song_started(song)
