@@ -504,11 +504,10 @@ class Scms(object):
         self.cov = None
         self.icov = None
 
-    def to_picklestring(self, instance):
+    def to_picklestring(self):
         f = StringIO()
         pickle.dump(self, f)
         return f.getvalue()
-
 
     
 class Mir(object):
