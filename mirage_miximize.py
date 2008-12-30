@@ -2,7 +2,7 @@ import sqlite3, os
 import const, gtk
 from widgets import main
 from plugins.songsmenu import SongsMenuPlugin
-from autoqueue.mirage import Mir, Db
+from autoqueue.mirage import Mir, MirDb
 from autoqueue.autoqueue import get_track, get_artist_tracks
 from quodlibet.util import copool
 from scipy import *
@@ -43,7 +43,7 @@ class MirageMiximizePlugin(SongsMenuPlugin):
         copool.add(self.do_stuff, songs)
 
     def do_stuff(self, songs):
-        db = Db()
+        db = MirDb()
         l = len(songs)
         print "mirage analysis"
         for i, song in enumerate(songs):
