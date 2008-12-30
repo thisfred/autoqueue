@@ -7,7 +7,7 @@ from cStringIO import StringIO
 from ctypes import *
 from scipy import *
 import gst, gobject
-from autoqueue import aq_db, merge
+from autoqueue import merge
 
 DEBUG = True
 cdll.LoadLibrary("/usr/lib/banshee-1/Extensions/libmirageaudio.so")
