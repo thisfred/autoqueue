@@ -23,7 +23,7 @@ from collections import deque
 from datetime import datetime, timedelta
 from time import strptime, sleep
 import urllib
-import random, os, heapq
+import random, os
 from xml.dom import minidom
 from cPickle import Pickler, Unpickler
 from utils import *
