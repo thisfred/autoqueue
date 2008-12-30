@@ -1,3 +1,7 @@
+import sqlite3, heapq
+from collections import deque
+from datetime import datetime, timedelta
+
 def get_userdir():
     """get the application user directory to store files"""
     userdir = os.path.join(os.path.expanduser("~"), '.autoqueue')
