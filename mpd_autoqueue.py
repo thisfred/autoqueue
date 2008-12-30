@@ -41,55 +41,55 @@ import atexit
 import socket
 import signal
 import optparse
-import autoqueue
+from autoqueue.autoqueue import AutoQueueBase, get_userdir, SongBase
 
-'''The settings path automatically expands ~ to the user home directory
-and $VAR to environment variables
-On most *n?x systems ~/.autoqueue will be expanded to /home/username/.autoqueue/
-Setting the path to $HOME/.autoqueue/ will usually yield the same result
-'''
-SETTINGS_PATH = '~/.autoqueue/'
+# The settings path automatically expands ~ to the user home directory
+# and $VAR to environment variables On most *n?x systems ~/.autoqueue
+# will be expanded to /home/username/.autoqueue/ Setting the path to
+# $HOME/.autoqueue/ will usually yield the same result
 
-'''These settings will be overwritten by the MPD_HOST/MPD_PORT environment
-variables and/or by the commandline arguments'''
+SETTINGS_PATH = get_userdir()
+
+# These settings will be overwritten by the MPD_HOST/MPD_PORT
+# environment variables and/or by the commandline arguments
 MPD_PORT = 6600
 MPD_HOST = 'localhost'
 
-'''The PID file to see if there are no other instances running'''
+# The PID file to see if there are no other instances running
 PID_FILE = '/var/run/autoqueue/mpd.pid'
 
-'''Send a KILL signal if the process didn't end KILL_TIMEOUT seconds after
-the TERM signal, check every KILL_CHECK_DELAY seconds if it's still alive
-after sending the TERM signal'''
+# Send a KILL signal if the process didn't end KILL_TIMEOUT seconds
+# after the TERM signal, check every KILL_CHECK_DELAY seconds if it's
+# still alive after sending the TERM signal
 KILL_TIMEOUT = 10
 KILL_CHECK_DELAY = 0.1
 
-'''The targets for stdin, stdout and stderr when daemonizing'''
+# The targets for stdin, stdout and stderr when daemonizing
 STDIN = '/dev/null'
 STDOUT = SETTINGS_PATH + 'stdout'
 STDERR = SETTINGS_PATH + 'stderr'
 
-'''The interval to refresh the MPD status, the faster this is set, the faster
-the MPD server will be polled to see if the queue is empty'''
+# The interval to refresh the MPD status, the faster this is set, the
+# faster the MPD server will be polled to see if the queue is empty
 REFRESH_INTERVAL = 10
 
-'''The desired length for the queue, set this to 0 to add a song for every
-finished song or to any other number for the number of seconds to keep the
-queue filled'''
+# The desired length for the queue, set this to 0 to add a song for
+# every finished song or to any other number for the number of seconds
+# to keep the queue filled
 DESIRED_QUEUE_LENGTH = 0
 
-'''Make sure we have a little margin before changing the song so the queue
-won't run empty, keeping this at 15 seconds should be safe
-Do note that when DESIRED_QUEUE_LENGTH = 0 than this would probably work
-better with a value of 0'''
+# Make sure we have a little margin before changing the song so the
+# queue won't run empty, keeping this at 15 seconds should be safe Do
+# note that when DESIRED_QUEUE_LENGTH = 0 than this would probably
+# work better with a value of 0
 QUEUE_MARGIN = 0
 
-'''When MPD is not running, should we launch?
-And if MPD exits, should we exit?'''
+# When MPD is not running, should we launch? And if MPD exits, should
+# we exit?
 EXIT_WITH_MPD = False
 
 class Song(autoqueue.SongBase):
-    '''A MPD song object'''
+    """A MPD song object"""
     def __init__(self, file=None, time=0, **kwargs):
         self.title = self.artist = self.album = ''
         self._file = file
@@ -97,24 +97,30 @@ class Song(autoqueue.SongBase):
         self.__dict__.update(**kwargs)
         
     def get_artist(self):
-        '''return lowercase UNICODE name of artist'''
+        """return lowercase UNICODE name of artist"""
         return unicode(self.artist.lower(), 'utf-8')
 
     def get_title(self):
-        '''return lowercase UNICODE title of song'''
+        """return lowercase UNICODE title of song"""
         return unicode(self.title.lower(), 'utf-8')
 
     def get_album(self):
-        '''return lowercase UNICODE album of song'''
+        """return lowercase UNICODE album of song"""
         return unicode(self.album.lower(), 'utf-8')
 
+    def get_filename(self):
+        return self.file
+        
     def get_tags(self):
-        '''return a list of tags for the songs'''
+        """return a list of tags for the songs"""
         return []
 
+    def get_length(self):
+        return self.time
+        
     @property
     def file(self):
-        '''file is an immutable attribute that's used for the hash method'''
+        """file is an immutable attribute that's used for the hash method"""
         return self._file
 
     def __repr__(self):
@@ -165,7 +171,7 @@ class Song(autoqueue.SongBase):
         return hash(self) != hash(other)
 
 class Search(object):
-    '''
+    """
     Search object which keeps track of all search parameters
 
     ALLOWED_FIELDS - list of allowed search fields
@@ -179,12 +185,12 @@ class Search(object):
     >>> search.add_parameters(any='test3', album='test4')
     >>> search.get_parameters()
     ['album', 'test4', 'title', 'test2', 'any', 'test3', 'artist', 'test']
-    '''
+    """
     ALLOWED_FIELDS = ('artist', 'album', 'title', 'track', 'name', 'genre',
         'date', 'composer', 'performer', 'comment', 'disc', 'filename', 'any')
 
     def __init__(self, field=None, value=None, **parameters):
-        '''
+        """
         Create a search object
 
         >>> search = Search(artist='test')
@@ -198,14 +204,14 @@ class Search(object):
         >>> search = Search('artist', 'test')
         >>> search.parameters
         {'artist': set(['test'])}
-        '''
+        """
         self.parameters = {}
         if field and value:
             self.add_parameter(field, value)
         self.add_parameters(**parameters)
 
     def add_parameters(self, **parameters):
-        '''
+        """
         Add one or more parameters to the search query
         
         Use with named arguments, the key must be in ALLOWED_FIELDS
@@ -214,11 +220,11 @@ class Search(object):
         >>> search.add_parameters(artist='test1', title='test2')
         >>> search.parameters
         {'artist': set(['test1']), 'title': set(['test2'])}
-        '''
+        """
         [self.add_parameter(k, v) for k, v in parameters.iteritems()]
 
     def add_parameter(self, field, value):
-        '''
+        """
         Add a parameter to the search query
         
         field - must be in ALLOWED_FIELDS
@@ -234,7 +240,7 @@ class Search(object):
         Traceback (most recent call last):
         ...
         TypeError: "spam" is not a valid field, please choose on from ALLOWED_FIELDS
-        '''
+        """
         if field in self.ALLOWED_FIELDS:
             self.parameters.setdefault(field, set()).add(value.lower().strip())
         else:
@@ -242,7 +248,7 @@ class Search(object):
                 'on from ALLOWED_FIELDS' % field
 
     def get_parameters(self):
-        '''
+        """
         Return a list of parameters for the MPDClient.search method
 
         >>> search = Search(artist='test1', title='test2')
@@ -255,7 +261,7 @@ class Search(object):
         Traceback (most recent call last):
         ...
         ValueError: Empty search queries are not allowed
-        '''
+        """
         ret = []
         for k, vs in self.parameters.iteritems():
             ret += [[k, v.encode('utf-8')] for v in vs]
@@ -265,14 +271,14 @@ class Search(object):
         return sum(ret, [])
 
 class Daemon(object):
-    '''Class to easily create a daemon which transparently handles the saving
-    and removing of the PID file'''
+    """Class to easily create a daemon which transparently handles the saving
+    and removing of the PID file"""
 
     def __init__(self, pid_file):
-        '''Create a new Daemon
+        """Create a new Daemon
 
         pid_file -- The file to save the PID in
-        '''
+        """
         self.pid_file = pid_file
         signal.signal(signal.SIGTERM, lambda *args: self.exit())
         signal.signal(signal.SIGINT, lambda *args: self.exit())
@@ -296,10 +302,10 @@ class Daemon(object):
         'The PID file will be written when set and deleted when unset')
 
     def exit(self):
-        '''Kill the daemon and remove the PID file
+        """Kill the daemon and remove the PID file
         
         This method will be called automatically when the process is
-        terminated'''
+        terminated"""
         del self.pid_file
         raise SystemExit
 
@@ -344,8 +350,8 @@ class Daemon(object):
 
     @classmethod
     def daemonize(cls):
-        '''Daemonize using the double fork method so the process keeps running
-        Even after the original shell exits'''
+        """Daemonize using the double fork method so the process keeps running
+        Even after the original shell exits"""
         stdin_file = expand_file(STDIN)
         stdout_file = expand_file(STDOUT)
         stderr_file = expand_file(STDERR)
@@ -369,7 +375,7 @@ class Daemon(object):
             print >>sys.stderr, 'Unable to fork: %s' % e
             sys.exit(1)
 
-        '''Redirect stdout, stderr and stdin'''
+        """Redirect stdout, stderr and stdin"""
         stdin = file(stdin_file, 'r')
         stdout = file(stdout_file, 'a+')
         stderr = file(stderr_file, 'a+', 0)
@@ -385,9 +391,8 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
         self.use_db = True
         self.store_blocked_artists = True
         autoqueue.AutoQueueBase.__init__(self)
-        self.random = True
+        self.by_mirage = False
         self.verbose = True
-        self.random = True
         self.desired_queue_length = DESIRED_QUEUE_LENGTH
         Daemon.__init__(self, pid_file)
         self._current_song = None
@@ -440,46 +445,47 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
     def set_host(self, host):
         self._host = socket.gethostbyname(host)
 
-    host = property(get_host, set_host, doc='MPD ip (can be set by ip and hostname)')
+    host = property(
+        get_host, set_host, doc='MPD ip (can be set by ip and hostname)')
 
     def player_construct_track_search(self, artist, title, restrictions):
-        '''construct a search that looks for songs with this artist
-        and title'''
+        """construct a search that looks for songs with this artist
+        and title"""
         return Search(artist=artist, title=title)
     
     def player_construct_tag_search(self, tags, exclude_artists, restrictions):
-        '''construct a search that looks for songs with these tags'''
+        """construct a search that looks for songs with these tags"""
         return None
 
     def player_construct_artist_search(self, artist, restrictions):
-        '''construct a search that looks for songs with this artist'''
+        """construct a search that looks for songs with this artist"""
         return Search(artist=artist)
         
     def player_construct_restrictions(
         self, track_block_time, relaxors, restrictors):
-        '''construct a search to further modify the searches'''
+        """construct a search to further modify the searches"""
         return None
 
     def player_search(self, search):
-        '''perform a player search'''
+        """perform a player search"""
         results = self.client.search(*search.get_parameters())
 
-        '''Make all search results lowercase and strip whitespace'''
+        """Make all search results lowercase and strip whitespace"""
         for r in results:
             for k, v in r.items():
                 if isinstance(v, basestring):
                     r['%s_search' % k] = unicode(v, 'utf-8').strip().lower()
 
-        '''Filter all non-exact matches'''
+        """Filter all non-exact matches"""
         for k, vs in search.parameters.iteritems():
             for v in vs:
                 results = [r for r in results if r.get('%s_search' % k) == v]
 
-        '''Convert all rows to song objects'''
+        """Convert all rows to song objects"""
         return [Song(**x) for x in results]
 
     def player_enqueue(self, song):
-        '''Put the song at the end of the queue'''
+        """Put the song at the end of the queue"""
         self.client.add(song.file)
 
     def player_current_song(self):
@@ -495,7 +501,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
         return (Song(**x) for x in self.client.playlistid())
 
     def player_get_songs_in_queue(self):
-        '''return (wrapped) song objects for the songs in the queue'''
+        """return (wrapped) song objects for the songs in the queue"""
         id = self.player_current_song_id()
         return [s for i, s in enumerate(self.player_playlist()) if i >= id]
         
@@ -553,7 +559,8 @@ def main():
             pid = None
 
         if Daemon.is_running(pid) and not options.kill:
-            print >>sys.stderr, '%s already running (PID: %d)' % (sys.argv[0], pid)
+            print >>sys.stderr, '%s already running (PID: %d)' % (
+                sys.argv[0], pid)
             sys.exit(2)
         else:
             Daemon.kill(pid, options.pid_file)
@@ -567,7 +574,8 @@ def main():
         file(options.pid_file, 'a')
         os.unlink(options.pid_file)
     except IOError, e:
-        print >>sys.stderr, 'Error: PID file "%s" not writable: %s' % (options.pid_file, e)
+        print >>sys.stderr, 'Error: PID file "%s" not writable: %s' % (
+            options.pid_file, e)
         sys.exit(3)
     
     if options.daemonic:
