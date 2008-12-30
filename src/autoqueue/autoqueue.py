@@ -1017,7 +1017,7 @@ class AutoQueueBase(object):
             SqlCmd,
             ("SELECT count(*) from distance;",)))[0][0]
         self.log("%s:: tracks: %s, t2t: %s, mirage: %s, distance: %s" %
-                 msg, tracks, t2t, mirage, distance)
+                 (msg, tracks, t2t, mirage, distance))
         
     def prune_db(self, prunes):
         """clean up the database: remove tracks and artists that are
