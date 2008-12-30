@@ -13,7 +13,7 @@ setup(
     'mirage': ['ctypes', 'scipy'],
     },
     package_dir={'': 'src'},
-    packages=['autoqueue'],
+    packages=['autoqueue', 'mirage'],
     package_data={"autoqueue": ["res/*.filter"]},
     include_package_data = True,
     zip_safe=False,
