@@ -1,3 +1,4 @@
+
 import os, struct, math, sys, sqlite3
 from decimal import Decimal
 from datetime import datetime, timedelta
@@ -333,22 +334,22 @@ class MirDb(object):
         self.aq_db = aq_db
     def add_track(self, trackid, scms):
         self.aq_db.sql_statement(
-            ("INSERT INTO mirage (trackid, scms) VALUES (?, ?);",
+            ("INSERT INTO mirage (trackid, scms) VALUES (?, ?)",
              (trackid,
               sqlite3.Binary(to_picklestring(scms)))))
 
     def remove_track(self, trackid):
         self.aq_db.sql_statement(
-            ("DELETE FROM mirage WHERE trackid = ?;", (trackid,)))
+            ("DELETE FROM mirage WHERE trackid = ?", (trackid,)))
 
     def remove_tracks(self, trackids):
         self.aq_db.sql_statement(
-            ("DELETE FROM mirage WHERE trackid IN ?;", (
+            ("DELETE FROM mirage WHERE trackid IN ?", (
             ','.join(trackids),)))
 
     def get_track(self, trackid):
         for row in self.aq_db.sql_query(
-            ("SELECT scms FROM mirage WHERE trackid = ?;", (trackid,))):
+            ("SELECT scms FROM mirage WHERE trackid = ?", (trackid,))):
             return instance_from_picklestring(row[0])
         return None
 
@@ -357,15 +358,15 @@ class MirDb(object):
             exclude_ids = []
         for row in self.aq_db.sql_query(
             ("SELECT scms, trackid FROM mirage WHERE trackid"
-             " NOT IN (%s);" % ','.join([str(ex) for ex in exclude_ids]),)):
+             " NOT IN (%s)" % ','.join([str(ex) for ex in exclude_ids]),)):
             yield row
 
     def get_all_track_ids(self):
-        for row in self.aq_db.sql_query(("SELECT trackid FROM mirage;",)):
+        for row in self.aq_db.sql_query(("SELECT trackid FROM mirage",)):
             yield row
         
     def reset(self):
-        self.aq_db.sql_statement(("DELETE FROM mirage;",))
+        self.aq_db.sql_statement(("DELETE FROM mirage",))
 
     def add_and_compare(self, trackid, scms, cutoff=10000, exclude_ids=None):
         if not exclude_ids:
@@ -380,7 +381,8 @@ class MirDb(object):
             dist = int(distance(scms, other, c) * 1000)
             if dist < cutoff:
                 self.aq_db.sql_statement(
-                    ("INSERT INTO distance (track_1, track_2, distance) VALUES (%s, %s, %s);" % (str(trackid), str(otherid), str(dist)),))
+                    ("INSERT INTO distance (track_1, track_2, distance) VALUES "
+                     "(?, ?, ?)", (str(trackid), str(otherid), str(dist)),))
 
     def compare(self, id1, id2):
         c = ScmsConfiguration(20)
@@ -391,10 +393,10 @@ class MirDb(object):
     def get_neighbours(self, trackid):
         neighbours1 = self.aq_db.sql_query(
             ("SELECT distance, track_2 FROM distance WHERE track_1 = ? ORDER "
-             "BY distance ASC LIMIT 100;", (trackid,)))
+             "BY distance ASC LIMIT 100", (trackid,)))
         neighbours2 = self.aq_db.sql_query(
             ("SELECT distance, track_1 FROM distance WHERE track_2 = ? ORDER "
-             "BY distance ASC LIMIT 100;", (trackid,)))
+             "BY distance ASC LIMIT 100", (trackid,)))
         for result in merge(neighbours1, neighbours2):
             yield result
 

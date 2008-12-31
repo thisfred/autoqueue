@@ -2,9 +2,6 @@ import sqlite3, heapq, os
 from time import sleep
 from collections import deque
 from datetime import datetime, timedelta
-from threading import Lock
-
-lock = Lock()
 
 def get_userdir():
     """get the application user directory to store files"""
@@ -185,36 +182,34 @@ class DbManager(object):
         self.con = sqlite3.connect(path)
         
     def sql_query(self, sql):
-        cur = self.con.cursor()
-        return cur.execute(*sql)
+        cursor = self.con.cursor()
+        for row in cursor.execute(*sql):
+            yield row
 
     def sql_statement(self, sql):
-        lock.acquire()
-        try:
-            cur = self.con.cursor()
-            cur.execute(*sql)
-            self.con.commit()
-        finally:
-            lock.release()
+        print sql
+        cursor = self.con.cursor()
+        cursor.execute(*sql)
+        self.con.commit()
         
     def create_db(self):
         """ Set up a database for the artist and track similarity scores
         """
         self.sql_statement(
             ("CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, "
-             "name VARCHAR(100), updated DATE);",))
+             "name VARCHAR(100), updated DATE)",))
         self.sql_statement(
             ("CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER, "
-             "artist2 INTEGER, match INTEGER);",))
+             "artist2 INTEGER, match INTEGER)",))
         self.sql_statement(
             ("CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, "
-             "artist INTEGER, title VARCHAR(100), updated DATE);",))
+             "artist INTEGER, title VARCHAR(100), updated DATE)",))
         self.sql_statement(
             ("CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, "
-             "track2 INTEGER, match INTEGER);",))
+             "track2 INTEGER, match INTEGER)",))
         self.sql_statement(
             ("CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, "
              "scms BLOB)",))
         self.sql_statement(
             ("CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
-             "INTEGER, distance INTEGER);",))
+             "INTEGER, distance INTEGER)",))

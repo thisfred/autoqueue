@@ -267,6 +267,27 @@ class AutoQueueBase(object):
             return ":memory:"
         return os.path.join(get_userdir(), "similarity.db")
     
+    def on_song_started_generator(self, song):
+        """Should be called by the plugin when a new song starts. If
+        the right conditions apply, we start looking for new songs to
+        queue."""
+        if song is None:
+            return
+        self.now = datetime.now()
+        artist_name = song.get_artist()
+        title = song.get_title()
+        if not (artist_name and title):
+            return
+        self.song = song
+        # add the artist to the blocked list, so their songs won't be
+        # played for a determined time
+        self.block_artist(artist_name)
+        if self.running:
+            return
+        if self.desired_queue_length == 0 or self.queue_needs_songs():
+            yield
+            self.fill_queue()
+
     def on_song_started(self, song):
         """Should be called by the plugin when a new song starts. If
         the right conditions apply, we start looking for new songs to
@@ -636,7 +657,7 @@ class AutoQueueBase(object):
             else:
                 ## aq_db.sql_statement(
                 ##     ("DELETE FROM track_2_track WHERE track_2_track.track1 = "
-                ##       "?;", (track_id,)))
+                ##       "?", (track_id,)))
                 generators.append(
                     self.get_similar_tracks_from_lastfm(
                     artist_name, title, track_id))
@@ -678,7 +699,7 @@ class AutoQueueBase(object):
                 gen = aq_db.sql_query(
                     ("SELECT match, name  FROM artist_2_artist INNER JOIN "
                       "artists ON artist_2_artist.artist2 = artists.id WHERE "
-                      "artist_2_artist.artist1 = ? ORDER BY match DESC; ",
+                      "artist_2_artist.artist1 = ? ORDER BY match DESC ",
                       (artist_id,)))
                 generators.append(
                     scale_transformer(
@@ -686,7 +707,7 @@ class AutoQueueBase(object):
             else:
                 ## aq_db.sql_statement(
                 ##     ("DELETE FROM artist_2_artist WHERE "
-                ##       "artist_2_artist.artist1 = ?;", (artist_id,)))
+                ##       "artist_2_artist.artist1 = ?", (artist_id,)))
                 generators.append(
                     self.get_similar_artists_from_lastfm(artist_name, artist_id)
                     )
@@ -785,13 +806,13 @@ class AutoQueueBase(object):
 
     def log_db_stats(self, msg):
         tracks = aq_db.sql_query(
-            ("SELECT count(*) from tracks;",)).next()[0]
+            ("SELECT count(*) from tracks",)).next()[0]
         t2t = aq_db.sql_query(
-            ("SELECT count(*) from track_2_track;",)).next()[0]
+            ("SELECT count(*) from track_2_track",)).next()[0]
         mirage = aq_db.sql_query(
-            ("SELECT count(*) from mirage;",)).next()[0]
+            ("SELECT count(*) from mirage",)).next()[0]
         distance = aq_db.sql_query(
-            ("SELECT count(*) from distance;",)).next()[0]
+            ("SELECT count(*) from distance",)).next()[0]
         self.log("%s:: tracks: %s, t2t: %s, mirage: %s, distance: %s" %
                  (msg, tracks, t2t, mirage, distance))
         
@@ -811,12 +832,12 @@ class AutoQueueBase(object):
                     [row for row in aq_db.sql_query(
                     ("SELECT artists.name, tracks.title, tracks.id FROM tracks "
                      "INNER JOIN artists ON tracks.artist = artists.id WHERE "
-                     "artists.name = ?;", (artist,)))])
+                     "artists.name = ?", (artist,)))])
             rows.extend(
                 [row for row in aq_db.sql_query(
                 ("SELECT artists.name, tracks.title, tracks.id FROM tracks "
                   "INNER JOIN artists ON tracks.artist = artists.id WHERE "
-                  "tracks.title = ?;", (prune['title'],)))])
+                  "tracks.title = ?", (prune['title'],)))])
         for i, item in enumerate(rows):
             search = self.player_construct_search(
                 {'artist': item[0], 'title': item[1]})
@@ -829,13 +850,13 @@ class AutoQueueBase(object):
 
     def delete_track_from_db(self, track_id):
         aq_db.sql_statement(
-            ("DELETE FROM distance WHERE track_1 = ? OR track_2 = ?;",
+            ("DELETE FROM distance WHERE track_1 = ? OR track_2 = ?",
              (track_id, track_id)))
         aq_db.sql_statement(
-            ("DELETE FROM mirage WHERE trackid = ?;", (track_id,)))
+            ("DELETE FROM mirage WHERE trackid = ?", (track_id,)))
         aq_db.sql_statement(
-            ("DELETE FROM track_2_track WHERE track1 = ? OR track2 = ?;",
+            ("DELETE FROM track_2_track WHERE track1 = ? OR track2 = ?",
               (track_id, track_id)))
         aq_db.sql_statement(
-            ("DELETE FROM tracks WHERE id = ?;", (track_id,)))
+            ("DELETE FROM tracks WHERE id = ?", (track_id,)))
         

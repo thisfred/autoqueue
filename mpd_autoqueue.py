@@ -426,9 +426,6 @@ class AutoQueuePlugin(AutoQueueBase, Daemon):
             else:
                 running = self.connect()
 
-            if interval <= 0 and self.desired_queue_length:
-                interval = 1
-                self.fill_queue()
             time.sleep(interval)
         self.exit()
 
