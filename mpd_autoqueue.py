@@ -43,6 +43,16 @@ import signal
 import optparse
 import autoqueue
 
+def expand_path(path):
+    path = os.path.expandvars(os.path.expanduser(path))
+    if not os.path.isdir(path):
+        os.mkdir(path)
+    return path
+
+def expand_file(path):
+    path, file_ = os.path.split(path)
+    return os.path.join(expand_path(path), file_)
+
 '''The settings path automatically expands ~ to the user home directory
 and $VAR to environment variables
 On most *n?x systems ~/.autoqueue will be expanded to /home/username/.autoqueue/
@@ -55,12 +65,12 @@ variables and/or by the commandline arguments'''
 MPD_PORT = 6600
 MPD_HOST = 'localhost'
 
-'''The PID file to see if there are no other instances running'''
-PID_FILE = '/var/run/autoqueue/mpd.pid'
+# The PID file to see if there are no other instances running
+PID_FILE = os.path.join(expand_path(SETTINGS_PATH), 'mpd.pid')
 
-'''Send a KILL signal if the process didn't end KILL_TIMEOUT seconds after
-the TERM signal, check every KILL_CHECK_DELAY seconds if it's still alive
-after sending the TERM signal'''
+# Send a KILL signal if the process didn't end KILL_TIMEOUT seconds
+# after the TERM signal, check every KILL_CHECK_DELAY seconds if it's
+# still alive after sending the TERM signal
 KILL_TIMEOUT = 10
 KILL_CHECK_DELAY = 0.1
 
@@ -112,6 +122,9 @@ class Song(autoqueue.SongBase):
         '''return a list of tags for the songs'''
         return []
 
+    def get_filename(self):
+        return '/var/lib/mpd/music/' + self.file
+    
     @property
     def file(self):
         '''file is an immutable attribute that's used for the hash method'''
@@ -387,7 +400,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
         autoqueue.AutoQueueBase.__init__(self)
         self.random = True
         self.verbose = True
-        self.random = True
+        self.by_mirage = True
         self.desired_queue_length = DESIRED_QUEUE_LENGTH
         Daemon.__init__(self, pid_file)
         self._current_song = None
@@ -414,9 +427,6 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
             else:
                 running = self.connect()
 
-            if interval <= 0 and self.desired_queue_length:
-                interval = 1
-                self.fill_queue()
             time.sleep(interval)
         self.exit()
 
@@ -513,15 +523,6 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
     def player_current_song_time(self):
         return int(self.player_status().get('time', '0:').split(':')[0])
 
-def expand_path(path):
-    path = os.path.expandvars(os.path.expanduser(path))
-    if not os.path.isdir(path):
-        os.mkdir(path)
-    return path
-
-def expand_file(path):
-    path, file_ = os.path.split(path)
-    return os.path.join(expand_path(path), file_)
 
 def main():
     parser = optparse.OptionParser()

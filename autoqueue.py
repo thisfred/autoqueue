@@ -385,8 +385,29 @@ class AutoQueueBase(object):
         if self.running:
             return
         if self.desired_queue_length == 0 or self.queue_needs_songs():
+            self.fill_queue()
+
+    def on_song_started_generator(self, song):
+        """Should be called by the plugin when a new song starts. If
+        the right conditions apply, we start looking for new songs to
+        queue."""
+        if song is None:
+            return
+        self.now = datetime.now()
+        artist_name = song.get_artist()
+        title = song.get_title()
+        if not (artist_name and title):
+            return
+        self.song = song
+        # add the artist to the blocked list, so their songs won't be
+        # played for a determined time
+        self.block_artist(artist_name)
+        if self.running:
+            return
+        if self.desired_queue_length == 0 or self.queue_needs_songs():
             yield
             self.fill_queue()
+
 
     def cleanup(self, songs, next_artist=''):
         ret = []

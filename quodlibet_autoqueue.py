@@ -134,7 +134,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             self.to_prune = [{
                 'artist': ssong.get_artist(),
                 'title': ssong.get_title()}]
-            copool.add(self.on_song_started, ssong)
+            copool.add(self.on_song_started_generator, ssong)
 
     def plugin_on_song_ended(self, song, skipped):
         copool.add(self.prune_db, self.to_prune)
