@@ -15,7 +15,7 @@ from library import library
 from quodlibet.util import copool
 import config
 
-from autoqueue.autoqueue import AutoQueueBase, SongBase, SQL, Cache
+from autoqueue import AutoQueueBase, SongBase, SQL, Cache
 
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) api key from last.fm here:
@@ -126,9 +126,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         self.log("disabled")
         self.__enabled = False
 
-    def destroy(self):
-        self.db_stop()
-        
     def plugin_on_song_started(self, song):
         """Triggered when a song start. If the right conditions apply,
         we start looking for new songs to queue."""
@@ -137,7 +134,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             self.to_prune = [{
                 'artist': ssong.get_artist(),
                 'title': ssong.get_title()}]
-            copool.add(self.on_song_started_generator, ssong)
+            copool.add(self.on_song_started, ssong)
 
     def plugin_on_song_ended(self, song, skipped):
         copool.add(self.prune_db, self.to_prune)
@@ -215,6 +212,13 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     # Implement the player specific methods needed by autoqueue
 
+    def player_get_userdir(self):
+        """get the application user directory to store files"""
+        try:
+            return const.USERDIR
+        except AttributeError:
+            return const.DIR
+    
     def player_construct_track_search(self, artist, title, restrictions=None):
         """construct a search that looks for songs with this artist
         and title"""

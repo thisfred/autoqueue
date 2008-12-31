@@ -1,22 +1,21 @@
-
-import os, struct, math, sys, sqlite3
+import os, struct, math, sys
 from decimal import Decimal
 from datetime import datetime, timedelta
 from operator import itemgetter
-import pickle
+import cPickle as pickle
 from cStringIO import StringIO
 from ctypes import *
+import sqlite3
 from scipy import *
 import gst, gobject
-from utils import merge
 
 DEBUG = True
-cdll.LoadLibrary("/usr/lib/banshee-1/Extensions/libmirageaudio.so")
-libmirageaudio = CDLL("libmirageaudio.so")
-
 
 class MirageAudio(Structure):
     pass
+
+cdll.LoadLibrary("/usr/lib/banshee-1/Extensions/libmirageaudio.so")
+libmirageaudio = CDLL("libmirageaudio.so")
 
 
 class MatrixDimensionMismatchException(Exception):
@@ -313,7 +312,6 @@ class Vector(Matrix):
     def __init__(self, rows):
         super(Vector, self).__init__(rows, 1)
 
-
 class CovarianceMatrix(object):
     def __init__(self, dim_or_matrix):
         from_matrix = isinstance(dim_or_matrix, Matrix)
@@ -329,49 +327,66 @@ class CovarianceMatrix(object):
                     self.d[l] = dim_or_matrix.d[i,j];
                     l += 1
         
-class MirDb(object):
-    def __init__(self, aq_db):
-        self.aq_db = aq_db
+class Db(object):
+    def __init__(self, connection):
+        self.connection = connection
+        cursor = self.connection.cursor()
+        cursor.execute("CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER "
+                       "PRIMARY KEY, scms BLOB)")
+        cursor.execute("CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, "
+                       "track_2 INTEGER, distance INTEGER)")
+        self.connection.commit()
+
     def add_track(self, trackid, scms):
-        self.aq_db.sql_statement(
-            ("INSERT INTO mirage (trackid, scms) VALUES (?, ?)",
-             (trackid,
-              sqlite3.Binary(to_picklestring(scms)))))
+        cursor = self.connection.cursor()
+        cursor.execute("INSERT INTO mirage (trackid, scms) VALUES (?, ?)",
+                       (trackid,
+                        sqlite3.Binary(instance_to_picklestring(scms))))
+        self.connection.commit()
 
     def remove_track(self, trackid):
-        self.aq_db.sql_statement(
-            ("DELETE FROM mirage WHERE trackid = ?", (trackid,)))
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM mirage WHERE trackid = ?", (trackid,))
+        self.connection.commit()
 
     def remove_tracks(self, trackids):
-        self.aq_db.sql_statement(
-            ("DELETE FROM mirage WHERE trackid IN ?", (
-            ','.join(trackids),)))
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM mirage WHERE trackid IN ?", (
+            ','.join(trackids),))
+        self.connection.commit()
 
     def get_track(self, trackid):
-        for row in self.aq_db.sql_query(
-            ("SELECT scms FROM mirage WHERE trackid = ?", (trackid,))):
-            return instance_from_picklestring(row[0])
-        return None
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT scms FROM mirage WHERE trackid = ?", (trackid,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return instance_from_picklestring(row[0])
 
     def get_tracks(self, exclude_ids=None):
         if not exclude_ids:
             exclude_ids = []
-        for row in self.aq_db.sql_query(
-            ("SELECT scms, trackid FROM mirage WHERE trackid"
-             " NOT IN (%s)" % ','.join([str(ex) for ex in exclude_ids]),)):
-            yield row
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT scms, trackid FROM mirage WHERE trackid"
+                       " NOT IN (%s);" % ','.join([str(ex) for ex in
+                                                   exclude_ids]))
+        return cursor
 
     def get_all_track_ids(self):
-        for row in self.aq_db.sql_query(("SELECT trackid FROM mirage",)):
-            yield row
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT trackid FROM mirage")
+        return [row[0] for row in cursor.fetchall()]
         
     def reset(self):
-        self.aq_db.sql_statement(("DELETE FROM mirage",))
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM mirage")
+        self.connection.commit()
 
     def add_and_compare(self, trackid, scms, cutoff=10000, exclude_ids=None):
         if not exclude_ids:
             exclude_ids = []
         self.add_track(trackid, scms)
+        cursor = self.connection.cursor()
         c = ScmsConfiguration(20)
         for buf, otherid in self.get_tracks(
             exclude_ids=exclude_ids):
@@ -380,9 +395,11 @@ class MirDb(object):
             other = instance_from_picklestring(buf)
             dist = int(distance(scms, other, c) * 1000)
             if dist < cutoff:
-                self.aq_db.sql_statement(
-                    ("INSERT INTO distance (track_1, track_2, distance) VALUES "
-                     "(?, ?, ?)", (str(trackid), str(otherid), str(dist)),))
+                cursor.execute(
+                    "INSERT INTO distance (track_1, track_2, distance) "
+                    "VALUES (?, ?, ?)",
+                    (trackid, otherid, dist))
+        self.connection.commit()
 
     def compare(self, id1, id2):
         c = ScmsConfiguration(20)
@@ -391,24 +408,27 @@ class MirDb(object):
         return int(distance(t1, t2, c) * 1000)
         
     def get_neighbours(self, trackid):
-        neighbours1 = self.aq_db.sql_query(
-            ("SELECT distance, track_2 FROM distance WHERE track_1 = ? ORDER "
-             "BY distance ASC LIMIT 100", (trackid,)))
-        neighbours2 = self.aq_db.sql_query(
-            ("SELECT distance, track_1 FROM distance WHERE track_2 = ? ORDER "
-             "BY distance ASC LIMIT 100", (trackid,)))
-        for result in merge(neighbours1, neighbours2):
-            yield result
-
-
+        cursor = self.connection.cursor()
+        neighbours1 = [row for row in cursor.execute(
+            "SELECT distance, track_2 FROM distance WHERE track_1 = ? "
+            "ORDER BY distance ASC LIMIT 100",
+            (trackid,))]
+        neighbours2 = [row for row in cursor.execute(
+            "SELECT distance, track_1 FROM distance WHERE track_2 = ? "
+            "ORDER BY distance ASC LIMIT 100",
+            (trackid,))]
+        
+        neighbours1.extend(neighbours2)
+        neighbours1.sort()
+        return neighbours1
+            
 class Mfcc(object):
     def __init__(self, winsize, srate, filters, cc):
         here = os.path.dirname( __file__)
         self.dct = Matrix(1,1)
         self.dct.load(os.path.join(here, 'res', 'dct.filter'))
         self.filterweights = Matrix(1,1)
-        self.filterweights.load(
-            os.path.join(here, 'res', 'filterweights.filter'))
+        self.filterweights.load(os.path.join(here, 'res', 'filterweights.filter'))
 
     def apply(self, m):
         def f(x):
@@ -457,6 +477,10 @@ def instance_from_picklestring(picklestring):
     f = StringIO(picklestring)
     return pickle.load(f)
 
+def instance_to_picklestring(instance):
+    f = StringIO()
+    pickle.dump(instance, f)
+    return f.getvalue()
 
 class ScmsConfiguration(object):
     def __init__(self, dimension):
@@ -483,11 +507,6 @@ class Scms(object):
         self.mean = None
         self.cov = None
         self.icov = None
-
-def to_picklestring(scms):
-    f = StringIO()
-    pickle.dump(scms, f)
-    return f.getvalue()
 
     
 class Mir(object):
@@ -532,7 +551,8 @@ class Mir(object):
 
         c = ScmsConfiguration(self.mfcccoefficients)
 
-        for row in db.get_tracks(exclude):
+        cursor = db.get_tracks(exclude)
+        for row in cursor.fetchall():
             cur_scms = instance_from_picklestring(row[0])
             cur_id = row[1]
             d = 0.0        
@@ -556,3 +576,25 @@ class Mir(object):
         t.stop()
         write_line("Mirage: playlist in: %s" % t.time)
         return keys
+
+## if __name__ == '__main__':
+##     mir = Mir()
+##     scms = mir.analyze('testfiles/test.mp3')
+##     scms2 = mir.analyze('testfiles/test2.mp3')
+##     scms3 = mir.analyze('testfiles/test3.ogg')
+##     scms4 = mir.analyze('testfiles/test4.ogg')
+##     scms5 = mir.analyze('testfiles/test5.ogg')
+##     scmses = [scms, scms2, scms3, scms4, scms5]
+
+##     testdb = Db(":memory:")
+##     for i, scms in enumerate(scmses):
+##         testdb.add_track(i, scms)
+        
+##     print sorted(
+##         [id for (scms, id) in testdb.get_tracks(exclude_ids=['3','4'])]) # [0,1,2]
+
+##     scms3_db = testdb.get_track('3')
+##     scms4_db = testdb.get_track('4')
+##     c = ScmsConfiguration(20)
+##     print int(distance(scms3_db, scms4_db, c) * 100) # 9647
+
