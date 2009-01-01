@@ -422,11 +422,14 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
                     )
                     running = True
                 except mpd.ConnectionError:
+                    print "disconnecting"
+                    self.running = False
                     running = False
                     self.disconnect()
             else:
-                running = self.connect()
-
+                print "reconnecting"
+                running = True
+                self.connect()
             time.sleep(interval)
         self.exit()
 
@@ -472,6 +475,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
 
     def player_search(self, search):
         '''perform a player search'''
+        
         results = self.client.search(*search.get_parameters())
 
         '''Make all search results lowercase and strip whitespace'''
@@ -491,7 +495,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
     def player_enqueue(self, song):
         '''Put the song at the end of the queue'''
         self.client.add(song.file)
-
+        
     def player_get_userdir(self):
         '''get the application user directory to store files'''
         return expand_path(SETTINGS_PATH)
