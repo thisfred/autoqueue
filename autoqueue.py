@@ -1056,19 +1056,21 @@ class AutoQueueBase(object):
         artists = []
         titles = []
         for prune in prunes:
+            artist = prune['artist']
+            title = prune['title']
             if artist not in artists:
                 artists.append(artist)
                 cursor.execute(
                     'SELECT artists.name, tracks.title, tracks.id FROM tracks'
                     ' INNER JOIN artists ON tracks.artist = artists.id WHERE '
-                    'artists.name = ?;', (prune['artist'],))
+                    'artists.name = ?;', (artist,))
                 rows.extend(cursor.fetchall())
             if title not in titles:
                 titles.append(title)
                 cursor.execute(
                     'SELECT artists.name, tracks.title, tracks.id FROM tracks '
                     'INNER JOIN artists ON tracks.artist = artists.id WHERE '
-                    'tracks.title = ?;', (prune['title'],))
+                    'tracks.title = ?;', (title,))
                 rows.extend(cursor.fetchall())
             yield
         cursor = None
