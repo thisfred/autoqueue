@@ -1053,17 +1053,24 @@ class AutoQueueBase(object):
             cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
         self.log('before: %s' % repr(before))
         rows = []
+        artists = []
+        titles = []
         for prune in prunes:
-            cursor.execute(
-                'SELECT artists.name, tracks.title, tracks.id FROM tracks'
-                ' INNER JOIN artists ON tracks.artist = artists.id WHERE '
-                'artists.name = ?;', (prune['artist'],))
-            rows.extend( cursor.fetchall())
-            cursor.execute(
-                'SELECT artists.name, tracks.title, tracks.id FROM tracks '
-                'INNER JOIN artists ON tracks.artist = artists.id WHERE '
-                'tracks.title = ?;', (prune['title'],))
-            rows.extend(cursor.fetchall())
+            if artist not in artists:
+                artists.append(artist)
+                cursor.execute(
+                    'SELECT artists.name, tracks.title, tracks.id FROM tracks'
+                    ' INNER JOIN artists ON tracks.artist = artists.id WHERE '
+                    'artists.name = ?;', (prune['artist'],))
+                rows.extend(cursor.fetchall())
+            if title not in titles:
+                titles.append(title)
+                cursor.execute(
+                    'SELECT artists.name, tracks.title, tracks.id FROM tracks '
+                    'INNER JOIN artists ON tracks.artist = artists.id WHERE '
+                    'tracks.title = ?;', (prune['title'],))
+                rows.extend(cursor.fetchall())
+            yield
         cursor = None
         for i, item in enumerate(rows):
             search = self.player_construct_search(
