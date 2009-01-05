@@ -489,12 +489,16 @@ class AutoQueueBase(object):
                     self.player_enqueue(song)
         else:
             self.player_enqueue(found[0][1])
+        songs = list(self._songs)
         if len(found) > 1:
-            songs = found[1:] + list(self._songs)
-            clean = self.cleanup(songs, found[0][1].get_artist())
-            self._songs = deque(clean)
-            while len(self._songs) > 10:
-                self._songs.pop()
+            songs = found[1:] + songs
+        found_artist = ''
+        if found:
+            found_artist = found[0][1].get_artist()            
+        clean = self.cleanup(songs, found_artist)
+        self._songs = deque(clean)
+        while len(self._songs) > 10:
+            self._songs.pop()
         if self._songs:
             self.log("%s backup songs: \n%s" % (
                 len(self._songs),
