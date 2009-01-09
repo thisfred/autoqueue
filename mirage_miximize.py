@@ -1,6 +1,5 @@
 import sqlite3, os
 import const, gtk
-from widgets import main
 from plugins.songsmenu import SongsMenuPlugin
 from mirage import Mir, Db
 from quodlibet.util import copool
@@ -36,14 +35,12 @@ class MirageMiximizePlugin(SongsMenuPlugin):
 
     def player_enqueue(self, songs):
         """Put the song at the end of the queue"""
-        gtk.gdk.threads_enter()
         # XXX: main is None here sometimes, for some reason I haven't
         # yet figured out. This stops execution completely, so I put
         # in this ugly hack.
+        from widgets import main
         if main:
             main.playlist.enqueue(songs)
-            print songs
-            gtk.gdk.threads_leave()
 
     def plugin_songs(self, songs):
         copool.add(self.do_stuff, songs)
@@ -69,7 +66,7 @@ class MirageMiximizePlugin(SongsMenuPlugin):
             except:
                 return
             db.add_and_compare(track_id, scms,exclude_ids=exclude_ids)
-            yield True
+            yield
         print "done"
         ids_and_songs = [
             (self.get_track(song.comma("artist").lower(), get_title(song))[0],
