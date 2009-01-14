@@ -399,8 +399,8 @@ class Db(object):
                     "INSERT INTO distance (track_1, track_2, distance) "
                     "VALUES (?, ?, ?)",
                     (trackid, otherid, dist))
+                self.connection.commit()
             yield
-        self.connection.commit()
 
     def compare(self, id1, id2):
         c = ScmsConfiguration(20)
