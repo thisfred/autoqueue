@@ -65,7 +65,9 @@ class MirageMiximizePlugin(SongsMenuPlugin):
                 scms = self.mir.analyze(filename)
             except:
                 return
-            db.add_and_compare(track_id, scms,exclude_ids=exclude_ids)
+            for dummy in db.add_and_compare(
+                track_id, scms,exclude_ids=exclude_ids):
+                yield
             yield
         print "done"
         ids_and_songs = [
