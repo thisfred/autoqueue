@@ -51,8 +51,10 @@ class MirageSongsPlugin(SongsMenuPlugin):
                 scms = self.mir.analyze(filename)
             except:
                 return
-            db.add_and_compare(track_id, scms,exclude_ids=exclude_ids)
-            yield True
+            for dummy in db.add_and_compare(
+                track_id, scms,exclude_ids=exclude_ids):
+                yield
+            yield
         print "done"
         
     def plugin_songs(self, songs):
