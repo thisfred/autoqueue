@@ -399,6 +399,7 @@ class Db(object):
                     "INSERT INTO distance (track_1, track_2, distance) "
                     "VALUES (?, ?, ?)",
                     (trackid, otherid, dist))
+            yield
         self.connection.commit()
 
     def compare(self, id1, id2):
