@@ -328,32 +328,38 @@ class CovarianceMatrix(object):
                     l += 1
         
 class Db(object):
-    def __init__(self, connection):
-        self.connection = connection
-        cursor = self.connection.cursor()
-        cursor.execute("CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER "
-                       "PRIMARY KEY, scms BLOB)")
-        cursor.execute("CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, "
-                       "track_2 INTEGER, distance INTEGER)")
+    def __init__(self, path):
+        self.dbpath = path
+        self.connection = sqlite3.connect(
+            self.dbpath, timeout=5.0, isolation_level="immediate") 
+        self.connection.execute(
+            "CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, "
+            "scms BLOB)")
+        self.connection.execute(
+            "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
+            "INTEGER, distance INTEGER)")
         self.connection.commit()
 
     def add_track(self, trackid, scms):
-        cursor = self.connection.cursor()
-        cursor.execute("INSERT INTO mirage (trackid, scms) VALUES (?, ?)",
+        connection = sqlite3.connect(
+            self.dbpath, timeout=5.0, isolation_level="immediate") 
+        connection.execute("INSERT INTO mirage (trackid, scms) VALUES (?, ?)",
                        (trackid,
                         sqlite3.Binary(instance_to_picklestring(scms))))
-        self.connection.commit()
+        connection.commit()
 
     def remove_track(self, trackid):
-        cursor = self.connection.cursor()
-        cursor.execute("DELETE FROM mirage WHERE trackid = ?", (trackid,))
-        self.connection.commit()
+        connection = sqlite3.connect(
+            self.dbpath, timeout=5.0, isolation_level="immediate") 
+        connection.execute("DELETE FROM mirage WHERE trackid = ?", (trackid,))
+        connection.commit()
 
     def remove_tracks(self, trackids):
-        cursor = self.connection.cursor()
-        cursor.execute("DELETE FROM mirage WHERE trackid IN ?", (
+        connection = sqlite3.connect(
+            self.dbpath, timeout=5.0, isolation_level="immediate") 
+        connection.execute("DELETE FROM mirage WHERE trackid IN ?", (
             ','.join(trackids),))
-        self.connection.commit()
+        connection.commit()
 
     def get_track(self, trackid):
         cursor = self.connection.cursor()
@@ -378,15 +384,15 @@ class Db(object):
         return [row[0] for row in cursor.fetchall()]
         
     def reset(self):
-        cursor = self.connection.cursor()
-        cursor.execute("DELETE FROM mirage")
-        self.connection.commit()
+        connection = sqlite3.connect(
+            self.dbpath, timeout=5.0, isolation_level="immediate") 
+        connection.execute("DELETE FROM mirage")
+        connection.commit()
 
     def add_and_compare(self, trackid, scms, cutoff=10000, exclude_ids=None):
         if not exclude_ids:
             exclude_ids = []
         self.add_track(trackid, scms)
-        cursor = self.connection.cursor()
         c = ScmsConfiguration(20)
         for buf, otherid in self.get_tracks(
             exclude_ids=exclude_ids):
@@ -395,11 +401,13 @@ class Db(object):
             other = instance_from_picklestring(buf)
             dist = int(distance(scms, other, c) * 1000)
             if dist < cutoff:
-                cursor.execute(
+                connection = sqlite3.connect(
+                    self.dbpath, timeout=5.0, isolation_level="immediate") 
+                connection.execute(
                     "INSERT INTO distance (track_1, track_2, distance) "
                     "VALUES (?, ?, ?)",
                     (trackid, otherid, dist))
-                self.connection.commit()
+                connection.commit()
             yield
 
     def compare(self, id1, id2):

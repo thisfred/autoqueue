@@ -24,6 +24,7 @@ class MirageSongsPlugin(SongsMenuPlugin):
     def __init__(self, *args):
         super(MirageSongsPlugin, self).__init__(*args)
         self.mir = Mir()
+        self.dbpath = os.path.join(self.player_get_userdir(), "similarity.db")        
 
     def player_get_userdir(self):
         """get the application user directory to store files"""
@@ -33,9 +34,7 @@ class MirageSongsPlugin(SongsMenuPlugin):
             return const.DIR
 
     def do_stuff(self, songs):
-        dbpath = os.path.join(self.player_get_userdir(), "similarity.db")
-        self.connection = sqlite3.connect(dbpath)
-        db = Db(self.connection)
+        db = Db(self.dbpath)
         l = len(songs)
         for i, song in enumerate(songs):
             artist_name = song.comma("artist").lower()
@@ -62,44 +61,47 @@ class MirageSongsPlugin(SongsMenuPlugin):
 
     def get_track(self, artist_name, title):
         """get track information from the database"""
-        self.connection.commit()
-        cursor = self.connection.cursor()
+        connection = sqlite3.connect(
+            self.dbpath, timeout=5.0, isolation_level="immediate") 
         title = title.encode("UTF-8")
         artist_id = self.get_artist(artist_name)[0]
-        cursor.execute(
+        rows = connection.execute(
             "SELECT * FROM tracks WHERE artist = ? AND title = ?",
             (artist_id, title))
-        row = cursor.fetchone()
-        if row:
+        for row in rows:
             return row
-        cursor.execute(
+        connection.execute(
             "INSERT INTO tracks (artist, title) VALUES (?, ?)",
             (artist_id, title))
-        self.connection.commit()
-        cursor.execute(
+        connection.commit()
+        rows = connection.execute(
             "SELECT * FROM tracks WHERE artist = ? AND title = ?",
             (artist_id, title))
-        return cursor.fetchone()
+        for row in rows:
+            return row
             
     def get_artist(self, artist_name):
         """get artist information from the database"""
-        self.connection.commit()
-        cursor = self.connection.cursor()
+        connection = sqlite3.connect(
+            self.dbpath, timeout=5.0, isolation_level="immediate") 
         artist_name = artist_name.encode("UTF-8")
-        cursor.execute("SELECT * FROM artists WHERE name = ?", (artist_name,))
-        row = cursor.fetchone()
-        if row:
+        rows = connection.execute(
+            "SELECT * FROM artists WHERE name = ?", (artist_name,))
+        for row in rows:
             return row
-        cursor.execute("INSERT INTO artists (name) VALUES (?)", (artist_name,))
-        self.connection.commit()
-        cursor.execute("SELECT * FROM artists WHERE name = ?", (artist_name,))
-        return cursor.fetchone()
+        connection.execute(
+            "INSERT INTO artists (name) VALUES (?)", (artist_name,))
+        connection.commit()
+        rows = connection.execute(
+            "SELECT * FROM artists WHERE name = ?", (artist_name,))
+        for row in rows:
+            return row
 
     def get_artist_tracks(self, artist_id):
-        self.connection.commit()
-        cursor = self.connection.cursor()
-        cursor.execute(
+        connection = sqlite3.connect(
+            self.dbpath, timeout=5.0, isolation_level="immediate")
+        rows = connection.execute(
             "SELECT tracks.id FROM tracks INNER JOIN artists"
             " ON tracks.artist = artists.id WHERE artists.id = ?",
             (artist_id, ))
-        return [row[0] for row in cursor.fetchall()]
+        return [row[0] for row in rows]

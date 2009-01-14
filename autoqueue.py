@@ -253,7 +253,6 @@ class AutoQueueBase(object):
         self.running = False
         self.verbose = False
         self.now = datetime.now()
-        self.connection = None
         self.song = None
         self._songs = deque([])
         self._blocked_artists = deque([])
@@ -262,6 +261,7 @@ class AutoQueueBase(object):
         self.restrictors = None
         self._artists_to_update = {}
         self._tracks_to_update = {}
+        self._delete_tracks = []
         self.random = False
         self.player_set_variables_from_config()
         if self.store_blocked_artists:
@@ -362,10 +362,9 @@ class AutoQueueBase(object):
     def get_database_connection(self):
         """get database reference"""
         if self.in_memory:
-            if self.connection:
-                return self.connection
             return sqlite3.connect(":memory:")
-        return sqlite3.connect(self.get_db_path())
+        return sqlite3.connect(
+            self.get_db_path(), timeout=5.0, isolation_level="immediate")
 
     def on_song_started(self, song):
         """Should be called by the plugin when a new song starts. If
@@ -521,8 +520,9 @@ class AutoQueueBase(object):
     def fill_queue(self):
         """search for appropriate songs and put them in the queue"""
         self.running = True
+        self.delete_tracks_from_db()
         if self.use_db:
-            self.connection = self.get_database_connection()
+            connection = self.get_database_connection()
         if self.desired_queue_length == 0:
             for dummy in self.queue_song():
                 yield
@@ -545,7 +545,6 @@ class AutoQueueBase(object):
                 for dummy in self._update_similar_tracks(
                     track_id, self._tracks_to_update[track_id]):
                     yield
-            self.connection.commit()
             self._artists_to_update = {}
             self._tracks_to_update = {}
         self.running = False
@@ -705,59 +704,59 @@ class AutoQueueBase(object):
     @Cache(1000)
     def get_artist(self, artist_name):
         """get artist information from the database"""
-        self.connection.commit()
-        cursor = self.connection.cursor()
+        connection = self.get_database_connection()
         artist_name = artist_name.encode("UTF-8")
-        cursor.execute("SELECT * FROM artists WHERE name = ?", (artist_name,))
-        row = cursor.fetchone()
-        if row:
+        rows = connection.execute(
+            "SELECT * FROM artists WHERE name = ?", (artist_name,))
+        for row in rows:
             return row
-        cursor.execute("INSERT INTO artists (name) VALUES (?)", (artist_name,))
-        self.connection.commit()
-        cursor.execute("SELECT * FROM artists WHERE name = ?", (artist_name,))
-        return cursor.fetchone()
+        connection.execute(
+            "INSERT INTO artists (name) VALUES (?)", (artist_name,))
+        connection.commit()
+        rows = connection.execute(
+            "SELECT * FROM artists WHERE name = ?", (artist_name,))
+        for row in rows:
+            return row
 
     @Cache(2000)
     def get_track(self, artist_name, title):
         """get track information from the database"""
-        self.connection.commit()
-        cursor = self.connection.cursor()
+        connection = self.get_database_connection()
         title = title.encode("UTF-8")
         artist_id = self.get_artist(artist_name)[0]
-        cursor.execute(
+        rows = connection.execute(
             "SELECT * FROM tracks WHERE artist = ? AND title = ?",
             (artist_id, title))
-        row = cursor.fetchone()
-        if row:
+        for row in rows:
             return row
-        cursor.execute(
+        connection.execute(
             "INSERT INTO tracks (artist, title) VALUES (?, ?)",
             (artist_id, title))
-        self.connection.commit()
-        cursor.execute(
+        connection.commit()
+        rows = connection.execute(
             "SELECT * FROM tracks WHERE artist = ? AND title = ?",
             (artist_id, title))
-        return cursor.fetchone()
+        for row in rows:
+            return row
 
     @Cache(2000)
     def get_artist_and_title(self, track_id):
-        self.connection.commit()
-        cursor = self.connection.cursor()
-        cursor.execute(
+        connection = self.get_database_connection()
+        rows = connection.execute(
             "SELECT artists.name, tracks.title FROM tracks INNER JOIN artists"
             " ON tracks.artist = artists.id WHERE tracks.id = ?",
             (track_id, ))
-        row = cursor.fetchone()
-        return row[0], row[1]
+        for row in rows:
+            return (row[0], row[1])
 
     def get_artist_tracks(self, artist_id):
-        self.connection.commit()
-        cursor = self.connection.cursor()
-        cursor.execute(
+        connection = self.get_database_connection()
+        rows = connection.execute(
             "SELECT tracks.id FROM tracks INNER JOIN artists"
             " ON tracks.artist = artists.id WHERE artists.id = ?",
             (artist_id, ))
-        return [row[0] for row in cursor.fetchall()]
+        for row in rows:
+            yield row[0]
 
     def analyze_track(self, song):
         artist_name = song.get_artist()
@@ -766,7 +765,7 @@ class AutoQueueBase(object):
         length = song.get_length()
         track = self.get_track(artist_name, title)
         track_id, artist_id = track[0], track[1]
-        db = Db(self.connection)
+        db = Db(self.get_db_path())
         if db.get_track(track_id):
             return
         self.log("no mirage data found, analyzing track")
@@ -791,7 +790,7 @@ class AutoQueueBase(object):
             raise StopIteration
         track = self.get_track(artist_name, title)
         track_id, artist_id, updated = track[0], track[1], track[3]
-        db = Db(self.connection)
+        db = Db(self.get_db_path())
         yielded = False
         for match, mtrack_id in db.get_neighbours(track_id):
             track_artist, track_title = self.get_artist_and_title(mtrack_id)
@@ -825,10 +824,9 @@ class AutoQueueBase(object):
                 self.get_similar_tracks_from_lastfm(
                 artist_name, title, track_id), self.max_track_match, scale_to):
                 yield result 
-        self.connection.commit()
         generators = []
-        cursor1 = self.connection.cursor()
-        cursor1.execute(
+        connection = self.get_database_connection()
+        cursor1 = connection.execute(
             "SELECT track_2_track.match, artists.name, tracks.title  FROM"
             " track_2_track INNER JOIN tracks ON track_2_track.track1"
             " = tracks.id INNER JOIN artists ON artists.id = tracks.artist"
@@ -841,8 +839,8 @@ class AutoQueueBase(object):
             if updated + timedelta(self.cache_time) > self.now:
                 self.log("Getting similar tracks from db for: %s - %s" % (
                     artist_name, title))
-                cursor2 = self.connection.cursor()
-                cursor2.execute(
+                connection2 = self.get_database_connection()
+                cursor2 = connection2.execute(
                     "SELECT track_2_track.match, artists.name, tracks.title"
                     " FROM track_2_track INNER JOIN tracks ON"
                     " track_2_track.track2 = tracks.id INNER JOIN artists ON"
@@ -852,7 +850,6 @@ class AutoQueueBase(object):
                 generators.append(
                     scale_transformer(cursor2, self.max_track_match, scale_to))
             else:
-                ## self.connection.commit()
                 ## cursor2 = self.connection.cursor()
                 ## cursor2.execute(
                 ##     "DELETE FROM track_2_track WHERE "
@@ -883,10 +880,9 @@ class AutoQueueBase(object):
             for result in self.get_similar_artists_from_lastfm(
                 artist_name, artist_id):
                 yield result
-        self.connection.commit()
         generators = []
-        cursor1 = self.connection.cursor()
-        cursor1.execute(
+        connection = self.get_database_connection()
+        cursor1 = connection.execute(
             "SELECT match, name  FROM artist_2_artist INNER JOIN artists"
             " ON artist_2_artist.artist1 = artists.id WHERE"
             " artist_2_artist.artist2 = ? ORDER BY match DESC",
@@ -900,8 +896,8 @@ class AutoQueueBase(object):
                 self.log(
                     "Getting similar artists from db for: %s " %
                     artist_name)
-                cursor2 = self.connection.cursor()
-                cursor2.execute(
+                connection2 = self.get_database_connection()
+                cursor2 = connection2.execute(
                     "SELECT match, name  FROM artist_2_artist INNER JOIN"
                     " artists ON artist_2_artist.artist2 = artists.id WHERE"
                     " artist_2_artist.artist1 = ? ORDER BY match DESC;",
@@ -910,7 +906,6 @@ class AutoQueueBase(object):
                     scale_transformer(
                     cursor2, self.max_artist_match, scale_to, offset=10000))
             else:
-                ## self.connection.commit()
                 ## cursor2 = self.connection.cursor()
                 ## cursor2.execute(
                 ##     "DELETE FROM artist_2_artist WHERE "
@@ -937,74 +932,76 @@ class AutoQueueBase(object):
         
     def _get_artist_match(self, artist1, artist2):
         """get artist match score from database"""
-        self.connection.commit()
-        cursor = self.connection.cursor()
-        cursor.execute(
+        connection = self.get_database_connection()
+        rows = connection.execute(
             "SELECT match FROM artist_2_artist WHERE artist1 = ?"
             " AND artist2 = ?",
             (artist1, artist2))
-        row = cursor.fetchone()
-        if not row:
-            return 0
-        return row[0]
+        for row in rows:
+            return row[0]            
+        return 0
 
     def _get_track_match(self, track1, track2):
         """get track match score from database"""
-        self.connection.commit()
-        cursor = self.connection.cursor()
-        cursor.execute(
+        connection = self.get_database_connection()
+        rows = connection.execute(
             "SELECT match FROM track_2_track WHERE track1 = ? AND track2 = ?",
             (track1, track2))
-        row = cursor.fetchone()
-        if not row:
-            return 0
-        return row[0]
+        for row in rows:
+            return row[0]            
+        return 0
 
     def _update_artist_match(self, artist1, artist2, match):
         """write match score to the database"""
-        cursor = self.connection.cursor()
-        cursor.execute(
+        connection = self.get_database_connection()
+        connection.execute(
             "UPDATE artist_2_artist SET match = ? WHERE artist1 = ? AND"
             " artist2 = ?",
             (match, artist1, artist2))
-
+        connection.commit()
+        
     def _update_track_match(self, track1, track2, match):
         """write match score to the database"""
-        cursor = self.connection.cursor()
-        cursor.execute(
+        connection = self.get_database_connection()
+        connection.execute(
             "UPDATE track_2_track SET match = ? WHERE track1 = ? AND"
             " track2 = ?",
             (match, track1, track2))
-
+        connection.commit()
+        
     def _insert_artist_match(self, artist1, artist2, match):
         """write match score to the database"""
-        cursor = self.connection.cursor()
-        cursor.execute(
+        connection = self.get_database_connection()
+        connection.execute(
             "INSERT INTO artist_2_artist (artist1, artist2, match) VALUES"
             " (?, ?, ?)",
             (artist1, artist2, match))
-
+        connection.commit()
+        
     def _insert_track_match(self, track1, track2, match):
         """write match score to the database"""
-        cursor = self.connection.cursor()
-        cursor.execute(
+        connection = self.get_database_connection()
+        connection.execute(
             "INSERT INTO track_2_track (track1, track2, match) VALUES"
             " (?, ?, ?)",
             (track1, track2, match))
-
+        connection.commit()
+        
     def _update_artist(self, artist_id):
         """write artist information to the database"""
-        cursor = self.connection.cursor()
-        cursor.execute(
+        connection = self.get_database_connection()
+        connection.execute(
             "UPDATE artists SET updated = DATETIME('now') WHERE id = ?",
             (artist_id,))
-
+        connection.commit()
+        
     def _update_track(self, track_id):
         """write track information to the database"""
-        cursor = self.connection.cursor()
-        cursor.execute(
+        connection = self.get_database_connection()
+        connection.execute(
             "UPDATE tracks SET updated = DATETIME('now') WHERE id = ?",
             (track_id,))
+        connection.commit()
         
     def _update_similar_artists(self, artist_id, similar_artists):
         """write similar artist information to the database"""
@@ -1040,22 +1037,19 @@ class AutoQueueBase(object):
         """
         self.log("create_db")
         connection = self.get_database_connection()
-        cursor = connection.cursor()
-        cursor.execute(
+        connection.execute(
             'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name'
             ' VARCHAR(100), updated DATE)')
-        cursor.execute(
+        connection.execute(
             'CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER,'
             ' artist2 INTEGER, match INTEGER)')
-        cursor.execute(
+        connection.execute(
             'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, artist'
             ' INTEGER, title VARCHAR(100), updated DATE)')
-        cursor.execute(
+        connection.execute(
             'CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, track2'
             ' INTEGER, match INTEGER)')
         connection.commit()
-        if self.in_memory:
-            self.connection = connection
             
     def prune_db(self, prunes):
         """clean up the database: remove tracks and artists that are
@@ -1063,17 +1057,6 @@ class AutoQueueBase(object):
         if not prunes:
             return
         connection = self.get_database_connection()
-        cursor = connection.cursor()
-        before = {
-            'tracks':
-            cursor.execute('SELECT count(*) from tracks;').fetchone()[0],
-            'track_2_track':
-            cursor.execute('SELECT count(*) from track_2_track;').fetchone()[0],
-            'mirage':
-            cursor.execute('SELECT count(*) from mirage;').fetchone()[0],
-            'distance':
-            cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
-        self.log('before: %s' % repr(before))
         rows = []
         artists = []
         titles = []
@@ -1082,50 +1065,49 @@ class AutoQueueBase(object):
             title = prune['title']
             if artist not in artists:
                 artists.append(artist)
-                cursor.execute(
+                rows1 = connection.execute(
                     'SELECT artists.name, tracks.title, tracks.id FROM tracks'
                     ' INNER JOIN artists ON tracks.artist = artists.id WHERE '
                     'artists.name = ?;', (artist,))
-                rows.extend(cursor.fetchall())
+                rows.extend([row for row in rows1])
             if title not in titles:
                 titles.append(title)
-                cursor.execute(
+                rows1 = connection.execute(
                     'SELECT artists.name, tracks.title, tracks.id FROM tracks '
                     'INNER JOIN artists ON tracks.artist = artists.id WHERE '
                     'tracks.title = ?;', (title,))
-                rows.extend(cursor.fetchall())
+                rows.extend([row for row in rows1])
             yield
-        cursor = None
         for i, item in enumerate(rows):
             search = self.player_construct_search(
                 {'artist': item[0], 'title': item[1]})
             songs = self.player_search(search)
             if not songs:
-                self.log("removing: %07d %s - %s" % (i, item[0], item[1]))
-                self.delete_track_from_db(item[2])
-            yield
-        cursor = connection.cursor()
-        after = {
-            'tracks':
-            cursor.execute('SELECT count(*) from tracks;').fetchone()[0],
-            'track_2_track':
-            cursor.execute('SELECT count(*) from track_2_track;').fetchone()[0],
-            'mirage':
-            cursor.execute('SELECT count(*) from mirage;').fetchone()[0],
-            'distance':
-            cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
-        self.log('after: %s' % repr(after))
+                self._delete_tracks.append(item[2])
 
-    def delete_track_from_db(self, track_id):
-        connection = self.get_database_connection()
-        cursor = connection.cursor()
-        cursor.execute(
-            'DELETE FROM distance WHERE track_1 = ? OR track_2 = ?;',
-            (track_id, track_id))
-        cursor.execute('DELETE FROM mirage WHERE trackid = ?;', (track_id,))
-        cursor.execute(
-            'DELETE FROM track_2_track WHERE track1 = ? OR track2 = ?;',
-            (track_id, track_id))
-        cursor.execute('DELETE FROM tracks WHERE id = ?;', (track_id,))
-        connection.commit()
-        
+    def delete_tracks_from_db(self):
+        while self._delete_tracks:
+            track_id = self._delete_tracks.pop()
+            try:
+                connection = self.get_database_connection()
+                connection.execute(
+                    'DELETE FROM distance WHERE track_1 = ? OR track_2 = ?;',
+                    (track_id, track_id))
+                connection.commit()
+                yield
+                connection.execute(
+                    'DELETE FROM mirage WHERE trackid = ?;', (track_id,))
+                connection.commit()
+                yield
+                connection.execute(
+                    'DELETE FROM track_2_track WHERE track1 = ? OR track2 = ?;',
+                    (track_id, track_id))
+                connection.commit()
+                yield
+                connection.execute('DELETE FROM tracks WHERE id = ?;', (track_id,))
+                connection.commit()
+                yield
+            except sqlite3.OperationalError:
+                self.log("delete failed")
+                self._delete_tracks.append(track_id)
+                break

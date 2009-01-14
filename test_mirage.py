@@ -149,8 +149,7 @@ class TestMir(object):
         ##     int(scms5.distance(scms5) * 100), 4000)
 
     def test_add_track(self):
-        connection = sqlite3.connect(":memory:")
-        testdb = Db(connection)
+        testdb = Db(":memory:")
         for i, scms in enumerate(scmses):
             testdb.add_track(i, scms)
         
@@ -160,8 +159,7 @@ class TestMir(object):
                     testdb.get_tracks(exclude_ids=['3','4'])]))
 
     def test_get_track(self):
-        connection = sqlite3.connect(":memory:")
-        testdb = Db(connection)
+        testdb = Db(":memory:")
         for i, testscms in enumerate(scmses):
             testdb.add_track(i, testscms)
         scms3_db = testdb.get_track('3')
@@ -170,8 +168,7 @@ class TestMir(object):
         assert_equals(117, int(distance(scms3_db, scms4_db, c)))
 
     def test_add_and_compare(self):
-        connection = sqlite3.connect(":memory:")
-        testdb = Db(connection)
+        testdb = Db(":memory:")
         for i, testscms in enumerate(scmses):
             testdb.add_and_compare(i, testscms)
         cursor = testdb.connection.cursor()
@@ -181,8 +178,7 @@ class TestMir(object):
             distances)
 
     def test_get_neighbours(self):
-        connection = sqlite3.connect(":memory:")
-        testdb = Db(connection)
+        testdb = Db(":memory:")
         for i, testscms in enumerate(scmses):
             testdb.add_and_compare(i, testscms)
         assert_equals(
