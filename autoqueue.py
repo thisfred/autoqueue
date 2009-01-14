@@ -1095,6 +1095,7 @@ class AutoQueueBase(object):
             songs = self.player_search(search)
             if not songs:
                 self._delete_tracks.append(item[2])
+            yield
 
     def delete_tracks_from_db(self):
         while self._delete_tracks:
