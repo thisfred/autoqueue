@@ -330,64 +330,74 @@ class CovarianceMatrix(object):
 class Db(object):
     def __init__(self, path):
         self.dbpath = path
-        self.connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate") 
-        self.connection.execute(
+        connection = self.get_database_connection()
+        connection.execute(
             "CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, "
             "scms BLOB)")
-        self.connection.execute(
+        connection.execute(
             "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
             "INTEGER, distance INTEGER)")
-        self.connection.commit()
-
+        connection.commit()
+        connection.close()
+        
+    def get_database_connection(self):
+        return sqlite3.connect(
+            self.dbpath, timeout=5.0, isolation_level="immediate")
+    
     def add_track(self, trackid, scms):
-        connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate") 
+        connection = self.get_database_connection()
         connection.execute("INSERT INTO mirage (trackid, scms) VALUES (?, ?)",
                        (trackid,
                         sqlite3.Binary(instance_to_picklestring(scms))))
         connection.commit()
+        connection.close()
 
     def remove_track(self, trackid):
-        connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate") 
+        connection = self.get_database_connection()
         connection.execute("DELETE FROM mirage WHERE trackid = ?", (trackid,))
         connection.commit()
+        connection.close()
 
     def remove_tracks(self, trackids):
-        connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate") 
+        connection = self.get_database_connection()
         connection.execute("DELETE FROM mirage WHERE trackid IN ?", (
             ','.join(trackids),))
         connection.commit()
+        connection.close()
 
     def get_track(self, trackid):
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT scms FROM mirage WHERE trackid = ?", (trackid,))
-        row = cursor.fetchone()
-        if not row:
-            return None
-        return instance_from_picklestring(row[0])
-
+        connection = self.get_database_connection()
+        rows = connection.execute(
+            "SELECT scms FROM mirage WHERE trackid = ?", (trackid,))
+        for row in rows:
+            connection.close()
+            return instance_from_picklestring(row[0])
+        connection.close()
+        return None
+    
     def get_tracks(self, exclude_ids=None):
         if not exclude_ids:
             exclude_ids = []
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT scms, trackid FROM mirage WHERE trackid"
-                       " NOT IN (%s);" % ','.join([str(ex) for ex in
-                                                   exclude_ids]))
-        return cursor
-
+        connection = self.get_database_connection()
+        rows = connection.execute(
+            "SELECT scms, trackid FROM mirage WHERE trackid NOT IN (%s);" %
+            ','.join([str(ex) for ex in exclude_ids]))
+        result = [row for row in rows]
+        connection.close()
+        return result
+    
     def get_all_track_ids(self):
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT trackid FROM mirage")
-        return [row[0] for row in cursor.fetchall()]
+        rows = connection.execute("SELECT trackid FROM mirage")
+        result = [row[0] for row in rows]
+        connection.close()
+        return result
         
     def reset(self):
         connection = sqlite3.connect(
             self.dbpath, timeout=5.0, isolation_level="immediate") 
         connection.execute("DELETE FROM mirage")
         connection.commit()
+        connection.close()
 
     def add_and_compare(self, trackid, scms, cutoff=10000, exclude_ids=None):
         if not exclude_ids:
@@ -408,6 +418,7 @@ class Db(object):
                     "VALUES (?, ?, ?)",
                     (trackid, otherid, dist))
                 connection.commit()
+                connection.close()
             yield
 
     def compare(self, id1, id2):
@@ -417,16 +428,16 @@ class Db(object):
         return int(distance(t1, t2, c) * 1000)
         
     def get_neighbours(self, trackid):
-        cursor = self.connection.cursor()
-        neighbours1 = [row for row in cursor.execute(
+        connection = self.get_database_connection()
+        neighbours1 = [row for row in connection.execute(
             "SELECT distance, track_2 FROM distance WHERE track_1 = ? "
             "ORDER BY distance ASC LIMIT 100",
             (trackid,))]
-        neighbours2 = [row for row in cursor.execute(
+        neighbours2 = [row for row in connection.execute(
             "SELECT distance, track_1 FROM distance WHERE track_2 = ? "
             "ORDER BY distance ASC LIMIT 100",
             (trackid,))]
-        
+        connection.close()
         neighbours1.extend(neighbours2)
         neighbours1.sort()
         return neighbours1

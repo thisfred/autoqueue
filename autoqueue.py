@@ -716,8 +716,10 @@ class AutoQueueBase(object):
         rows = connection.execute(
             "SELECT * FROM artists WHERE name = ?", (artist_name,))
         for row in rows:
+            connection.close()
             return row
-
+        connection.close()
+        
     @Cache(2000)
     def get_track(self, artist_name, title):
         """get track information from the database"""
@@ -737,7 +739,9 @@ class AutoQueueBase(object):
             "SELECT * FROM tracks WHERE artist = ? AND title = ?",
             (artist_id, title))
         for row in rows:
+            connection.close()
             return row
+        connection.close()
 
     @Cache(2000)
     def get_artist_and_title(self, track_id):
@@ -959,6 +963,7 @@ class AutoQueueBase(object):
             " artist2 = ?",
             (match, artist1, artist2))
         connection.commit()
+        connection.close()
         
     def _update_track_match(self, track1, track2, match):
         """write match score to the database"""
@@ -968,6 +973,7 @@ class AutoQueueBase(object):
             " track2 = ?",
             (match, track1, track2))
         connection.commit()
+        connection.close()
         
     def _insert_artist_match(self, artist1, artist2, match):
         """write match score to the database"""
@@ -977,6 +983,7 @@ class AutoQueueBase(object):
             " (?, ?, ?)",
             (artist1, artist2, match))
         connection.commit()
+        connection.close()
         
     def _insert_track_match(self, track1, track2, match):
         """write match score to the database"""
@@ -986,6 +993,7 @@ class AutoQueueBase(object):
             " (?, ?, ?)",
             (track1, track2, match))
         connection.commit()
+        connection.close()
         
     def _update_artist(self, artist_id):
         """write artist information to the database"""
@@ -994,6 +1002,7 @@ class AutoQueueBase(object):
             "UPDATE artists SET updated = DATETIME('now') WHERE id = ?",
             (artist_id,))
         connection.commit()
+        connection.close()
         
     def _update_track(self, track_id):
         """write track information to the database"""
@@ -1002,6 +1011,7 @@ class AutoQueueBase(object):
             "UPDATE tracks SET updated = DATETIME('now') WHERE id = ?",
             (track_id,))
         connection.commit()
+        connection.close()
         
     def _update_similar_artists(self, artist_id, similar_artists):
         """write similar artist information to the database"""
@@ -1050,6 +1060,7 @@ class AutoQueueBase(object):
             'CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, track2'
             ' INTEGER, match INTEGER)')
         connection.commit()
+        connection.close()
             
     def prune_db(self, prunes):
         """clean up the database: remove tracks and artists that are
@@ -1094,20 +1105,21 @@ class AutoQueueBase(object):
                     'DELETE FROM distance WHERE track_1 = ? OR track_2 = ?;',
                     (track_id, track_id))
                 connection.commit()
-                yield
                 connection.execute(
                     'DELETE FROM mirage WHERE trackid = ?;', (track_id,))
                 connection.commit()
-                yield
+
                 connection.execute(
                     'DELETE FROM track_2_track WHERE track1 = ? OR track2 = ?;',
                     (track_id, track_id))
                 connection.commit()
-                yield
-                connection.execute('DELETE FROM tracks WHERE id = ?;', (track_id,))
+                connection.execute(
+                    'DELETE FROM tracks WHERE id = ?;', (track_id,))
                 connection.commit()
+                connection.close()
                 yield
             except sqlite3.OperationalError:
+                connection.close()
                 self.log("delete failed")
                 self._delete_tracks.append(track_id)
                 break

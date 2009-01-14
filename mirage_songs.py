@@ -78,7 +78,9 @@ class MirageSongsPlugin(SongsMenuPlugin):
             "SELECT * FROM tracks WHERE artist = ? AND title = ?",
             (artist_id, title))
         for row in rows:
+            connection.close()
             return row
+        connection.close()
             
     def get_artist(self, artist_name):
         """get artist information from the database"""
@@ -95,7 +97,9 @@ class MirageSongsPlugin(SongsMenuPlugin):
         rows = connection.execute(
             "SELECT * FROM artists WHERE name = ?", (artist_name,))
         for row in rows:
+            connection.close()
             return row
+        connection.close()
 
     def get_artist_tracks(self, artist_id):
         connection = sqlite3.connect(
