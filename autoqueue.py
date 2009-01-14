@@ -385,7 +385,8 @@ class AutoQueueBase(object):
         if self.running:
             return
         if self.desired_queue_length == 0 or self.queue_needs_songs():
-            self.fill_queue()
+            for dummy in self.fill_queue():
+                pass
 
     def on_song_started_generator(self, song):
         """Should be called by the plugin when a new song starts. If
@@ -405,8 +406,8 @@ class AutoQueueBase(object):
         if self.running:
             return
         if self.desired_queue_length == 0 or self.queue_needs_songs():
-            yield
-            self.fill_queue()
+            for dummy in self.fill_queue():
+                yield
 
 
     def cleanup(self, songs, next_artist=''):
@@ -434,8 +435,10 @@ class AutoQueueBase(object):
         generators = []
         last_song = self.get_last_song()
         if MIRAGE and self.by_mirage:
-            self.analyze_track(self.song)
-            generators.append(self.get_ordered_mirage_tracks(last_song))
+            for dummy in self.analyze_track(self.song):
+                yield
+            generators.append((
+                t for t in self.get_ordered_mirage_tracks(last_song) if t))
         if self.by_tracks:
             generators.append(self.get_ordered_similar_tracks(last_song))
         if self.by_artists:
@@ -455,7 +458,11 @@ class AutoQueueBase(object):
         while len(found) < 12:
             blocked = self.get_blocked_artists()
             try:
-                score, result = generator.next()
+                item = generator.next()
+                while not item:
+                    item = generator.next()
+                    yield
+                score, result = item
                 if self._songs:
                     if score > self._songs[0][0]:
                         break
@@ -507,11 +514,9 @@ class AutoQueueBase(object):
                 bsong.get_artist(),
                 bsong.get_title()) for score, bsong in list(self._songs)])))
         for song in generator:
-            pass
-        if found:
-            return True
-        else:
-            return False
+            yield
+        if not found:
+            yield "exhausted"
 
     def fill_queue(self):
         """search for appropriate songs and put them in the queue"""
@@ -519,17 +524,27 @@ class AutoQueueBase(object):
         if self.use_db:
             self.connection = self.get_database_connection()
         if self.desired_queue_length == 0:
-            self.queue_song()
+            for dummy in self.queue_song():
+                yield
+        stop = False
         while self.queue_needs_songs():
-            if not self.queue_song():
+            for exhausted in self.queue_song():
+                if exhausted:
+                    stop = True
+                    break
+                yield
+            if stop:
                 break
+            yield
         if self.use_db:
             for artist_id in self._artists_to_update:
-                self._update_similar_artists(
-                    artist_id, self._artists_to_update[artist_id])
+                for dummy in self._update_similar_artists(
+                    artist_id, self._artists_to_update[artist_id]):
+                    yield
             for track_id in self._tracks_to_update:
-                self._update_similar_tracks(
-                    track_id, self._tracks_to_update[track_id])
+                for dummy in self._update_similar_tracks(
+                    track_id, self._tracks_to_update[track_id]):
+                    yield
             self.connection.commit()
             self._artists_to_update = {}
             self._tracks_to_update = {}
@@ -753,15 +768,16 @@ class AutoQueueBase(object):
         track_id, artist_id = track[0], track[1]
         db = Db(self.connection)
         if db.get_track(track_id):
-            return False
+            return
         self.log("no mirage data found, analyzing track")
         exclude_ids = self.get_artist_tracks(artist_id)
         try:
             scms = self.mir.analyze(filename)
         except:
-            return False
-        db.add_and_compare(track_id, scms,exclude_ids=exclude_ids)
-        return True
+            return
+        for dummy in db.add_and_compare(track_id, scms,exclude_ids=exclude_ids):
+            yield
+        return
 
     def get_ordered_mirage_tracks(self, song):
         """get similar tracks from mirage acoustic analysis"""
@@ -786,8 +802,8 @@ class AutoQueueBase(object):
             yielded = True
         if yielded:
             raise StopIteration
-        if not self.analyze_track(song):
-            raise StopIteration
+        for dummy in self.analyze_track(song):
+            yield
         for match, mtrack_id in db.get_neighbours(track_id):
             distance = scale(match, maximum, scale_to)
             track_artist, track_title = self.get_artist_and_title(mtrack_id)
@@ -999,6 +1015,7 @@ class AutoQueueBase(object):
                     artist_id, id2, artist['lastfm_match'])
                 continue
             self._insert_artist_match(artist_id, id2, artist['lastfm_match'])
+            yield
         self._update_artist(artist_id)
         
     def _update_similar_tracks(self, track_id, similar_tracks):
@@ -1009,6 +1026,7 @@ class AutoQueueBase(object):
                 self._update_track_match(track_id, id2, track['lastfm_match'])
                 continue
             self._insert_track_match(track_id, id2, track['lastfm_match'])
+            yield
         self._update_track(track_id)
 
     def log(self, msg):
