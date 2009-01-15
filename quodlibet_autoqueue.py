@@ -129,16 +129,14 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     def plugin_on_song_started(self, song):
         """Triggered when a song start. If the right conditions apply,
         we start looking for new songs to queue."""
+        if self.running:
+            return
         if song:
             ssong = Song(song)
-            self.to_prune = [{
-                'artist': ssong.get_artist(),
-                'title': ssong.get_title()}]
-            copool.add(self.on_song_started_generator, ssong)
-
-    def plugin_on_song_ended(self, song, skipped):
-        copool.add(self.prune_db, self.to_prune)
-
+            self.on_song_started(ssong)
+            copool.add(self.on_song_started_generator)
+            copool.add(self.delete_tracks_from_db)
+        
     def plugin_on_removed(self, songs):
         rsongs = [
             {'artist': Song(song).get_artist(),
@@ -314,9 +312,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def player_enqueue(self, song):
         """Put the song at the end of the queue"""
-        gtk.gdk.threads_enter()
         main.playlist.enqueue([song.song])
-        gtk.gdk.threads_leave()
 
     def player_search(self, search):
         """perform a player search"""

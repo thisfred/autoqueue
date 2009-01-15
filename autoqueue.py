@@ -381,28 +381,12 @@ class AutoQueueBase(object):
         # add the artist to the blocked list, so their songs won't be
         # played for a determined time
         self.block_artist(artist_name)
-        if self.running:
-            return
-        if self.desired_queue_length == 0 or self.queue_needs_songs():
-            for dummy in self.fill_queue():
-                pass
 
-    def on_song_started_generator(self, song):
+    def on_song_started_generator(self):
         """Should be called by the plugin when a new song starts. If
         the right conditions apply, we start looking for new songs to
         queue."""
-        if song is None:
-            return
-        self.now = datetime.now()
-        artist_name = song.get_artist()
-        title = song.get_title()
-        if not (artist_name and title):
-            return
-        self.song = song
-        # add the artist to the blocked list, so their songs won't be
-        # played for a determined time
-        self.block_artist(artist_name)
-        if self.running:
+        if self.song is None:
             return
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             for dummy in self.fill_queue():
@@ -436,8 +420,7 @@ class AutoQueueBase(object):
         if MIRAGE and self.by_mirage:
             for dummy in self.analyze_track(self.song):
                 yield
-            generators.append((
-                t for t in self.get_ordered_mirage_tracks(last_song) if t))
+            generators.append(self.get_ordered_mirage_tracks(last_song))
         if self.by_tracks:
             generators.append(self.get_ordered_similar_tracks(last_song))
         if self.by_artists:
@@ -454,6 +437,7 @@ class AutoQueueBase(object):
         self.unblock_artists()
         found = []
         generator = self.song_generator()
+        deletes = []
         while len(found) < 12:
             blocked = self.get_blocked_artists()
             try:
@@ -482,8 +466,13 @@ class AutoQueueBase(object):
                         songs.remove(song)
                     if not song.get_artist() in blocked:
                         found.append((score, song))
+                else:
+                    deletes.append(
+                        {"artist": result.get("artist"),
+                         "title": result.get("title")})
             except StopIteration:
                 break
+            self.prune_db(deletes)
         if not found:
             self.log("nothing found, using backup songs")
             if self._songs:
@@ -520,9 +509,6 @@ class AutoQueueBase(object):
     def fill_queue(self):
         """search for appropriate songs and put them in the queue"""
         self.running = True
-        self.delete_tracks_from_db()
-        if self.use_db:
-            connection = self.get_database_connection()
         if self.desired_queue_length == 0:
             for dummy in self.queue_song():
                 yield
@@ -1074,26 +1060,25 @@ class AutoQueueBase(object):
         for prune in prunes:
             artist = prune['artist']
             title = prune['title']
-            if artist not in artists:
-                artists.append(artist)
+            artists.append(artist)
+            if title:
                 rows1 = connection.execute(
                     'SELECT artists.name, tracks.title, tracks.id FROM tracks'
                     ' INNER JOIN artists ON tracks.artist = artists.id WHERE '
-                    'artists.name = ?;', (artist,))
-                rows.extend([row for row in rows1])
-            if title not in titles:
-                titles.append(title)
+                    'artists.name = ? AND tracks.title = ?;', (artist, title))
+            else:
                 rows1 = connection.execute(
-                    'SELECT artists.name, tracks.title, tracks.id FROM tracks '
-                    'INNER JOIN artists ON tracks.artist = artists.id WHERE '
-                    'tracks.title = ?;', (title,))
-                rows.extend([row for row in rows1])
+                    'SELECT artists.name, tracks.title, tracks.id FROM tracks'
+                    ' INNER JOIN artists ON tracks.artist = artists.id WHERE '
+                    'artists.name = ?;', (artist))
+            rows.extend([row for row in rows1])
             yield
         for i, item in enumerate(rows):
             search = self.player_construct_search(
                 {'artist': item[0], 'title': item[1]})
             songs = self.player_search(search)
             if not songs:
+                self.log("deleting %s - %s" % (item[0], item[1]))
                 self._delete_tracks.append(item[2])
             yield
 
@@ -1122,5 +1107,17 @@ class AutoQueueBase(object):
             except sqlite3.OperationalError:
                 connection.close()
                 self.log("delete failed")
-                self._delete_tracks.append(track_id)
                 break
+        connection = self.get_database_connection()
+        cursor = connection.cursor()
+        after = {
+            'tracks':
+            cursor.execute('SELECT count(*) from tracks;').fetchone()[0],
+            'track_2_track':
+            cursor.execute('SELECT count(*) from track_2_track;').fetchone()[0],
+            'mirage':
+            cursor.execute('SELECT count(*) from mirage;').fetchone()[0],
+            'distance':
+            cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
+        connection.close()
+        self.log('db: %s' % repr(after))
