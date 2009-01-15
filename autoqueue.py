@@ -472,7 +472,8 @@ class AutoQueueBase(object):
                          "title": result.get("title")})
             except StopIteration:
                 break
-            self.prune_db(deletes)
+            for dummy in self.prune_db(deletes):
+                yield
         if not found:
             self.log("nothing found, using backup songs")
             if self._songs:
@@ -1094,7 +1095,6 @@ class AutoQueueBase(object):
                 connection.execute(
                     'DELETE FROM mirage WHERE trackid = ?;', (track_id,))
                 connection.commit()
-
                 connection.execute(
                     'DELETE FROM track_2_track WHERE track1 = ? OR track2 = ?;',
                     (track_id, track_id))
