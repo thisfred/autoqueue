@@ -384,6 +384,7 @@ class Db(object):
             ','.join([str(ex) for ex in exclude_ids]))
         result = [row for row in rows]
         connection.close()
+        print len(result), " tracks found"
         return result
     
     def get_all_track_ids(self):
@@ -419,7 +420,8 @@ class Db(object):
                     (trackid, otherid, dist))
                 connection.commit()
                 connection.close()
-                yield
+                print "add", otherid
+            yield
 
     def compare(self, id1, id2):
         c = ScmsConfiguration(20)

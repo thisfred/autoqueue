@@ -135,12 +135,11 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             ssong = Song(song)
             self.on_song_started(ssong)
             copool.add(self.on_song_started_generator)
-            copool.add(self.delete_tracks_from_db)
         
     def plugin_on_removed(self, songs):
         rsongs = [
             {'artist': Song(song).get_artist(),
-             'title': Song(song).get_title()} for song in songs]
+             'title': None} for song in songs]
         copool.add(self.prune_db, rsongs)
         
     def PluginPreferences(self, parent):

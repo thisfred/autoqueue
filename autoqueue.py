@@ -391,7 +391,8 @@ class AutoQueueBase(object):
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             for dummy in self.fill_queue():
                 yield
-
+        for dummy in self.delete_tracks_from_db():
+            yield
 
     def cleanup(self, songs, next_artist=''):
         ret = []
@@ -761,11 +762,9 @@ class AutoQueueBase(object):
             return
         self.log("no mirage data found, analyzing track")
         exclude_ids = self.get_artist_tracks(artist_id)
-        try:
-            scms = self.mir.analyze(filename)
-        except:
-            return
-        for dummy in db.add_and_compare(track_id, scms,exclude_ids=exclude_ids):
+        scms = self.mir.analyze(filename)
+        for dummy in db.add_and_compare(
+            track_id, scms, exclude_ids=exclude_ids):
             yield
         return
 
@@ -1061,17 +1060,18 @@ class AutoQueueBase(object):
         for prune in prunes:
             artist = prune['artist']
             title = prune['title']
-            artists.append(artist)
             if title:
                 rows1 = connection.execute(
                     'SELECT artists.name, tracks.title, tracks.id FROM tracks'
                     ' INNER JOIN artists ON tracks.artist = artists.id WHERE '
                     'artists.name = ? AND tracks.title = ?;', (artist, title))
             else:
-                rows1 = connection.execute(
-                    'SELECT artists.name, tracks.title, tracks.id FROM tracks'
-                    ' INNER JOIN artists ON tracks.artist = artists.id WHERE '
-                    'artists.name = ?;', (artist))
+                if artist not in artists:
+                    artists.append(artist)
+                    rows1 = connection.execute(
+                        'SELECT artists.name, tracks.title, tracks.id FROM '
+                        'tracks INNER JOIN artists ON tracks.artist = '
+                        'artists.id WHERE artists.name = ?;', (artist,))
             rows.extend([row for row in rows1])
             yield
         for i, item in enumerate(rows):

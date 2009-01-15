@@ -51,7 +51,7 @@ class MirageSongsPlugin(SongsMenuPlugin):
             except:
                 return
             for dummy in db.add_and_compare(
-                track_id, scms,exclude_ids=exclude_ids):
+                track_id, scms, exclude_ids=exclude_ids):
                 yield
             yield
         print "done"
