@@ -384,7 +384,6 @@ class Db(object):
             ','.join([str(ex) for ex in exclude_ids]))
         result = [row for row in rows]
         connection.close()
-        print len(result), " tracks found"
         return result
     
     def get_all_track_ids(self):
@@ -400,7 +399,7 @@ class Db(object):
         connection.commit()
         connection.close()
 
-    def add_and_compare(self, trackid, scms, cutoff=10000, exclude_ids=None):
+    def add_and_compare(self, trackid, scms, cutoff=20000, exclude_ids=None):
         if not exclude_ids:
             exclude_ids = []
         self.add_track(trackid, scms)
@@ -420,7 +419,6 @@ class Db(object):
                     (trackid, otherid, dist))
                 connection.commit()
                 connection.close()
-                print "add", otherid
             yield
 
     def compare(self, id1, id2):

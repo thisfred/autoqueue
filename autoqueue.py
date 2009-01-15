@@ -388,11 +388,11 @@ class AutoQueueBase(object):
         queue."""
         if self.song is None:
             return
+        for dummy in self.delete_tracks_from_db():
+            yield
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             for dummy in self.fill_queue():
                 yield
-        for dummy in self.delete_tracks_from_db():
-            yield
 
     def cleanup(self, songs, next_artist=''):
         ret = []
@@ -770,8 +770,8 @@ class AutoQueueBase(object):
 
     def get_ordered_mirage_tracks(self, song):
         """get similar tracks from mirage acoustic analysis"""
-        maximum = 10000
-        scale_to = 5000
+        maximum = 20000
+        scale_to = 10000
         artist_name = song.get_artist()
         title = song.get_title()
         self.log("Getting similar tracks from mirage for: %s - %s" % (
@@ -840,13 +840,6 @@ class AutoQueueBase(object):
                 generators.append(
                     scale_transformer(cursor2, self.max_track_match, scale_to))
             else:
-                ## cursor2 = self.connection.cursor()
-                ## cursor2.execute(
-                ##     "DELETE FROM track_2_track WHERE "
-                ##     "track_2_track.track1 = ?;",
-                ##     (track_id,)
-                ##     )
-                ## self.connection.commit()
                 generators.append(
                     self.get_similar_tracks_from_lastfm(
                     artist_name, title, track_id))
@@ -896,13 +889,6 @@ class AutoQueueBase(object):
                     scale_transformer(
                     cursor2, self.max_artist_match, scale_to, offset=10000))
             else:
-                ## cursor2 = self.connection.cursor()
-                ## cursor2.execute(
-                ##     "DELETE FROM artist_2_artist WHERE "
-                ##     "artist_2_artist.artist1 = ?;",
-                ##     (artist_id,)
-                ##     )
-                ## self.connection.commit()
                 generators.append(
                     self.get_similar_artists_from_lastfm(artist_name, artist_id)
                     )
@@ -1078,7 +1064,7 @@ class AutoQueueBase(object):
             search = self.player_construct_search(
                 {'artist': item[0], 'title': item[1]})
             songs = self.player_search(search)
-            if not songs:
+            if not songs or random.random() > .999:
                 self.log("deleting %s - %s" % (item[0], item[1]))
                 self._delete_tracks.append(item[2])
             yield
