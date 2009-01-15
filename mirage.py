@@ -419,7 +419,7 @@ class Db(object):
                     (trackid, otherid, dist))
                 connection.commit()
                 connection.close()
-            yield
+                yield
 
     def compare(self, id1, id2):
         c = ScmsConfiguration(20)

@@ -472,8 +472,8 @@ class AutoQueueBase(object):
                          "title": result.get("title")})
             except StopIteration:
                 break
-            for dummy in self.prune_db(deletes):
-                yield
+        for dummy in self.prune_db(deletes):
+            yield
         if not found:
             self.log("nothing found, using backup songs")
             if self._songs:
