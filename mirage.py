@@ -399,11 +399,13 @@ class Db(object):
         connection.commit()
         connection.close()
 
-    def add_and_compare(self, trackid, scms, cutoff=20000, exclude_ids=None):
+    def add_and_compare(self, trackid, scms, cutoff=16000, exclude_ids=None):
         if not exclude_ids:
             exclude_ids = []
         self.add_track(trackid, scms)
         c = ScmsConfiguration(20)
+        added = 0
+        best_of_the_rest = []
         for buf, otherid in self.get_tracks(
             exclude_ids=exclude_ids):
             if trackid == otherid:
@@ -419,8 +421,25 @@ class Db(object):
                     (trackid, otherid, dist))
                 connection.commit()
                 connection.close()
+                added += 1
+            else:
+                best_of_the_rest.append((dist, trackid, otherid))
+                best_of_the_rest.sort()
+                while len(best_of_the_rest) > 10:
+                    best_of_the_rest.pop()
             yield
-
+        while best_of_the_rest and added < 10:
+            dist, trackid, otherid = best_of_the_rest.pop(0)
+            connection = sqlite3.connect(
+                self.dbpath, timeout=5.0, isolation_level="immediate") 
+            connection.execute(
+                "INSERT INTO distance (track_1, track_2, distance) "
+                "VALUES (?, ?, ?)",
+                (trackid, otherid, dist))
+            connection.commit()
+            connection.close()
+            added += 1
+            
     def compare(self, id1, id2):
         c = ScmsConfiguration(20)
         t1 = self.get_track(id1)

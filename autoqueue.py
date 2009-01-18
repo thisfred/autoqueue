@@ -393,7 +393,7 @@ class AutoQueueBase(object):
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             for dummy in self.fill_queue():
                 yield
-
+        
     def cleanup(self, songs, next_artist=''):
         ret = []
         seen = []
@@ -419,7 +419,7 @@ class AutoQueueBase(object):
         generators = []
         last_song = self.get_last_song()
         if MIRAGE and self.by_mirage:
-            for dummy in self.analyze_track(self.song):
+            for dummy in self.analyze_track(last_song):
                 yield
             generators.append(self.get_ordered_mirage_tracks(last_song))
         if self.by_tracks:
@@ -468,9 +468,7 @@ class AutoQueueBase(object):
                     if not song.get_artist() in blocked:
                         found.append((score, song))
                 else:
-                    deletes.append(
-                        {"artist": result.get("artist"),
-                         "title": result.get("title")})
+                    deletes.append(result.get("artist"))
             except StopIteration:
                 break
         for dummy in self.prune_db(deletes):
@@ -739,7 +737,10 @@ class AutoQueueBase(object):
             " ON tracks.artist = artists.id WHERE tracks.id = ?",
             (track_id, ))
         for row in rows:
-            return (row[0], row[1])
+            result = (row[0], row[1])
+            break
+        connection.close()
+        return result
 
     def get_artist_tracks(self, artist_id):
         connection = self.get_database_connection()
@@ -747,8 +748,9 @@ class AutoQueueBase(object):
             "SELECT tracks.id FROM tracks INNER JOIN artists"
             " ON tracks.artist = artists.id WHERE artists.id = ?",
             (artist_id, ))
-        for row in rows:
-            yield row[0]
+        result = [row[0] for row in rows]
+        connection.close()
+        return result
 
     def analyze_track(self, song):
         artist_name = song.get_artist()
@@ -781,23 +783,10 @@ class AutoQueueBase(object):
         track = self.get_track(artist_name, title)
         track_id, artist_id, updated = track[0], track[1], track[3]
         db = Db(self.get_db_path())
-        yielded = False
         for match, mtrack_id in db.get_neighbours(track_id):
             track_artist, track_title = self.get_artist_and_title(mtrack_id)
             yield(scale(match, maximum, scale_to),
                   {'mirage_distance': match,
-                   'artist': track_artist,
-                   'title': track_title})
-            yielded = True
-        if yielded:
-            raise StopIteration
-        for dummy in self.analyze_track(song):
-            yield
-        for match, mtrack_id in db.get_neighbours(track_id):
-            distance = scale(match, maximum, scale_to)
-            track_artist, track_title = self.get_artist_and_title(mtrack_id)
-            yield(scale(match, maximum, scale_to),
-                  {'mirage_distance': scale(distance, maximum, scale_to),
                    'artist': track_artist,
                    'title': track_title})
 
@@ -816,12 +805,13 @@ class AutoQueueBase(object):
                 yield result 
         generators = []
         connection = self.get_database_connection()
-        cursor1 = connection.execute(
+        cursor1 = [row for row in connection.execute(
             "SELECT track_2_track.match, artists.name, tracks.title  FROM"
             " track_2_track INNER JOIN tracks ON track_2_track.track1"
             " = tracks.id INNER JOIN artists ON artists.id = tracks.artist"
             " WHERE track_2_track.track2 = ? ORDER BY track_2_track.match DESC",
-            (track_id,))
+            (track_id,))]
+        connection.close()
         generators.append(
             scale_transformer(cursor1, self.max_track_match, scale_to))
         if updated:
@@ -830,13 +820,14 @@ class AutoQueueBase(object):
                 self.log("Getting similar tracks from db for: %s - %s" % (
                     artist_name, title))
                 connection2 = self.get_database_connection()
-                cursor2 = connection2.execute(
+                cursor2 = [row for row in connection2.execute(
                     "SELECT track_2_track.match, artists.name, tracks.title"
                     " FROM track_2_track INNER JOIN tracks ON"
                     " track_2_track.track2 = tracks.id INNER JOIN artists ON"
                     " artists.id = tracks.artist WHERE track_2_track.track1"
                     " = ? ORDER BY track_2_track.match DESC",
-                    (track_id,))
+                    (track_id,))]
+                connection2.close()
                 generators.append(
                     scale_transformer(cursor2, self.max_track_match, scale_to))
             else:
@@ -865,11 +856,12 @@ class AutoQueueBase(object):
                 yield result
         generators = []
         connection = self.get_database_connection()
-        cursor1 = connection.execute(
+        cursor1 = [row for row in connection.execute(
             "SELECT match, name  FROM artist_2_artist INNER JOIN artists"
             " ON artist_2_artist.artist1 = artists.id WHERE"
             " artist_2_artist.artist2 = ? ORDER BY match DESC",
-            (artist_id,))
+            (artist_id,))]
+        connection.close()
         generators.append(
             scale_transformer(
             cursor1, self.max_artist_match, scale_to, offset=10000))
@@ -880,11 +872,12 @@ class AutoQueueBase(object):
                     "Getting similar artists from db for: %s " %
                     artist_name)
                 connection2 = self.get_database_connection()
-                cursor2 = connection2.execute(
+                cursor2 = [row for row in connection2.execute(
                     "SELECT match, name  FROM artist_2_artist INNER JOIN"
                     " artists ON artist_2_artist.artist2 = artists.id WHERE"
                     " artist_2_artist.artist1 = ? ORDER BY match DESC;",
-                    (artist_id,))
+                    (artist_id,))]
+                connection2.close()
                 generators.append(
                     scale_transformer(
                     cursor2, self.max_artist_match, scale_to, offset=10000))
@@ -913,9 +906,12 @@ class AutoQueueBase(object):
             "SELECT match FROM artist_2_artist WHERE artist1 = ?"
             " AND artist2 = ?",
             (artist1, artist2))
+        result = 0
         for row in rows:
-            return row[0]            
-        return 0
+            result = row[0]
+            break
+        connection.close()
+        return result
 
     def _get_track_match(self, track1, track2):
         """get track match score from database"""
@@ -923,9 +919,12 @@ class AutoQueueBase(object):
         rows = connection.execute(
             "SELECT match FROM track_2_track WHERE track1 = ? AND track2 = ?",
             (track1, track2))
+        result = 0
         for row in rows:
-            return row[0]            
-        return 0
+            result = row[0]
+            break
+        connection.close()
+        return result
 
     def _update_artist_match(self, artist1, artist2, match):
         """write match score to the database"""
@@ -1039,32 +1038,24 @@ class AutoQueueBase(object):
         never played"""
         if not prunes:
             return
-        connection = self.get_database_connection()
         rows = []
         artists = []
         titles = []
-        for prune in prunes:
-            artist = prune['artist']
-            title = prune['title']
-            if title:
-                rows1 = connection.execute(
-                    'SELECT artists.name, tracks.title, tracks.id FROM tracks'
-                    ' INNER JOIN artists ON tracks.artist = artists.id WHERE '
-                    'artists.name = ? AND tracks.title = ?;', (artist, title))
-            else:
-                if artist not in artists:
-                    artists.append(artist)
-                    rows1 = connection.execute(
-                        'SELECT artists.name, tracks.title, tracks.id FROM '
-                        'tracks INNER JOIN artists ON tracks.artist = '
-                        'artists.id WHERE artists.name = ?;', (artist,))
-            rows.extend([row for row in rows1])
+        for artist in prunes:
+            if artist not in artists:
+                artists.append(artist)
+                connection = self.get_database_connection()
+                rows.extend([row for row in connection.execute(
+                    'SELECT artists.name, tracks.title, tracks.id FROM '
+                    'tracks INNER JOIN artists ON tracks.artist = '
+                    'artists.id WHERE artists.name = ?;', (artist,))])
+                connection.close()
             yield
         for i, item in enumerate(rows):
             search = self.player_construct_search(
                 {'artist': item[0], 'title': item[1]})
             songs = self.player_search(search)
-            if not songs or random.random() > .999:
+            if not songs:
                 self.log("deleting %s - %s" % (item[0], item[1]))
                 self._delete_tracks.append(item[2])
             yield
@@ -1077,14 +1068,11 @@ class AutoQueueBase(object):
                 connection.execute(
                     'DELETE FROM distance WHERE track_1 = ? OR track_2 = ?;',
                     (track_id, track_id))
-                connection.commit()
                 connection.execute(
                     'DELETE FROM mirage WHERE trackid = ?;', (track_id,))
-                connection.commit()
                 connection.execute(
                     'DELETE FROM track_2_track WHERE track1 = ? OR track2 = ?;',
                     (track_id, track_id))
-                connection.commit()
                 connection.execute(
                     'DELETE FROM tracks WHERE id = ?;', (track_id,))
                 connection.commit()
