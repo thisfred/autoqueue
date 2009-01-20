@@ -72,3 +72,43 @@ features are simply not possible to implement for some players.
   played the Lowlands 2008 festival (after tagging all of those tracks
   accordingly, see my lastfmtagger plugin.) Default: ''
 
+mirage support
+==============
+
+
+The dependencies you need are:
+
+- ctypes and scipy (basic ubuntu versions work for me.)
+- the mirage banshee plugin. Which you can get here:
+
+http://hop.at/mirage/
+
+(there is an unofficial ubuntu repository which I'm using.)
+
+You will need to copy or symlink the mirage.py module into the
+appropriate plugin directory, and *copy* the res/ directory
+there. (symlinks don't work, I've done something stupid there.)
+
+The mirage code looks up the banshee-mirage library in a hardcoded
+place, which works on my systems, but is likely to break on
+others'. Any suggestions on how to improve this are welcome, this was
+my first time using ctypes.
+
+After doing that, you need to activate the feature. In QL it's in the
+UI, in rhythmbox or mpd, you'll need to tweak the code and set the
+variable 'by_mirage' to true.
+
+How it works: by default, it will take quite a while to start noticing
+the effects, as songs are analyzed as they are played, and so the
+similarity information is built up very slowly. I have made another
+plugin, to help speed things up in QL at least. You'll need to copy
+mirage_songs.py *and* the res/ directory into the plugins/songsmenu
+directory in your .quodlibet. (Again, I have not thought through how
+to get around the hard copying and the duplication, any ideas greatly
+appreciated.)
+
+This plugin allows you to select songs in the player, right click and
+analyze them. It can take a while, so I suggest starting with small
+numbers of songs, or doing a large number overnight or so. The player
+will keep working and playing while it is doing mass analysis, but the
+UI will be intermittently responsive at best.
