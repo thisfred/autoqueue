@@ -396,7 +396,8 @@ class AutoQueueBase(object):
         queue."""
         if self.song is None:
             return
-        self.player_execute_async(self.delete_tracks_from_db)
+        fid = 'delete_tracks_from_db' + str(datetime.now())
+        self.player_execute_async(self.delete_tracks_from_db, funcid=fid)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             for dummy in self.fill_queue():
                 yield
@@ -478,7 +479,8 @@ class AutoQueueBase(object):
                     deletes.append(result.get("artist"))
             except StopIteration:
                 break
-        self.player_execute_async(self.prune_db, deletes)
+        fid = "prune_db" + str(datetime.now())
+        self.player_execute_async(self.prune_db, deletes, funcid=fid)
         if not found:
             self.log("nothing found, using backup songs")
             if self._songs:
@@ -507,7 +509,8 @@ class AutoQueueBase(object):
                 score,
                 bsong.get_artist(),
                 bsong.get_title()) for score, bsong in list(self._songs)])))
-        self.player_execute_async(exhaust, generator)
+        fid = "exhaust" + str(datetime.now())
+        self.player_execute_async(exhaust, generator, funcid=fid)
         if not found:
             yield "exhausted"
 
@@ -530,13 +533,15 @@ class AutoQueueBase(object):
             yield
         if self.use_db:
             for artist_id in self._artists_to_update:
+                fid = "_update_similar_artists" + str(datetime.now())
                 self.player_execute_async(
                     self._update_similar_artists,
-                    artist_id, self._artists_to_update[artist_id])
+                    artist_id, self._artists_to_update[artist_id], funcid=fid)
             for track_id in self._tracks_to_update:
+                fid = "_update_similar_tracks" + str(datetime.now())
                 self.player_execute_async(
                     self._update_similar_tracks,
-                    track_id, self._tracks_to_update[track_id])
+                    track_id, self._tracks_to_update[track_id], funcid=fid)
             self._artists_to_update = {}
             self._tracks_to_update = {}
         self.running = False
