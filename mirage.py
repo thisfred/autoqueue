@@ -438,8 +438,10 @@ class Db(object):
                 (trackid, otherid, dist))
             connection.commit()
             connection.close()
+            yield
             added += 1
-            
+        print "added %d connections" % added
+        
     def compare(self, id1, id2):
         c = ScmsConfiguration(20)
         t1 = self.get_track(id1)

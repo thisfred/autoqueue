@@ -52,6 +52,10 @@ ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
 # be nice to last.fm
 WAIT_BETWEEN_REQUESTS = timedelta(0, 1) 
 
+def exhaust(iterator):
+    for i in iterator:
+        yield
+
 def transform_trackresult(tresult):
     score = tresult[0]
     result = {
@@ -328,6 +332,10 @@ class AutoQueueBase(object):
         """return (wrapped) song objects for the songs in the queue"""
         return []
 
+    def player_execute_async(self, method, *args, **kwargs):
+        for dummy in method(*args, **kwargs):
+            pass
+        
     def check_db(self):
         if self.in_memory:
             self.create_db()
@@ -388,8 +396,7 @@ class AutoQueueBase(object):
         queue."""
         if self.song is None:
             return
-        for dummy in self.delete_tracks_from_db():
-            yield
+        self.player_execute_async(self.delete_tracks_from_db)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             for dummy in self.fill_queue():
                 yield
@@ -471,8 +478,7 @@ class AutoQueueBase(object):
                     deletes.append(result.get("artist"))
             except StopIteration:
                 break
-        for dummy in self.prune_db(deletes):
-            yield
+        self.player_execute_async(self.prune_db, deletes)
         if not found:
             self.log("nothing found, using backup songs")
             if self._songs:
@@ -501,13 +507,13 @@ class AutoQueueBase(object):
                 score,
                 bsong.get_artist(),
                 bsong.get_title()) for score, bsong in list(self._songs)])))
-        for song in generator:
-            yield
+        self.player_execute_async(exhaust, generator)
         if not found:
             yield "exhausted"
 
     def fill_queue(self):
         """search for appropriate songs and put them in the queue"""
+        yield
         self.running = True
         if self.desired_queue_length == 0:
             for dummy in self.queue_song():
@@ -524,13 +530,13 @@ class AutoQueueBase(object):
             yield
         if self.use_db:
             for artist_id in self._artists_to_update:
-                for dummy in self._update_similar_artists(
-                    artist_id, self._artists_to_update[artist_id]):
-                    yield
+                self.player_execute_async(
+                    self._update_similar_artists,
+                    artist_id, self._artists_to_update[artist_id])
             for track_id in self._tracks_to_update:
-                for dummy in self._update_similar_tracks(
-                    track_id, self._tracks_to_update[track_id]):
-                    yield
+                self.player_execute_async(
+                    self._update_similar_tracks,
+                    track_id, self._tracks_to_update[track_id])
             self._artists_to_update = {}
             self._tracks_to_update = {}
         self.running = False
@@ -1061,6 +1067,7 @@ class AutoQueueBase(object):
             yield
 
     def delete_tracks_from_db(self):
+        yield
         while self._delete_tracks:
             track_id = self._delete_tracks.pop()
             try:
@@ -1095,3 +1102,4 @@ class AutoQueueBase(object):
             cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
         connection.close()
         self.log('db: %s' % repr(after))
+
