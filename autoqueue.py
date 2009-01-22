@@ -445,6 +445,7 @@ class AutoQueueBase(object):
         generator = self.song_generator()
         deletes = []
         while len(found) < 12:
+            yield
             blocked = self.get_blocked_artists()
             try:
                 item = generator.next()
@@ -470,6 +471,7 @@ class AutoQueueBase(object):
                         and songs):
                         song = random.choice(songs)
                         songs.remove(song)
+                        yield
                     if not song.get_artist() in blocked:
                         found.append((score, song))
                 else:
@@ -485,6 +487,7 @@ class AutoQueueBase(object):
                 while self.is_blocked(
                     song.get_artist()) and self._songs:
                     score, song = self._songs.popleft()
+                    yield
                 if not self.is_blocked(song.get_artist()):
                     self.player_enqueue(song)
         else:
