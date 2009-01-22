@@ -1,5 +1,6 @@
 import sqlite3, os
 import const
+from datetime import datetime
 from plugins.songsmenu import SongsMenuPlugin
 from mirage import Mir, Db
 from quodlibet.util import copool
@@ -57,7 +58,8 @@ class MirageSongsPlugin(SongsMenuPlugin):
         print "done"
         
     def plugin_songs(self, songs):
-        copool.add(self.do_stuff, songs)
+        fid = "mirage_songs" + str(datetime.now())
+        copool.add(self.do_stuff, songs, funcid=fid)
 
     def get_track(self, artist_name, title):
         """get track information from the database"""

@@ -7,6 +7,7 @@ it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation"""
 
 import const, gtk
+from datetime import datetime
 from plugins.events import EventPlugin
 from widgets import main
 from parse import Query
@@ -138,7 +139,8 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         
     def plugin_on_removed(self, songs):
         rsongs = [Song(song).get_artist() for song in songs]
-        copool.add(self.prune_db, rsongs)
+        fid = "prune_db" + str(datetime.now())
+        copool.add(self.prune_db, rsongs, funcid=fid)
         
     def PluginPreferences(self, parent):
         def bool_changed(widget):
