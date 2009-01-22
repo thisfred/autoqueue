@@ -265,7 +265,6 @@ class AutoQueueBase(object):
         self.restrictors = None
         self._artists_to_update = {}
         self._tracks_to_update = {}
-        self._delete_tracks = []
         self.random = False
         self.player_set_variables_from_config()
         if self.store_blocked_artists:
@@ -396,8 +395,6 @@ class AutoQueueBase(object):
         queue."""
         if self.song is None:
             return
-        fid = 'delete_tracks_from_db' + str(datetime.now())
-        self.player_execute_async(self.delete_tracks_from_db, funcid=fid)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             for dummy in self.fill_queue():
                 yield
@@ -1068,32 +1065,29 @@ class AutoQueueBase(object):
             songs = self.player_search(search)
             if not songs:
                 self.log("deleting %s - %s" % (item[0], item[1]))
-                self._delete_tracks.append(item[2])
+                track_id = item[2]
+                try:
+                    connection = self.get_database_connection()
+                    connection.execute(
+                        'DELETE FROM distance WHERE track_1 = ? OR track_2 = '
+                        '?;',
+                        (track_id, track_id))
+                    connection.execute(
+                        'DELETE FROM mirage WHERE trackid = ?;', (track_id,))
+                    connection.execute(
+                        'DELETE FROM track_2_track WHERE track1 = ? OR track2 ='
+                        ' ?;',
+                        (track_id, track_id))
+                    connection.execute(
+                        'DELETE FROM tracks WHERE id = ?;', (track_id,))
+                    connection.commit()
+                    connection.close()
+                    yield
+                except sqlite3.OperationalError:
+                    connection.close()
+                    self.log("delete failed")
+                    break
             yield
-
-    def delete_tracks_from_db(self):
-        yield
-        while self._delete_tracks:
-            track_id = self._delete_tracks.pop()
-            try:
-                connection = self.get_database_connection()
-                connection.execute(
-                    'DELETE FROM distance WHERE track_1 = ? OR track_2 = ?;',
-                    (track_id, track_id))
-                connection.execute(
-                    'DELETE FROM mirage WHERE trackid = ?;', (track_id,))
-                connection.execute(
-                    'DELETE FROM track_2_track WHERE track1 = ? OR track2 = ?;',
-                    (track_id, track_id))
-                connection.execute(
-                    'DELETE FROM tracks WHERE id = ?;', (track_id,))
-                connection.commit()
-                connection.close()
-                yield
-            except sqlite3.OperationalError:
-                connection.close()
-                self.log("delete failed")
-                break
         connection = self.get_database_connection()
         cursor = connection.cursor()
         after = {
@@ -1107,4 +1101,3 @@ class AutoQueueBase(object):
             cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
         connection.close()
         self.log('db: %s' % repr(after))
-

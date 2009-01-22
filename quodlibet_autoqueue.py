@@ -207,7 +207,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     # Implement the player specific methods needed by autoqueue
     def player_execute_async(self, method, *args, **kwargs):
-        print repr(method)
         copool.add(method, *args, **kwargs)
 
     def player_get_userdir(self):
