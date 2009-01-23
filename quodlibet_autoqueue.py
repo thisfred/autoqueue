@@ -130,12 +130,10 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     def plugin_on_song_started(self, song):
         """Triggered when a song start. If the right conditions apply,
         we start looking for new songs to queue."""
-        if self.running:
+        if not song:
             return
-        if song:
-            ssong = Song(song)
-            self.on_song_started(ssong)
-            copool.add(self.on_song_started_generator)
+        ssong = Song(song)
+        self.on_song_started(ssong)
         
     def plugin_on_removed(self, songs):
         rsongs = [Song(song).get_artist() for song in songs]
