@@ -384,17 +384,18 @@ class AutoQueueBase(object):
         title = song.get_title()
         if not (artist_name and title):
             return
-        self.song = song
         # add the artist to the blocked list, so their songs won't be
         # played for a determined time
         self.block_artist(artist_name)
+        if self.running:
+            return
+        self.song = song
+        self.player_execute_async(self.on_song_started_generator)
 
     def on_song_started_generator(self):
         """Should be called by the plugin when a new song starts. If
         the right conditions apply, we start looking for new songs to
         queue."""
-        if self.song is None:
-            return
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             for dummy in self.fill_queue():
                 yield
@@ -511,8 +512,6 @@ class AutoQueueBase(object):
                 bsong.get_title()) for score, bsong in list(self._songs)])))
         fid = "exhaust" + str(datetime.now())
         self.player_execute_async(exhaust, generator, funcid=fid)
-        if not found:
-            yield "exhausted"
 
     def fill_queue(self):
         """search for appropriate songs and put them in the queue"""
@@ -524,12 +523,7 @@ class AutoQueueBase(object):
         stop = False
         while self.queue_needs_songs():
             for exhausted in self.queue_song():
-                if exhausted:
-                    stop = True
-                    break
                 yield
-            if stop:
-                break
             yield
         if self.use_db:
             for artist_id in self._artists_to_update:
