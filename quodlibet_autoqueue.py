@@ -59,9 +59,9 @@ BOOL_SETTINGS = {
     'verbose': {
         'value': False,
         'label': 'log to console'},
-    'random': {
+    'weed': {
         'value': False,
-        'label': 'random picks'},
+        'label': 'keep db clean'},
     }
 STR_SETTINGS = {
     'restrictors' : {
@@ -113,7 +113,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     def __init__(self):
         self.use_db = True
         self.store_blocked_artists = True
-        self.to_prune = {}
         EventPlugin.__init__(self)
         AutoQueueBase.__init__(self)
         
@@ -136,9 +135,12 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         self.on_song_started(ssong)
         
     def plugin_on_removed(self, songs):
-        rsongs = [Song(song).get_artist() for song in songs]
-        fid = "prune_db" + str(datetime.now())
-        copool.add(self.prune_db, rsongs, funcid=fid)
+        rartists = [Song(song).get_artist() for song in songs]
+        rtitles = [Song(song).get_title() for song in songs]
+        if self.weed:
+            fid = "prune_db" + str(datetime.now())
+            copool.add(
+                self.prune_db, artists=rartists, titles=rtitles, funcid=fid)
         
     def PluginPreferences(self, parent):
         def bool_changed(widget):
