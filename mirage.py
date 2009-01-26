@@ -399,7 +399,7 @@ class Db(object):
         connection.commit()
         connection.close()
 
-    def add_and_compare(self, trackid, scms, cutoff=16000, exclude_ids=None):
+    def add_and_compare(self, trackid, scms, cutoff=15000, exclude_ids=None):
         if not exclude_ids:
             exclude_ids = []
         self.add_track(trackid, scms)
