@@ -226,8 +226,14 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         versioned = ""
         if "(" in title:
             split = title.split("(")
-            vtitle = "(".join(split[:-1]).strip()
-            version =  split[-1].strip()[:-1]
+            if not split[0]:
+                # (something) title [(version)]
+                nsplit = ["(".join(split[:2])]
+                nsplit.extend(split[2:])
+                split = nsplit
+            # title (version [(something)])
+            vtitle = split[0].strip()
+            version =  "(".join(split[1:]).strip()[:-1]
             versioned = '&(artist = "%s", title = "%s", version="%s")' % (
                 escape(artist),
                 escape(vtitle),
