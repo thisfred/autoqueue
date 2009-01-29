@@ -332,6 +332,8 @@ class AutoQueueBase(object):
         return []
 
     def player_execute_async(self, method, *args, **kwargs):
+        if 'funcid' in kwargs:
+            del kwargs['funcid']
         for dummy in method(*args, **kwargs):
             pass
         
