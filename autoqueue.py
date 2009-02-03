@@ -244,6 +244,7 @@ class AutoQueueBase(object):
     store_blocked_artists = False
     in_memory = False 
     def __init__(self):
+        self.connection = None
         self.max_track_match = 10000
         self.max_artist_match = 10000
         self.artist_block_time = 1
@@ -274,6 +275,11 @@ class AutoQueueBase(object):
         if MIRAGE:
             self.mir = Mir()
 
+    def close_database_connection(self, connection):
+        if self.in_memory:
+            return
+        connection.close()
+        
     def player_get_userdir(self):
         """get the application user directory to store files"""
         return NotImplemented
@@ -371,7 +377,10 @@ class AutoQueueBase(object):
     def get_database_connection(self):
         """get database reference"""
         if self.in_memory:
-            return sqlite3.connect(":memory:")
+            if self.connection:
+                return self.connection
+            self.connection = sqlite3.connect(":memory:")
+            return self.connection
         return sqlite3.connect(
             self.get_db_path(), timeout=5.0, isolation_level="immediate")
 
@@ -714,10 +723,10 @@ class AutoQueueBase(object):
         rows = connection.execute(
             "SELECT * FROM artists WHERE name = ?", (artist_name,))
         for row in rows:
-            connection.close()
+            self.close_database_connection(connection)
             return row
-        connection.close()
-        
+        self.close_database_connection(connection)
+
     @Cache(2000)
     def get_track(self, artist_name, title):
         """get track information from the database"""
@@ -737,9 +746,9 @@ class AutoQueueBase(object):
             "SELECT * FROM tracks WHERE artist = ? AND title = ?",
             (artist_id, title))
         for row in rows:
-            connection.close()
+            self.close_database_connection(connection)
             return row
-        connection.close()
+        self.close_database_connection(connection)        
 
     @Cache(2000)
     def get_artist_and_title(self, track_id):
@@ -751,7 +760,7 @@ class AutoQueueBase(object):
         for row in rows:
             result = (row[0], row[1])
             break
-        connection.close()
+        self.close_database_connection(connection)
         return result
 
     def get_artist_tracks(self, artist_id):
@@ -761,7 +770,7 @@ class AutoQueueBase(object):
             " ON tracks.artist = artists.id WHERE artists.id = ?",
             (artist_id, ))
         result = [row[0] for row in rows]
-        connection.close()
+        self.close_database_connection(connection)
         return result
 
     def analyze_track(self, song):
@@ -823,7 +832,7 @@ class AutoQueueBase(object):
             " = tracks.id INNER JOIN artists ON artists.id = tracks.artist"
             " WHERE track_2_track.track2 = ? ORDER BY track_2_track.match DESC",
             (track_id,))]
-        connection.close()
+        self.close_database_connection(connection)
         generators.append(
             scale_transformer(cursor1, self.max_track_match, scale_to))
         if updated:
@@ -839,7 +848,7 @@ class AutoQueueBase(object):
                     " artists.id = tracks.artist WHERE track_2_track.track1"
                     " = ? ORDER BY track_2_track.match DESC",
                     (track_id,))]
-                connection2.close()
+                self.close_database_connection(connection2)
                 generators.append(
                     scale_transformer(cursor2, self.max_track_match, scale_to))
             else:
@@ -873,7 +882,7 @@ class AutoQueueBase(object):
             " ON artist_2_artist.artist1 = artists.id WHERE"
             " artist_2_artist.artist2 = ? ORDER BY match DESC",
             (artist_id,))]
-        connection.close()
+        self.close_database_connection(connection)
         generators.append(
             scale_transformer(
             cursor1, self.max_artist_match, scale_to, offset=10000))
@@ -889,7 +898,7 @@ class AutoQueueBase(object):
                     " artists ON artist_2_artist.artist2 = artists.id WHERE"
                     " artist_2_artist.artist1 = ? ORDER BY match DESC;",
                     (artist_id,))]
-                connection2.close()
+                self.close_database_connection(connection2)
                 generators.append(
                     scale_transformer(
                     cursor2, self.max_artist_match, scale_to, offset=10000))
@@ -922,7 +931,7 @@ class AutoQueueBase(object):
         for row in rows:
             result = row[0]
             break
-        connection.close()
+        self.close_database_connection(connection)
         return result
 
     def _get_track_match(self, track1, track2):
@@ -935,7 +944,7 @@ class AutoQueueBase(object):
         for row in rows:
             result = row[0]
             break
-        connection.close()
+        self.close_database_connection(connection)
         return result
 
     def _update_artist_match(self, artist1, artist2, match):
@@ -946,7 +955,7 @@ class AutoQueueBase(object):
             " artist2 = ?",
             (match, artist1, artist2))
         connection.commit()
-        connection.close()
+        self.close_database_connection(connection)
         
     def _update_track_match(self, track1, track2, match):
         """write match score to the database"""
@@ -956,7 +965,7 @@ class AutoQueueBase(object):
             " track2 = ?",
             (match, track1, track2))
         connection.commit()
-        connection.close()
+        self.close_database_connection(connection)
         
     def _insert_artist_match(self, artist1, artist2, match):
         """write match score to the database"""
@@ -966,7 +975,7 @@ class AutoQueueBase(object):
             " (?, ?, ?)",
             (artist1, artist2, match))
         connection.commit()
-        connection.close()
+        self.close_database_connection(connection)
         
     def _insert_track_match(self, track1, track2, match):
         """write match score to the database"""
@@ -976,7 +985,7 @@ class AutoQueueBase(object):
             " (?, ?, ?)",
             (track1, track2, match))
         connection.commit()
-        connection.close()
+        self.close_database_connection(connection)
         
     def _update_artist(self, artist_id):
         """write artist information to the database"""
@@ -985,7 +994,7 @@ class AutoQueueBase(object):
             "UPDATE artists SET updated = DATETIME('now') WHERE id = ?",
             (artist_id,))
         connection.commit()
-        connection.close()
+        self.close_database_connection(connection)
         
     def _update_track(self, track_id):
         """write track information to the database"""
@@ -994,7 +1003,7 @@ class AutoQueueBase(object):
             "UPDATE tracks SET updated = DATETIME('now') WHERE id = ?",
             (track_id,))
         connection.commit()
-        connection.close()
+        self.close_database_connection(connection)
         
     def _update_similar_artists(self, artist_id, similar_artists):
         """write similar artist information to the database"""
@@ -1043,7 +1052,7 @@ class AutoQueueBase(object):
             'CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, track2'
             ' INTEGER, match INTEGER)')
         connection.commit()
-        connection.close()
+        self.close_database_connection(connection)
             
     def prune_db(self, titles=None, artists=None):
         """clean up the database: remove tracks and artists that are
@@ -1061,11 +1070,13 @@ class AutoQueueBase(object):
                         'SELECT artists.name, tracks.title, tracks.id FROM '
                         'tracks INNER JOIN artists ON tracks.artist = '
                         'artists.id WHERE artists.name = ?;', (artist,))])
-                    connection.close()
+                    self.close_database_connection(connection)
                 yield
         if titles:
             seen_titles = []
             for vtitle in titles:
+                if not vtitle:
+                    continue
                 title = vtitle.split("(")[0]
                 if title not in seen_titles:
                     seen_titles.append(title)
@@ -1075,7 +1086,7 @@ class AutoQueueBase(object):
                         'tracks INNER JOIN artists ON tracks.artist = '
                         'artists.id WHERE tracks.title = ? OR tracks.title = ?;'
                         , (vtitle, title))])
-                    connection.close()
+                    self.close_database_connection(connection)
                 yield
         for i, item in enumerate(rows):
             search = self.player_construct_search(
@@ -1099,10 +1110,10 @@ class AutoQueueBase(object):
                     connection.execute(
                         'DELETE FROM tracks WHERE id = ?;', (track_id,))
                     connection.commit()
-                    connection.close()
+                    self.close_database_connection(connection)
                     yield
                 except sqlite3.OperationalError:
-                    connection.close()
+                    self.close_database_connection(connection)
                     self.log("delete failed")
                     break
             yield
@@ -1117,5 +1128,5 @@ class AutoQueueBase(object):
             cursor.execute('SELECT count(*) from mirage;').fetchone()[0],
             'distance':
             cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
-        connection.close()
+        self.close_database_connection(connection)
         self.log('db: %s' % repr(after))

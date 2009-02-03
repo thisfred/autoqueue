@@ -104,13 +104,18 @@ class MockSong(SongBase):
 
 class MockAutoQueue(AutoQueueBase):
     def __init__(self):
-        self.player = MockPlayer(self.on_song_started)
+        self.player = MockPlayer(self.started)
         self.use_db = True
         self.in_memory = True
         super(MockAutoQueue, self).__init__() 
         self.by_tags = True
         self.verbose = True
-   
+
+    def started(self, song):
+        self.on_song_started(song)
+        for dummy in self.on_song_started_generator():
+            yield
+            
     def player_construct_track_search(self, artist, title, restrictions=None):
         search = {'artist': artist, 'title': title}
         if restrictions:
@@ -428,16 +433,16 @@ class TestAutoQueue(object):
         
     def test_on_song_started(self):
         test_song = MockSong('Joni Mitchell', 'Carey')
-        for i in self.autoqueue.on_song_started(test_song):
+        for i in self.autoqueue.started(test_song):
             pass
         songs_in_queue = self.autoqueue.player_get_songs_in_queue()
         assert_equals('joanna newsom', songs_in_queue[0].get_artist())
         assert_equals('peach, plum, pear', songs_in_queue[0].get_title())
         backup_songs = self.autoqueue._songs
         score, song = backup_songs[0]
-        assert_equals(9300, score)
-        assert_equals('leonard cohen', song.get_artist())
-        assert_equals('suzanne', song.get_title())
+        assert_equals(9336, score)
+        assert_equals('bob dylan', song.get_artist())
+        assert_equals("blowin' in the wind", song.get_title())
 
     def test_backup_songs(self):
         test_song = MockSong('Joni Mitchell', 'Carey')
@@ -452,13 +457,13 @@ class TestAutoQueue(object):
         assert_equals('joanna newsom', songs_in_queue[0].get_artist())
         assert_equals('peach, plum, pear', songs_in_queue[0].get_title())
         backup_songs = self.autoqueue._songs
-        assert_equals('leonard cohen', backup_songs[0][1].get_artist())
-        assert_equals('suzanne', backup_songs[0][1].get_title())
+        assert_equals('bob dylan', backup_songs[0][1].get_artist())
+        assert_equals("blowin' in the wind", backup_songs[0][1].get_title())
         self.autoqueue.player.play_song_from_queue()
         songs_in_queue = self.autoqueue.player_get_songs_in_queue()
         assert_equals('leonard cohen', songs_in_queue[0].get_artist())
         assert_equals('suzanne', songs_in_queue[0].get_title())
-        assert_equals(3, len(self.autoqueue._songs))
+        assert_equals(1, len(self.autoqueue._songs))
         
     def test_block_artist(self):
         artist_name = 'joni mitchell'
@@ -478,19 +483,21 @@ class TestAutoQueue(object):
             self.autoqueue.get_last_song().get_title())
         self.autoqueue.player.play_song_from_queue()
         assert_equals(
-            'marlena shaw', self.autoqueue.get_last_song().get_artist())
+            'minnie riperton', self.autoqueue.get_last_song().get_artist())
         assert_equals(
-            'will i find my love today?',
+            'reasons',
             self.autoqueue.get_last_song().get_title())
         self.autoqueue.player.play_song_from_queue()
         assert_equals(
-            'minnie riperton', self.autoqueue.get_last_song().get_artist())
+            'jimmy smith and wes montgomery',
+            self.autoqueue.get_last_song().get_artist())
         assert_equals(
-            'reasons', self.autoqueue.get_last_song().get_title())
+            'mellow mood',
+            self.autoqueue.get_last_song().get_title())
 
     def test_get_track_match(self):
         test_song = MockSong('Joni Mitchell', 'Carey')
-        for i in self.autoqueue.on_song_started(test_song):
+        for i in self.autoqueue.started(test_song):
             pass
         artist = 'joni mitchell'
         title = 'carey'
@@ -502,7 +509,7 @@ class TestAutoQueue(object):
 
     def test_get_artist_match(self):
         test_song = MockSong('Joni Mitchell', 'The Last Time I Saw Richard')
-        for i in self.autoqueue.on_song_started(test_song):
+        for i in self.autoqueue.started(test_song):
             pass
         artist = 'joni mitchell'
         artist2 =  'paul simon'
