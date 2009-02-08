@@ -15,6 +15,7 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 
 import os
+import urllib
 from time import time
 import gconf
 import rb, rhythmdb
@@ -44,11 +45,13 @@ class Song(SongBase):
         return []
 
     def get_length(self):
-        return self.db.entry_get(self.song, rhythmdb.PROP_DURATION))
+        return self.db.entry_get(self.song, rhythmdb.PROP_DURATION)
 
     def get_filename(self):
-        return self.db.entry_get(self.song, rhythmdb.PROP_LOCATION))
-
+        location = self.db.entry_get(self.song, rhythmdb.PROP_LOCATION)
+        if location.startswith("file://"):
+            return urllib.unquote(location[7:])
+        return None
 
 class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
     def __init__(self):
@@ -57,9 +60,8 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         self.store_blocked_artists = True
         AutoQueueBase.__init__(self)
         self.gconfclient = gconf.client_get_default()
-        self.verbose = True
-        self.random = False
-        self.by_mirage = True
+        self.verbose = False
+        self.by_mirage = False
         
     def activate(self, shell):
         self.shell = shell
@@ -121,13 +123,12 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         seconds = track_block_time * 24 * 60 * 60
         now = time()
         cutoff = now - seconds
-        self.log("BEFORE: " + str(cutoff))
         return (
             rhythmdb.QUERY_PROP_LESS, rhythmdb.PROP_LAST_PLAYED, cutoff)
 
     def player_set_variables_from_config(self):
         """Initialize user settings from the configuration storage"""
-        #XXX Steal from charlotte 
+        #XXX Still to do
         pass
 
     def player_get_queue_length(self):
