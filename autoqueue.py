@@ -33,11 +33,11 @@ try:
 except ImportError:
     SQL = False
 
-#try:
-from mirage import Mir, Db
-MIRAGE = True
-#except ImportError:
-#    MIRAGE = False
+try:
+    from mirage import Mir, Db, MatrixDimensionMismatchException
+    MIRAGE = True
+except ImportError:
+    MIRAGE = False
     
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) last.fm api key from here:
@@ -777,15 +777,20 @@ class AutoQueueBase(object):
         artist_name = song.get_artist()
         title = song.get_title()
         filename = song.get_filename()
+        if not filename:
+            return
         length = song.get_length()
         track = self.get_track(artist_name, title)
         track_id, artist_id = track[0], track[1]
         db = Db(self.get_db_path())
         if db.get_track(track_id):
             return
-        self.log("no mirage data found, analyzing track")
+        self.log("no mirage data found for %s, analyzing track" % filename)
         exclude_ids = self.get_artist_tracks(artist_id)
-        scms = self.mir.analyze(filename)
+        try:
+            scms = self.mir.analyze(filename)
+        except MatrixDimensionMismatchException:
+            return
         for dummy in db.add_and_compare(
             track_id, scms, exclude_ids=exclude_ids):
             yield
