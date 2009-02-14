@@ -260,7 +260,6 @@ class AutoQueueBase(object):
         self.weed = False
         self.now = datetime.now()
         self.song = None
-        self._songs = deque([])
         self._blocked_artists = deque([])
         self._blocked_artists_times = deque([])
         self.relaxors = None
@@ -415,21 +414,6 @@ class AutoQueueBase(object):
             for dummy in self.fill_queue():
                 yield
 
-    def cleanup(self, songs, next_artist=''):
-        ret = []
-        seen = []
-        if next_artist:
-            seen = [next_artist]
-        for (score, song) in songs:
-            artist = song.get_artist()
-            if artist in seen:
-                continue
-            if self.is_blocked(artist):
-                continue
-            seen.append(artist)
-            ret.append((score, song))
-        return ret
-    
     def queue_needs_songs(self):
         """determine whether the queue needs more songs added"""
         time = self.player_get_queue_length()
@@ -457,10 +441,10 @@ class AutoQueueBase(object):
         restrictions = self.player_construct_restrictions(
             self.track_block_time, self.relaxors, self.restrictors)
         self.unblock_artists()
-        found = []
+        found = None
         generator = self.song_generator()
         deletes = []
-        while len(found) < 12:
+        while not found:
             yield
             blocked = self.get_blocked_artists()
             try:
@@ -469,9 +453,6 @@ class AutoQueueBase(object):
                     item = generator.next()
                     yield
                 score, result = item
-                if self._songs:
-                    if score > self._songs[0][0]:
-                        break
                 self.log("looking for: %s, %s" % (score, repr(result)))
                 search = self.player_construct_search(result, restrictions)
                 artist = result.get('artist')
@@ -489,7 +470,7 @@ class AutoQueueBase(object):
                         songs.remove(song)
                         yield
                     if not song.get_artist() in blocked:
-                        found.append((score, song))
+                        found = song
                 else:
                     deletes.append(result.get("title"))
             except StopIteration:
@@ -497,35 +478,8 @@ class AutoQueueBase(object):
         if self.weed and deletes:
             fid = "prune_db" + str(datetime.now())
             self.player_execute_async(self.prune_db, titles=deletes, funcid=fid)
-        if not found:
-            self.log("nothing found, using backup songs")
-            if self._songs:
-                score, song = self._songs.popleft()
-                while self.is_blocked(
-                    song.get_artist()) and self._songs:
-                    score, song = self._songs.popleft()
-                    yield
-                if not self.is_blocked(song.get_artist()):
-                    self.player_enqueue(song)
-        else:
-            self.player_enqueue(found[0][1])
-        songs = list(self._songs)
-        if len(found) > 1:
-            songs = found[1:] + songs
-        found_artist = ''
         if found:
-            found_artist = found[0][1].get_artist()            
-        clean = self.cleanup(songs, found_artist)
-        self._songs = deque(clean)
-        while len(self._songs) > 10:
-            self._songs.pop()
-        if self._songs:
-            self.log("%s backup songs: \n%s" % (
-                len(self._songs),
-                "\n".join(["%05d %s - %s" % (
-                score,
-                bsong.get_artist(),
-                bsong.get_title()) for score, bsong in list(self._songs)])))
+            self.player_enqueue(found)
         fid = "exhaust" + str(datetime.now())
         self.player_execute_async(exhaust, generator, funcid=fid)
 
