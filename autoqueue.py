@@ -401,6 +401,8 @@ class AutoQueueBase(object):
             return
         self.song = song
         self.player_execute_async(self.on_song_started_generator)
+        for dummy in self.analyze_track(song):
+            pass
         if self.weed:
             fid = "prune_db" + str(datetime.now())
             self.player_execute_async(
