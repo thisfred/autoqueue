@@ -414,7 +414,7 @@ class Db(object):
             exclude_ids = []
         self.add_track(trackid, scms)
         c = ScmsConfiguration(20)
-        added = 0
+        add = []
         best_of_the_rest = []
         for buf, otherid in self.get_tracks(
             exclude_ids=exclude_ids):
@@ -423,15 +423,10 @@ class Db(object):
             other = instance_from_picklestring(buf)
             dist = int(distance(scms, other, c) * 1000)
             if dist < cutoff:
-                connection = self.get_database_connection()
-                connection.execute(
-                    "INSERT INTO distance (track_1, track_2, distance) "
-                    "VALUES (?, ?, ?)",
-                    (trackid, otherid, dist))
-                connection.commit()
-                self.close_database_connection(connection)
-                added += 1
+                add.append((trackid, otherid, dist))
             else:
+                if len(add) > 9:
+                    continue
                 if len(best_of_the_rest) > 9:
                     if dist > best_of_the_rest[-1][0]:
                         continue
@@ -440,6 +435,16 @@ class Db(object):
                 while len(best_of_the_rest) > 10:
                     best_of_the_rest.pop()
             yield
+        added = 0
+        if add:
+            connection = self.get_database_connection()
+            while add:
+                added += 1
+                connection.execute(
+                    "INSERT INTO distance (track_1, track_2, distance) "
+                    "VALUES (?, ?, ?)", add.pop())
+            connection.commit()
+            self.close_database_connection(connection)
         while best_of_the_rest and added < 10:
             dist, trackid, otherid = best_of_the_rest.pop(0)
             connection = self.get_database_connection()
