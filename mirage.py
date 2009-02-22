@@ -338,6 +338,10 @@ class Db(object):
         connection.execute(
             "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
             "INTEGER, distance INTEGER)")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS dtrack1x ON distance (track_1)")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS dtrack2x ON distance (track_2)")
         connection.commit()
         self.close_database_connection(connection)
 

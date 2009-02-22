@@ -16,7 +16,7 @@ from library import library
 from quodlibet.util import copool
 import config
 
-from autoqueue import AutoQueueBase, SongBase, SQL, Cache
+from autoqueue import AutoQueueBase, SongBase, SQL
 
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) api key from last.fm here:
@@ -39,7 +39,11 @@ INT_SETTINGS = {
         'label': 'queue (seconds)'},
     'cache_time': {
         'value': 90,
-        'label': 'cache (days)'},}
+        'label': 'cache (days)'},
+    'backup_songs':{
+        'value': 10,
+        'label': 'no. of backup songs'},
+    }
 BOOL_SETTINGS = {
     'cache': {
         'value': SQL and True,
@@ -139,7 +143,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         rtitles = [Song(song).get_title() for song in songs]
         if self.weed:
             fid = "prune_db" + str(datetime.now())
-            copool.add(
+            self.player_execute_async(
                 self.prune_db, artists=rartists, titles=rtitles, funcid=fid)
         
     def PluginPreferences(self, parent):
