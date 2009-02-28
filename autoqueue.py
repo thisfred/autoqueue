@@ -38,7 +38,7 @@ try:
     MIRAGE = True
 except ImportError:
     MIRAGE = False
-    
+
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) last.fm api key from here:
 # http://www.last.fm/api/account
@@ -50,7 +50,7 @@ ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
              "&artist=%s&api_key=" + API_KEY
 
 # be nice to last.fm
-WAIT_BETWEEN_REQUESTS = timedelta(0, 1) 
+WAIT_BETWEEN_REQUESTS = timedelta(0, 1)
 
 def exhaust(iterator):
     for i in iterator:
@@ -126,7 +126,7 @@ class SongBase(object):
     """A wrapper object around player specific song objects."""
     def __init__(self, song):
         self.song = song
-    
+
     def get_artist(self):
         """return lowercase UNICODE name of artist"""
         return NotImplemented
@@ -146,12 +146,12 @@ class SongBase(object):
     def get_length(self):
         """return length in seconds"""
         return NotImplemented
-    
+
 class AutoQueueBase(object):
     """Generic base class for autoqueue plugins."""
     use_db = False
     store_blocked_artists = False
-    in_memory = False 
+    in_memory = False
     def __init__(self):
         self.connection = None
         self.max_track_match = 10000
@@ -187,7 +187,7 @@ class AutoQueueBase(object):
         if self.in_memory:
             return
         connection.close()
-        
+
     def player_get_userdir(self):
         """get the application user directory to store files"""
         return NotImplemented
@@ -205,7 +205,7 @@ class AutoQueueBase(object):
         if tags:
             return self.player_construct_tag_search(
                 tags, restrictions)
-            
+
     def player_construct_track_search(self, artist, title, restrictions=None):
         """construct a search that looks for songs with this artist
         and title"""
@@ -214,12 +214,12 @@ class AutoQueueBase(object):
     def player_construct_artist_search(self, artist, restrictions=None):
         """construct a search that looks for songs with this artist"""
         return NotImplemented
-    
+
     def player_construct_tag_search(self, tags, restrictions=None):
         """construct a search that looks for songs with these
         tags"""
         return NotImplemented
-        
+
     def player_construct_restrictions(
         self, track_block_time, relaxors, restrictors):
         """contstruct a search to further modify the searches"""
@@ -250,7 +250,7 @@ class AutoQueueBase(object):
             del kwargs['funcid']
         for dummy in method(*args, **kwargs):
             pass
-        
+
     def check_db(self):
         if self.in_memory:
             self.create_db()
@@ -279,10 +279,10 @@ class AutoQueueBase(object):
                 pickle.close()
         except IOError:
             pass
-        
+
     def get_db_path(self):
         return os.path.join(self.player_get_userdir(), "similarity.db")
-    
+
     def get_database_connection(self):
         """get database reference"""
         if self.in_memory:
@@ -418,7 +418,7 @@ class AutoQueueBase(object):
             self._artists_to_update = {}
             self._tracks_to_update = {}
         self.running = False
-   
+
     def block_artist(self, artist_name):
         """store artist name and current daytime so songs by that
         artist can be blocked
@@ -510,7 +510,7 @@ class AutoQueueBase(object):
                 self._tracks_to_update.setdefault(track_id, []).append(result)
             yield (
                 scale(match, self.max_track_match, 10000, invert=True), result)
-            
+
     def get_similar_artists_from_lastfm(self, artist_name, artist_id):
         """get similar artists"""
         self.log("Getting similar artists from last.fm for: %s " % artist_name)
@@ -546,7 +546,7 @@ class AutoQueueBase(object):
             return xmldoc
         except:
             return None
-    
+
     def get_artist(self, artist_name, with_connection=None):
         """get artist information from the database"""
         if with_connection:
@@ -603,6 +603,7 @@ class AutoQueueBase(object):
             "SELECT artists.name, tracks.title FROM tracks INNER JOIN artists"
             " ON tracks.artist = artists.id WHERE tracks.id = ?",
             (track_id, ))
+        result = None
         for row in rows:
             result = (row[0], row[1])
             break
@@ -611,6 +612,7 @@ class AutoQueueBase(object):
 
     def get_artist_tracks(self, artist_id):
         connection = self.get_database_connection()
+        result = []
         rows = connection.execute(
             "SELECT tracks.id FROM tracks INNER JOIN artists"
             " ON tracks.artist = artists.id WHERE artists.id = ?",
@@ -675,7 +677,7 @@ class AutoQueueBase(object):
             for result in scale_transformer(
                 self.get_similar_tracks_from_lastfm(
                 artist_name, title, track_id), self.max_track_match, scale_to):
-                yield result 
+                yield result
         generators = []
         cursor1 = [row for row in connection.execute(
             "SELECT track_2_track.match, artists.name, tracks.title  FROM"
@@ -770,7 +772,7 @@ class AutoQueueBase(object):
         if not tags:
             raise StopIteration
         yield 20000, {'tags': tags}
-        
+
     def _get_artist_match(self, artist1, artist2, with_connection=None):
         """get artist match score from database"""
         if with_connection:
@@ -820,7 +822,7 @@ class AutoQueueBase(object):
         if not with_connection:
             connection.commit()
             self.close_database_connection(connection)
-        
+
     def _update_track_match(self, track1, track2, match, with_connection=None):
         """write match score to the database"""
         if with_connection:
@@ -834,7 +836,7 @@ class AutoQueueBase(object):
         if not with_connection:
             connection.commit()
             self.close_database_connection(connection)
-        
+
     def _insert_artist_match(
         self, artist1, artist2, match, with_connection=None):
         """write match score to the database"""
@@ -849,7 +851,7 @@ class AutoQueueBase(object):
         if not with_connection:
             connection.commit()
             self.close_database_connection(connection)
-        
+
     def _insert_track_match(self, track1, track2, match, with_connection=None):
         """write match score to the database"""
         if with_connection:
@@ -863,7 +865,7 @@ class AutoQueueBase(object):
         if not with_connection:
             connection.commit()
             self.close_database_connection(connection)
-        
+
     def _update_artist(self, artist_id, with_connection=None):
         """write artist information to the database"""
         if with_connection:
@@ -876,7 +878,7 @@ class AutoQueueBase(object):
         if not with_connection:
             connection.commit()
             self.close_database_connection(connection)
-        
+
     def _update_track(self, track_id, with_connection=None):
         """write track information to the database"""
         if with_connection:
@@ -889,7 +891,7 @@ class AutoQueueBase(object):
         if not with_connection:
             connection.commit()
             self.close_database_connection(connection)
-        
+
     def _update_similar_artists(self, artist_id, similar_artists):
         """write similar artist information to the database"""
         connection = self.get_database_connection()
@@ -908,7 +910,7 @@ class AutoQueueBase(object):
         self._update_artist(artist_id, with_connection=connection)
         connection.commit()
         self.close_database_connection(connection)
-        
+
     def _update_similar_tracks(self, track_id, similar_tracks):
         """write similar track information to the database"""
         connection = self.get_database_connection()
@@ -974,7 +976,7 @@ class AutoQueueBase(object):
             "CREATE INDEX IF NOT EXISTS t2tt1x ON track_2_track (track2)")
         connection.commit()
         self.close_database_connection(connection)
-        
+
     def prune_db(self, titles=None, artists=None):
         """clean up the database: remove tracks and artists that are
         never played"""
