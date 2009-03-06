@@ -1,7 +1,7 @@
 """AutoQueue: an automatic queueing plugin library.
 version 0.3
 
-Copyright 2007-2008 Eric Casteleijn <thisfred@gmail.com>,
+Copyright 2007-2009 Eric Casteleijn <thisfred@gmail.com>,
                     Daniel Nouri <daniel.nouri@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -175,6 +175,8 @@ class AutoQueueBase(object):
         self.restrictors = None
         self._artists_to_update = {}
         self._tracks_to_update = {}
+        self.prune_artists = []
+        self.prune_titles = []
         self.player_set_variables_from_config()
         if self.store_blocked_artists:
             self.get_blocked_artists_pickle()
@@ -307,6 +309,7 @@ class AutoQueueBase(object):
         # add the artist to the blocked list, so their songs won't be
         # played for a determined time
         self.block_artist(artist_name)
+        self.prune_artists.append(artist_name)
         if self.running:
             return
         self.song = song
@@ -314,9 +317,7 @@ class AutoQueueBase(object):
         for dummy in self.analyze_track(song):
             pass
         if self.weed:
-            fid = "prune_db" + str(datetime.now())
-            self.player_execute_async(
-                self.prune_db, artists=[artist_name], funcid=fid)
+            self.player_execute_async(self.prune_db)
 
     def on_song_started_generator(self):
         """Should be called by the plugin when a new song starts. If
@@ -383,13 +384,10 @@ class AutoQueueBase(object):
                         yield
                     if not song.get_artist() in blocked:
                         found = song
-                else:
-                    deletes.append(result.get("title"))
+                elif self.weed:
+                    self.prune_titles.append(result.get("title"))
             except StopIteration:
                 break
-        if self.weed and deletes:
-            fid = "prune_db" + str(datetime.now())
-            self.player_execute_async(self.prune_db, titles=deletes, funcid=fid)
         if found:
             self.player_enqueue(found)
         fid = "exhaust" + str(datetime.now())
@@ -977,36 +975,44 @@ class AutoQueueBase(object):
         connection.commit()
         self.close_database_connection(connection)
 
-    def prune_db(self, titles=None, artists=None):
+    def prune_db(self):
         """clean up the database: remove tracks and artists that are
         never played"""
-        if not titles and not artists:
+        if not self.prune_titles and not self.prune_artists:
             return
         rows = []
         yield
-        connection = self.get_database_connection()
-        if artists:
+        if self.prune_artists:
             seen_artists = []
-            for artist in artists:
+            while self.prune_artists:
+                artist = self.prune_artists.pop(0)
                 if artist not in seen_artists:
                     seen_artists.append(artist)
+                    connection = self.get_database_connection()
                     rows.extend([row for row in connection.execute(
                         'SELECT artists.name, tracks.title, tracks.id FROM '
                         'tracks INNER JOIN artists ON tracks.artist = '
                         'artists.id WHERE artists.name = ?;', (artist,))])
-        if titles:
+                    self.close_database_connection(connection)
+                    yield
+        if self.prune_titles:
             seen_titles = []
-            for vtitle in titles:
+            while self.prune_titles:
+                vtitle = self.prune_titles.pop(0)
                 if not vtitle:
                     continue
                 title = vtitle.split("(")[0]
                 if title not in seen_titles:
                     seen_titles.append(title)
+                    connection = self.get_database_connection()
                     rows.extend([row for row in connection.execute(
                         'SELECT artists.name, tracks.title, tracks.id FROM '
                         'tracks INNER JOIN artists ON tracks.artist = '
                         'artists.id WHERE tracks.title = ? OR tracks.title = ?;'
                         , (vtitle, title))])
+                    self.close_database_connection(connection)
+                    yield
+        connection = self.get_database_connection()
         for i, item in enumerate(rows):
             search = self.player_construct_search(
                 {'artist': item[0], 'title': item[1]})

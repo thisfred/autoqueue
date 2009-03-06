@@ -1,6 +1,6 @@
 """AutoQueue: an automatic queueing plugin for Quod Libet.
 version 0.3
-Copyright 2007-2008 Eric Casteleijn <thisfred@gmail.com>
+Copyright 2007-2009 Eric Casteleijn <thisfred@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
@@ -105,7 +105,7 @@ class Song(SongBase):
     def get_length(self):
         return self.song("~#length")
 
-    
+
 class AutoQueue(EventPlugin, AutoQueueBase):
     """The actual plugin class"""
     PLUGIN_ID = "AutoQueue"
@@ -113,13 +113,13 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     PLUGIN_VERSION = "0.1"
 
     __enabled = False
-  
+
     def __init__(self):
         self.use_db = True
         self.store_blocked_artists = True
         EventPlugin.__init__(self)
         AutoQueueBase.__init__(self)
-        
+
     def enabled(self):
         """user enabled the plugin"""
         self.log("enabled")
@@ -137,15 +137,14 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             return
         ssong = Song(song)
         self.on_song_started(ssong)
-        
+
     def plugin_on_removed(self, songs):
         rartists = [Song(song).get_artist() for song in songs]
         rtitles = [Song(song).get_title() for song in songs]
         if self.weed:
-            fid = "prune_db" + str(datetime.now())
-            self.player_execute_async(
-                self.prune_db, artists=rartists, titles=rtitles, funcid=fid)
-        
+            self.prune_artists.extend(rartists)
+            self.prune_titles.extend(rtitles)
+
     def PluginPreferences(self, parent):
         def bool_changed(widget):
             if widget.get_active():
@@ -156,7 +155,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 'plugins',
                 'autoqueue_%s' % widget.get_name(),
                 widget.get_active() and 'true' or 'false')
-            
+
         def str_changed(entry, key):
             value = entry.get_text()
             config.set('plugins', 'autoqueue_%s' % key, value)
@@ -167,7 +166,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             if value:
                 config.set('plugins', 'autoqueue_%s' % key, value)
                 setattr(self, key, int(value))
-            
+
         table = gtk.Table()
         table.set_col_spacings(3)
         i = 0
@@ -208,7 +207,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 entry.set_text(config.get('plugins', 'autoqueue_%s' % setting))
             except:
                 pass
-            
+
         return table
 
     # Implement the player specific methods needed by autoqueue
@@ -221,7 +220,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             return const.USERDIR
         except AttributeError:
             return const.DIR
-    
+
     def player_construct_track_search(self, artist, title, restrictions=None):
         """construct a search that looks for songs with this artist
         and title"""
@@ -247,7 +246,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         if restrictions:
             search = "&(%s, %s)" % (search, restrictions)
         return search
-    
+
     def player_construct_tag_search(self, tags, restrictions=None):
         """construct a search that looks for songs with these
         tags"""
@@ -274,7 +273,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             search = "&(|(%s),%s)" % (
                 ",".join(search_tags), excluding)
         return search
-    
+
     def player_construct_artist_search(self, artist, restrictions=None):
         """construct a search that looks for songs with this artist"""
         search = 'artist = "%s"' % escape(artist)
