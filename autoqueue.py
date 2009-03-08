@@ -313,19 +313,11 @@ class AutoQueueBase(object):
         if self.running:
             return
         self.song = song
-        self.player_execute_async(self.on_song_started_generator)
-        for dummy in self.analyze_track(song):
-            pass
+        if self.desired_queue_length == 0 or self.queue_needs_songs():
+            self.player_execute_async(self.fill_queue)
+        self.player_execute_async(self.analyze_track, song)
         if self.weed:
             self.player_execute_async(self.prune_db)
-
-    def on_song_started_generator(self):
-        """Should be called by the plugin when a new song starts. If
-        the right conditions apply, we start looking for new songs to
-        queue."""
-        if self.desired_queue_length == 0 or self.queue_needs_songs():
-            for dummy in self.fill_queue():
-                yield
 
     def queue_needs_songs(self):
         """determine whether the queue needs more songs added"""
@@ -390,8 +382,8 @@ class AutoQueueBase(object):
                 break
         if found:
             self.player_enqueue(found)
-        fid = "exhaust" + str(datetime.now())
-        self.player_execute_async(exhaust, generator, funcid=fid)
+        for dummy in self.exhaust(generator):
+            yield
 
     def fill_queue(self):
         """search for appropriate songs and put them in the queue"""
@@ -985,6 +977,8 @@ class AutoQueueBase(object):
         if self.prune_artists:
             seen_artists = []
             while self.prune_artists:
+                if len(rows) > 20:
+                    break
                 artist = self.prune_artists.pop(0)
                 if artist not in seen_artists:
                     seen_artists.append(artist)
@@ -998,6 +992,8 @@ class AutoQueueBase(object):
         if self.prune_titles:
             seen_titles = []
             while self.prune_titles:
+                if len(rows) > 20:
+                    break
                 vtitle = self.prune_titles.pop(0)
                 if not vtitle:
                     continue
@@ -1012,11 +1008,16 @@ class AutoQueueBase(object):
                         , (vtitle, title))])
                     self.close_database_connection(connection)
                     yield
-        connection = self.get_database_connection()
-        for i, item in enumerate(rows):
+        nrows = []
+        for item in rows:
             search = self.player_construct_search(
                 {'artist': item[0], 'title': item[1]})
             songs = self.player_search(search)
+            if not songs:
+                nrows.append(row)
+            yield
+        connection = self.get_database_connection()
+        for item in nrows:
             if not songs:
                 self.log("deleting %s - %s" % (item[0], item[1]))
                 track_id = item[2]
@@ -1033,16 +1034,5 @@ class AutoQueueBase(object):
                 connection.execute(
                     'DELETE FROM tracks WHERE id = ?;', (track_id,))
         connection.commit()
-        cursor = connection.cursor()
-        after = {
-            'tracks':
-            cursor.execute('SELECT count(*) from tracks;').fetchone()[0],
-            'track_2_track':
-            cursor.execute('SELECT count(*) from track_2_track;').fetchone()[0],
-            'mirage':
-            cursor.execute('SELECT count(*) from mirage;').fetchone()[0],
-            'distance':
-            cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
         self.close_database_connection(connection)
         yield
-        self.log('db: %s' % repr(after))
