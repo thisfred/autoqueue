@@ -283,6 +283,8 @@ class AutoQueueBase(object):
             pass
 
     def get_db_path(self):
+        if self.in_memory:
+            return ":memory:"
         return os.path.join(self.player_get_userdir(), "similarity.db")
 
     def get_database_connection(self):
@@ -315,7 +317,6 @@ class AutoQueueBase(object):
         self.song = song
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             self.player_execute_async(self.fill_queue)
-        self.player_execute_async(self.analyze_track, song)
         if self.weed:
             self.player_execute_async(self.prune_db)
 

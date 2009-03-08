@@ -82,8 +82,7 @@ class MockPlayer(object):
     def play_song_from_queue(self):
         func = self.plugin_on_song_started
         queue_song = self.queue.pop(0)
-        for thing in func(queue_song):
-            pass
+        func(queue_song)
 
 
 class MockSong(SongBase):
@@ -91,7 +90,7 @@ class MockSong(SongBase):
         self.artist = artist
         self.title = title
         self.tags = tags
-        
+
     def get_artist(self):
         return self.artist.lower()
 
@@ -107,15 +106,13 @@ class MockAutoQueue(AutoQueueBase):
         self.player = MockPlayer(self.started)
         self.use_db = True
         self.in_memory = True
-        super(MockAutoQueue, self).__init__() 
+        super(MockAutoQueue, self).__init__()
         self.by_tags = True
         self.verbose = True
 
     def started(self, song):
         self.on_song_started(song)
-        for dummy in self.on_song_started_generator():
-            yield
-            
+
     def player_construct_track_search(self, artist, title, restrictions=None):
         search = {'artist': artist, 'title': title}
         if restrictions:
@@ -128,7 +125,7 @@ class MockAutoQueue(AutoQueueBase):
         if restrictions:
             search.update(restrictions)
         return search
-    
+
     def player_construct_tag_search(self, tags, restrictions=None):
         """construct a search that looks for songs with these
         tags"""
@@ -137,12 +134,12 @@ class MockAutoQueue(AutoQueueBase):
         if restrictions:
             search.update(restrictions)
         return search
-        
+
     def player_construct_restrictions(
         self, track_block_time, relaxors, restrictors):
         """contstruct a search to further modify the searches"""
         return {}
-    
+
     def player_get_queue_length(self):
         return len(self.player.queue)
 
@@ -167,14 +164,17 @@ class MockAutoQueue(AutoQueueBase):
             return xmldoc
         except:
             return None
-        
+
+    def analyze_track(self, song):
+        yield
+
 class TestSong(object):
     def setup(self):
         songobject = (
             'Joni Mitchell', 'Carey', ['matala', 'crete', 'places', 'villages',
                                        'islands', 'female vocals'])
         self.song = MockSong(*songobject)
-   
+
     def test_get_artist(self):
         assert_equals('joni mitchell', self.song.get_artist())
 
@@ -184,8 +184,8 @@ class TestSong(object):
     def test_get_tags(self):
         assert_equals(['matala', 'crete', 'places', 'villages', 'islands',
                        'female vocals'], self.song.get_tags())
-        
-        
+
+
 @Throttle(WAIT_BETWEEN_REQUESTS)
 def throttled_method():
     return
@@ -197,7 +197,7 @@ def unthrottled_method():
 class TestAutoQueue(object):
     def setup(self):
         self.autoqueue = MockAutoQueue()
-    
+
     def test_in_memory(self):
         assert_equals(True, self.autoqueue.in_memory)
 
@@ -287,7 +287,7 @@ class TestAutoQueue(object):
               'artist': u'ali farka tour\xe9 and ry cooder'}),
             (19682, {'lastfm_match': 318, 'artist': u'sali sidibe'})]
         assert_equals(td, sim)
-        
+
     def test_get_similar_tracks_from_lastfm(self):
         artist = 'nina simone'
         title = "i think it's going to rain today"
@@ -430,41 +430,14 @@ class TestAutoQueue(object):
         for i in range(4):
             self.autoqueue.player_enqueue(test_song)
         assert_equals(False, self.autoqueue.queue_needs_songs())
-        
+
     def test_on_song_started(self):
         test_song = MockSong('Joni Mitchell', 'Carey')
-        for i in self.autoqueue.started(test_song):
-            pass
+        self.autoqueue.started(test_song)
         songs_in_queue = self.autoqueue.player_get_songs_in_queue()
         assert_equals('joanna newsom', songs_in_queue[0].get_artist())
         assert_equals('peach, plum, pear', songs_in_queue[0].get_title())
-        backup_songs = self.autoqueue._songs
-        score, song = backup_songs[0]
-        assert_equals(9336, score)
-        assert_equals('bob dylan', song.get_artist())
-        assert_equals("blowin' in the wind", song.get_title())
 
-    def test_backup_songs(self):
-        test_song = MockSong('Joni Mitchell', 'Carey')
-        test_song2 = MockSong(
-            'Nina Simone', "I Think It's Going to Rain Today",
-            ['forecasts', 'predictions', 'today',
-             'female vocals', 'weather', 'rain'])
-        test_song3 = MockSong('nick drake', 'things behind the sun')
-        self.autoqueue.player_enqueue(test_song)
-        self.autoqueue.player.play_song_from_queue()
-        songs_in_queue = self.autoqueue.player_get_songs_in_queue()
-        assert_equals('joanna newsom', songs_in_queue[0].get_artist())
-        assert_equals('peach, plum, pear', songs_in_queue[0].get_title())
-        backup_songs = self.autoqueue._songs
-        assert_equals('bob dylan', backup_songs[0][1].get_artist())
-        assert_equals("blowin' in the wind", backup_songs[0][1].get_title())
-        self.autoqueue.player.play_song_from_queue()
-        songs_in_queue = self.autoqueue.player_get_songs_in_queue()
-        assert_equals('leonard cohen', songs_in_queue[0].get_artist())
-        assert_equals('suzanne', songs_in_queue[0].get_title())
-        assert_equals(1, len(self.autoqueue._songs))
-        
     def test_block_artist(self):
         artist_name = 'joni mitchell'
         self.autoqueue.block_artist(artist_name)
@@ -483,52 +456,12 @@ class TestAutoQueue(object):
             self.autoqueue.get_last_song().get_title())
         self.autoqueue.player.play_song_from_queue()
         assert_equals(
-            'minnie riperton', self.autoqueue.get_last_song().get_artist())
+            'marlena shaw', self.autoqueue.get_last_song().get_artist())
         assert_equals(
-            'reasons',
-            self.autoqueue.get_last_song().get_title())
-        self.autoqueue.player.play_song_from_queue()
-        assert_equals(
-            'jimmy smith and wes montgomery',
-            self.autoqueue.get_last_song().get_artist())
-        assert_equals(
-            'mellow mood',
+            'will i find my love today?',
             self.autoqueue.get_last_song().get_title())
 
-    def test_get_track_match(self):
-        test_song = MockSong('Joni Mitchell', 'Carey')
-        for i in self.autoqueue.started(test_song):
-            pass
-        artist = 'joni mitchell'
-        title = 'carey'
-        artist2 = 'nick drake'
-        title2 = 'things behind the sun'
-        assert_equals(
-            838,
-            self.autoqueue.get_track_match(artist, title, artist2, title2))
 
-    def test_get_artist_match(self):
-        test_song = MockSong('Joni Mitchell', 'The Last Time I Saw Richard')
-        for i in self.autoqueue.started(test_song):
-            pass
-        artist = 'joni mitchell'
-        artist2 =  'paul simon'
-        ## cursor = self.autoqueue.connection.cursor()
-        ## cursor.execute("SELECT * FROM artist_2_artist INNER JOIN artists ON "
-        ##                "artists.id = artist_2_artist.artist2;")
-        ## for row in cursor:
-        ##     print row
-        assert_equals(
-            6705,
-            self.autoqueue.get_artist_match(artist, artist2))
-
-    def test_get_tag_match(self):
-        tags1 = [
-            'artist:lowlands 2006', 'artist:sxsw 2005', 'modernity', 'love']
-        tags2 = ['covers', 'bloc party', 'modernity', 'love', 'live']
-        assert_equals(2, self.autoqueue.get_tag_match(tags1, tags2))
-
-        
 class TestThrottle(object):
     def test_throttle(self):
         now = datetime.now()
@@ -539,4 +472,4 @@ class TestThrottle(object):
             if datetime.now() > (now + timedelta(0,0,1000)):
                 break
         assert_equals(True, times < 100)
-        
+

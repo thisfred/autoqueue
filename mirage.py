@@ -1,3 +1,25 @@
+"""Mirage integration for autoqueue.
+version 0.3
+
+Copyright 2007-2009 Eric Casteleijn <thisfred@gmail.com>,
+                    Paolo Tranquilli <redsun82@gmail.com>
+
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2, or (at your option)
+any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
+"""
+
 import os, struct, math, sys
 from decimal import Decimal
 from datetime import datetime, timedelta
@@ -151,13 +173,13 @@ def write(string):
         return
     print string,
 
-    
+
 class DbgTimer(object):
     def __init__(self):
         self.startt = 0
         self.stopt = 0
         self.time = 0
-        
+
     def start(self):
         if not DEBUG:
             return
@@ -181,7 +203,7 @@ class AudioDecoder(object):
     def __del__(self):
         mirageaudio_destroy(self.ma)
         self.ma = None
-        
+
     def decode(self, filename):
         frames = c_int(0)
         size = c_int(0)
@@ -237,7 +259,7 @@ class Matrix(object):
         mean = Vector(self.rows)
         mean.d = self.d.mean(1)
         return mean
-    
+
     def mprint(self, rows, columns):
         print "Rows: %s Columns: %s" % (self.rows, self.columns)
         print '['
@@ -255,7 +277,7 @@ class Matrix(object):
                 print self.d[j, i],
             print ";"
         print ']'
-        
+
     def covariance(self, mean):
         cache = Matrix(self.rows, self.columns)
         factor = 1.0 / (self.columns - 1)
@@ -273,13 +295,13 @@ class Matrix(object):
                 cov.d[i, j] = sum
                 if i == j:
                     continue
-                cov.d[j, i] = sum 
+                cov.d[j, i] = sum
         return cov
 
     def write(self, filename):
         """we will use pickle, I think"""
         pass
-    
+
     def load(self, filename):
         f = open(filename, 'rb')
         bytes = f.read(4)
@@ -299,6 +321,9 @@ class Matrix(object):
         m = m.reshape([self.rows + 1, self.columns + 1])
         for i in range(1, self.rows + 1):
             for j in range(1, self.columns + 1):
+                # XXX: the replace is a necessary hack for locales
+                # where str(Decimal) uses commas. If anyone has a
+                # better solution, please let me know.
                 m[i, j] = Decimal(str(self.d[i - 1, j - 1]))
         gauss_jordan(m, self.rows, e, self.rows)
         inv = Matrix(self.rows, self.columns)
@@ -307,7 +332,7 @@ class Matrix(object):
                 inv.d[i - 1, j - 1] = m[i, j]
         return inv
 
-            
+
 class Vector(Matrix):
     def __init__(self, rows):
         super(Vector, self).__init__(rows, 1)
@@ -326,7 +351,7 @@ class CovarianceMatrix(object):
                 for j in range(i, dim_or_matrix.columns):
                     self.d[l] = dim_or_matrix.d[i,j];
                     l += 1
-        
+
 class Db(object):
     def __init__(self, path):
         self.dbpath = path
@@ -349,7 +374,7 @@ class Db(object):
         if self.dbpath == ':memory:':
             return
         connection.close()
-        
+
     def get_database_connection(self):
         if self.dbpath == ':memory:':
             if not self.connection:
@@ -357,7 +382,7 @@ class Db(object):
             return self.connection
         return sqlite3.connect(
             self.dbpath, timeout=5.0, isolation_level="immediate")
-    
+
     def add_track(self, trackid, scms):
         connection = self.get_database_connection()
         connection.execute("INSERT INTO mirage (trackid, scms) VALUES (?, ?)",
@@ -388,7 +413,7 @@ class Db(object):
             return instance_from_picklestring(row[0])
         self.close_database_connection(connection)
         return None
-    
+
     def get_tracks(self, exclude_ids=None):
         if not exclude_ids:
             exclude_ids = []
@@ -399,14 +424,14 @@ class Db(object):
         result = [row for row in rows]
         self.close_database_connection(connection)
         return result
-    
+
     def get_all_track_ids(self):
         connection = self.get_database_connection()
         rows = connection.execute("SELECT trackid FROM mirage")
         result = [row[0] for row in rows]
         self.close_database_connection(connection)
         return result
-        
+
     def reset(self):
         connection = self.get_database_connection()
         connection.execute("DELETE FROM mirage")
@@ -449,25 +474,24 @@ class Db(object):
                     "VALUES (?, ?, ?)", add.pop())
             connection.commit()
             self.close_database_connection(connection)
+        connection = self.get_database_connection()
         while best_of_the_rest and added < 10:
             dist, trackid, otherid = best_of_the_rest.pop(0)
-            connection = self.get_database_connection()
             connection.execute(
                 "INSERT INTO distance (track_1, track_2, distance) "
                 "VALUES (?, ?, ?)",
                 (trackid, otherid, dist))
-            connection.commit()
-            self.close_database_connection(connection)
-            yield
             added += 1
+        connection.commit()
+        self.close_database_connection(connection)
         print "added %d connections" % added
-        
+
     def compare(self, id1, id2):
         c = ScmsConfiguration(20)
         t1 = self.get_track(id1)
         t2 = self.get_track(id2)
         return int(distance(t1, t2, c) * 1000)
-        
+
     def get_neighbours(self, trackid):
         connection = self.get_database_connection()
         neighbours1 = [row for row in connection.execute(
@@ -482,7 +506,7 @@ class Db(object):
         neighbours1.extend(neighbours2)
         neighbours1.sort()
         return neighbours1
-            
+
 class Mfcc(object):
     def __init__(self, winsize, srate, filters, cc):
         here = os.path.dirname( __file__)
@@ -498,7 +522,7 @@ class Mfcc(object):
                 return 0.0
             return 10.0 * math.log10(x)
         vf = vectorize(f)
-        
+
         t = DbgTimer()
         t.start()
         mel = Matrix(self.filterweights.rows, m.columns)
@@ -506,7 +530,7 @@ class Mfcc(object):
         mel.d = vf(mel.d)
         mel.d = mel.d + dot(self.filterweights.d, m.d)
         mel.d = vf(mel.d)
-        
+
         try:
             mfcc = self.dct.multiply(mel)
             t.stop()
@@ -570,7 +594,7 @@ class Scms(object):
         self.cov = None
         self.icov = None
 
-    
+
 class Mir(object):
 
     def __init__(self):
@@ -599,7 +623,7 @@ class Mir(object):
 
         t.stop()
         return scms
-        
+
     def similar_tracks(ids, exclude, db, length=0):
         seed_scms = []
         for i in range(len(ids)):
@@ -617,7 +641,7 @@ class Mir(object):
         for row in cursor.fetchall():
             cur_scms = instance_from_picklestring(row[0])
             cur_id = row[1]
-            d = 0.0        
+            d = 0.0
             count = 0.0
             for j in range(len(seed_scms)):
                 dcur = distance(seed_scms[j], cur_scms, c)
@@ -651,7 +675,7 @@ class Mir(object):
 ##     testdb = Db(":memory:")
 ##     for i, scms in enumerate(scmses):
 ##         testdb.add_track(i, scms)
-        
+
 ##     print sorted(
 ##         [id for (scms, id) in testdb.get_tracks(exclude_ids=['3','4'])]) # [0,1,2]
 
