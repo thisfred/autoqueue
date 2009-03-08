@@ -977,8 +977,6 @@ class AutoQueueBase(object):
         if self.prune_artists:
             seen_artists = []
             while self.prune_artists:
-                if len(rows) > 20:
-                    break
                 artist = self.prune_artists.pop(0)
                 if artist not in seen_artists:
                     seen_artists.append(artist)
@@ -992,8 +990,6 @@ class AutoQueueBase(object):
         if self.prune_titles:
             seen_titles = []
             while self.prune_titles:
-                if len(rows) > 20:
-                    break
                 vtitle = self.prune_titles.pop(0)
                 if not vtitle:
                     continue
