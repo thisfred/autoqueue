@@ -1031,3 +1031,16 @@ class AutoQueueBase(object):
             connection.commit()
             self.close_database_connection(connection)
             yield
+        connection = self.get_database_connection()
+        cursor = connection.cursor()
+        after = {
+            'tracks':
+            cursor.execute('SELECT count(*) from tracks;').fetchone()[0],
+            'track_2_track':
+            cursor.execute('SELECT count(*) from track_2_track;').fetchone()[0],
+            'mirage':
+            cursor.execute('SELECT count(*) from mirage;').fetchone()[0],
+            'distance':
+            cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
+        self.close_database_connection(connection)
+        self.log('db: %s' % repr(after))
