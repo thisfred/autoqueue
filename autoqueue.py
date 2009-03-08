@@ -1014,25 +1014,24 @@ class AutoQueueBase(object):
                 {'artist': item[0], 'title': item[1]})
             songs = self.player_search(search)
             if not songs:
-                nrows.append(row)
+                nrows.append(item)
             yield
-        connection = self.get_database_connection()
         for item in nrows:
-            if not songs:
-                self.log("deleting %s - %s" % (item[0], item[1]))
-                track_id = item[2]
-                connection.execute(
-                    'DELETE FROM distance WHERE track_1 = ? OR track_2 = '
-                    '?;',
-                    (track_id, track_id))
-                connection.execute(
-                    'DELETE FROM mirage WHERE trackid = ?;', (track_id,))
-                connection.execute(
-                    'DELETE FROM track_2_track WHERE track1 = ? OR track2 ='
-                    ' ?;',
-                    (track_id, track_id))
-                connection.execute(
-                    'DELETE FROM tracks WHERE id = ?;', (track_id,))
-        connection.commit()
-        self.close_database_connection(connection)
-        yield
+            connection = self.get_database_connection()
+            self.log("deleting %s - %s" % (item[0], item[1]))
+            track_id = item[2]
+            connection.execute(
+                'DELETE FROM distance WHERE track_1 = ? OR track_2 = '
+                '?;',
+                (track_id, track_id))
+            connection.execute(
+                'DELETE FROM mirage WHERE trackid = ?;', (track_id,))
+            connection.execute(
+                'DELETE FROM track_2_track WHERE track1 = ? OR track2 ='
+                ' ?;',
+                (track_id, track_id))
+            connection.execute(
+                'DELETE FROM tracks WHERE id = ?;', (track_id,))
+            connection.commit()
+            self.close_database_connection(connection)
+            yield
