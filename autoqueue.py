@@ -382,7 +382,7 @@ class AutoQueueBase(object):
                 break
         if found:
             self.player_enqueue(found)
-        for dummy in self.exhaust(generator):
+        for dummy in exhaust(generator):
             yield
 
     def fill_queue(self):
