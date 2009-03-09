@@ -177,6 +177,8 @@ class AutoQueueBase(object):
         self._tracks_to_update = {}
         self.prune_artists = []
         self.prune_titles = []
+        self._rows = []
+        self._nrows = []
         self.player_set_variables_from_config()
         if self.store_blocked_artists:
             self.get_blocked_artists_pickle()
@@ -973,7 +975,6 @@ class AutoQueueBase(object):
         never played"""
         if not self.prune_titles and not self.prune_artists:
             return
-        rows = []
         yield
         if self.prune_artists:
             seen_artists = []
@@ -982,7 +983,7 @@ class AutoQueueBase(object):
                 if artist not in seen_artists:
                     seen_artists.append(artist)
                     connection = self.get_database_connection()
-                    rows.extend([row for row in connection.execute(
+                    self._rows.extend([row for row in connection.execute(
                         'SELECT artists.name, tracks.title, tracks.id FROM '
                         'tracks INNER JOIN artists ON tracks.artist = '
                         'artists.id WHERE artists.name = ?;', (artist,))])
@@ -998,22 +999,23 @@ class AutoQueueBase(object):
                 if title not in seen_titles:
                     seen_titles.append(title)
                     connection = self.get_database_connection()
-                    rows.extend([row for row in connection.execute(
+                    self._rows.extend([row for row in connection.execute(
                         'SELECT artists.name, tracks.title, tracks.id FROM '
                         'tracks INNER JOIN artists ON tracks.artist = '
                         'artists.id WHERE tracks.title = ? OR tracks.title = ?;'
                         , (vtitle, title))])
                     self.close_database_connection(connection)
                     yield
-        nrows = []
-        for item in rows:
+        while self._rows:
+            item = self._rows.pop(0)
             search = self.player_construct_search(
                 {'artist': item[0], 'title': item[1]})
             songs = self.player_search(search)
             if not songs:
-                nrows.append(item)
+                self._nrows.append(item)
             yield
-        for item in nrows:
+        while self._nrows:
+            item = self._nrows.pop(0)
             connection = self.get_database_connection()
             self.log("deleting %s - %s" % (item[0], item[1]))
             track_id = item[2]
