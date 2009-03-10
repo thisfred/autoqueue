@@ -321,6 +321,8 @@ class AutoQueueBase(object):
             self.player_execute_async(self.fill_queue)
         if self.weed:
             self.player_execute_async(self.prune_db)
+            self.player_execute_async(self.prune_search)
+            self.player_execute_async(self.prune_delete)
 
     def queue_needs_songs(self):
         """determine whether the queue needs more songs added"""
@@ -983,7 +985,8 @@ class AutoQueueBase(object):
                 if artist not in seen_artists:
                     seen_artists.append(artist)
                     connection = self.get_database_connection()
-                    self._rows.extend([row for row in connection.execute(
+                    self._rows.extend(
+                        [(row[0], row[1], row[2]) for row in connection.execute(
                         'SELECT artists.name, tracks.title, tracks.id FROM '
                         'tracks INNER JOIN artists ON tracks.artist = '
                         'artists.id WHERE artists.name = ?;', (artist,))])
@@ -999,13 +1002,16 @@ class AutoQueueBase(object):
                 if title not in seen_titles:
                     seen_titles.append(title)
                     connection = self.get_database_connection()
-                    self._rows.extend([row for row in connection.execute(
+                    self._rows.extend(
+                        [(row[0], row[1], row[2]) for row in connection.execute(
                         'SELECT artists.name, tracks.title, tracks.id FROM '
                         'tracks INNER JOIN artists ON tracks.artist = '
                         'artists.id WHERE tracks.title = ? OR tracks.title = ?;'
                         , (vtitle, title))])
                     self.close_database_connection(connection)
                     yield
+
+    def prune_search(self):
         while self._rows:
             item = self._rows.pop(0)
             search = self.player_construct_search(
@@ -1014,6 +1020,8 @@ class AutoQueueBase(object):
             if not songs:
                 self._nrows.append(item)
             yield
+
+    def prune_delete(self):
         while self._nrows:
             item = self._nrows.pop(0)
             connection = self.get_database_connection()
