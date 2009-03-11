@@ -73,17 +73,24 @@ mirageaudio_canceldecode = libmirageaudio.mirageaudio_canceldecode
 def distance(scms1, scms2, scmsconf):
     val = 0.0
     dim = scmsconf.get_dimension()
-    covlen = (dim * dim + dim) / 2
-    s1cov = scms1.cov.d
-    s2icov = scms2.icov.d
-    s1icov = scms1.icov.d
-    s2cov = scms2.cov.d
-    s1mean = scms1.mean.d
-    s2mean = scms2.mean.d
+    covlen = scmsconf.get_covariance_length()
+    s1cov = scms1.cov
+    s2icov = scms2.icov
+    s1icov = scms1.icov
+    s2cov = scms2.cov
+    s1mean = scms1.mean
+    s2mean = scms2.mean
 
     for i in range(covlen):
-        val += s1cov[i] * s2icov[i] + s2cov[i] * s1icov[i]
         scmsconf.aicov[i] = s1icov[i] + s2icov[i]
+
+    for i in range(dim):
+        idx = i * dim - (i * i + i) / 2
+        val += s1cov[idx + i] * s2icov[idx + i] + s2cov[idx + i] * s1icov[
+            idx + i]
+        for k in range (i+1, dim):
+            val += 2 * s1cov[idx + k] * s2icov[idx + k] + 2 * s2cov[
+                idx + k] * s1icov[idx + k];
 
     for i in range(dim):
         scmsconf.mdiff[i] = s1mean[i] - s2mean[i]
@@ -98,7 +105,7 @@ def distance(scms1, scms2, scmsconf):
             idx += 1
             tmp1 += scmsconf.aicov[idx] * scmsconf.mdiff[k]
         val += tmp1 * scmsconf.mdiff[i]
-    val = val/2 - scms1.cov.dim
+    val = val / 4 - scmsconf.get_dimension() / 2
     return val
 
 def gauss_jordan(a, n, b, m):
@@ -337,20 +344,6 @@ class Vector(Matrix):
     def __init__(self, rows):
         super(Vector, self).__init__(rows, 1)
 
-class CovarianceMatrix(object):
-    def __init__(self, dim_or_matrix):
-        from_matrix = isinstance(dim_or_matrix, Matrix)
-        if not from_matrix:
-            self.dim = dim_or_matrix
-            self.d = zeros([(self.dim * self.dim + self.dim) / 2])
-        else:
-            self.dim = dim_or_matrix.rows
-            self.d = zeros([(self.dim * self.dim + self.dim) / 2])
-            l = 0
-            for i in range(self.dim):
-                for j in range(i, dim_or_matrix.columns):
-                    self.d[l] = dim_or_matrix.d[i,j];
-                    l += 1
 
 class Db(object):
     def __init__(self, path):
@@ -507,6 +500,7 @@ class Db(object):
         neighbours1.sort()
         return neighbours1
 
+
 class Mfcc(object):
     def __init__(self, winsize, srate, filters, cc):
         here = os.path.dirname( __file__)
@@ -515,6 +509,18 @@ class Mfcc(object):
         self.filterweights = Matrix(1,1)
         self.filterweights.load(os.path.join(
             here, 'res', 'filterweights.filter'))
+
+        self.fwft = [[0, 0]] * self.filterweights.rows
+        for i in range(self.filterweights.rows):
+            last = 0.0
+            for j in range(self.filterweights.columns):
+                if self.filterweights.d[i, j] and last:
+                    self.fwft[i][0] = j
+                elif last and not self.filterweights.d[i, j]:
+                    self.fwft[i][1] = j
+                last = self.filterweights.d[i, j]
+                if last:
+                    self.fwft[i][1] = self.filterweights.columns
 
     def apply(self, m):
         def f(x):
@@ -526,8 +532,6 @@ class Mfcc(object):
         t = DbgTimer()
         t.start()
         mel = Matrix(self.filterweights.rows, m.columns)
-        mel = self.filterweights.multiply(m)
-        mel.d = vf(mel.d)
         mel.d = mel.d + dot(self.filterweights.d, m.d)
         mel.d = vf(mel.d)
 
@@ -539,25 +543,6 @@ class Mfcc(object):
         except MatrixDimensionMismatchException:
             raise MfccFailedException
 
-def scms_factory(mfcc):
-    t = DbgTimer()
-    t.start()
-    s = Scms()
-    s.mean = mfcc.mean()
-    full_cov = mfcc.covariance(s.mean)
-
-    s.cov = CovarianceMatrix(full_cov)
-    for i in range(s.cov.dim):
-        for j in range(i + 1, s.cov.dim):
-            s.cov.d[i * s.cov.dim + j - (i * i + i)/2] *= 2
-    try:
-        full_icov = full_cov.inverse()
-        s.icov = CovarianceMatrix(full_icov)
-    except MatrixSingularException:
-        raise ScmsImpossibleException
-    t.stop()
-    write_line("Mirage: scms created in: %s" % t.time)
-    return s
 
 def instance_from_picklestring(picklestring):
     f = StringIO(picklestring)
@@ -589,14 +574,40 @@ class ScmsConfiguration(object):
 
 
 class Scms(object):
-    def __init__(self):
-        self.mean = None
-        self.cov = None
-        self.icov = None
+    def __init__(self, dim):
+        self.mean = []
+        self.cov = []
+        self.icov = []
+        self.dim = dim
+        self.sym_dim = (dim * dim + dim) / 2
+
+
+def scms_factory(mfcc):
+    t = DbgTimer()
+    t.start()
+
+    m = mfcc.mean()
+
+    c = mfcc.covariance(m)
+
+    try:
+        ic = c.inverse()
+    except MatrixSingularException:
+        raise ScmsImpossibleException
+
+    dim = m.rows
+    s = Scms(dim)
+    for i in range(dim):
+        s.mean.append(m.d[i])
+        for j in range(i, dim):
+            s.cov.append(c.d[i, j])
+            s.icov.append(ic.d[i, j])
+    t.stop()
+    write_line("Mirage: scms created in: %s" % t.time)
+    return s
 
 
 class Mir(object):
-
     def __init__(self):
         self.samplingrate = 22050
         self.windowsize = 1024
