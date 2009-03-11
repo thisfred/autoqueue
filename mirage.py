@@ -431,7 +431,8 @@ class Db(object):
         connection.commit()
         self.close_database_connection(connection)
 
-    def add_and_compare(self, trackid, scms, cutoff=15000, exclude_ids=None):
+    def add_and_compare(self, trackid, scms, cutoff=10000, exclude_ids=None):
+        min_add = 5
         if not exclude_ids:
             exclude_ids = []
         self.add_track(trackid, scms)
@@ -447,14 +448,14 @@ class Db(object):
             if dist < cutoff:
                 add.append((trackid, otherid, dist))
             else:
-                if len(add) > 9:
+                if len(add) > min_add - 1:
                     continue
-                if len(best_of_the_rest) > 9:
+                if len(best_of_the_rest) > min_add - 1:
                     if dist > best_of_the_rest[-1][0]:
                         continue
                 best_of_the_rest.append((dist, trackid, otherid))
                 best_of_the_rest.sort()
-                while len(best_of_the_rest) > 10:
+                while len(best_of_the_rest) > min_add:
                     best_of_the_rest.pop()
             yield
         added = 0
@@ -468,7 +469,7 @@ class Db(object):
             connection.commit()
             self.close_database_connection(connection)
         connection = self.get_database_connection()
-        while best_of_the_rest and added < 10:
+        while best_of_the_rest and added < min_add:
             dist, trackid, otherid = best_of_the_rest.pop(0)
             connection.execute(
                 "INSERT INTO distance (track_1, track_2, distance) "

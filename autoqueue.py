@@ -653,7 +653,10 @@ class AutoQueueBase(object):
         track_id, artist_id, updated = track[0], track[1], track[3]
         db = Db(self.get_db_path())
         for match, mtrack_id in db.get_neighbours(track_id):
-            track_artist, track_title = self.get_artist_and_title(mtrack_id)
+            result = self.get_artist_and_title(mtrack_id)
+            if not result:
+                continue
+            track_artist, track_title = result
             yield(scale(match, maximum, scale_to),
                   {'mirage_distance': match,
                    'artist': track_artist,
