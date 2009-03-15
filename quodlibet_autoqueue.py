@@ -68,12 +68,9 @@ BOOL_SETTINGS = {
         'label': 'keep db clean'},
     }
 STR_SETTINGS = {
-    'restrictors' : {
+    'restrictions' : {
         'value': '',
         'label': 'restrict',},
-    'relaxors' : {
-        'value': '',
-        'label': 'relax',},
     }
 
 def escape(the_string):
@@ -104,6 +101,18 @@ class Song(SongBase):
 
     def get_length(self):
         return self.song("~#length")
+
+    def get_playcount(self):
+        return self.song("~#playcount")
+
+    def get_added(self):
+        return self.song("~#added")
+
+    def get_last_played(self):
+        return self.song("~#lastplayed")
+
+    def get_rating(self):
+        return self.song("~#rating")
 
 
 class AutoQueue(EventPlugin, AutoQueueBase):
@@ -280,16 +289,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         if restrictions:
             search = "&(%s, %s)" % (search, restrictions)
         return search
-
-    def player_construct_restrictions(
-        self, track_block_time, relaxors, restrictors):
-        """contstruct a search to further modify the searches"""
-        restrictions = "#(laststarted > %s days)" % track_block_time
-        if relaxors:
-            restrictions = "|(%s, %s)" % (restrictions, relaxors)
-        if restrictors:
-            restrictions = "&(%s, %s)" % (restrictions, restrictors)
-        return restrictions
 
     def player_set_variables_from_config(self):
         """Initialize user settings from the configuration storage"""

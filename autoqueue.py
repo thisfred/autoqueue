@@ -20,6 +20,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
 
 from collections import deque
+from math import log
 from datetime import datetime, timedelta
 from time import strptime, sleep
 import urllib
@@ -122,6 +123,7 @@ class Throttle(object):
             return result
         return wrapper
 
+
 class SongBase(object):
     """A wrapper object around player specific song objects."""
     def __init__(self, song):
@@ -147,6 +149,23 @@ class SongBase(object):
         """return length in seconds"""
         return NotImplemented
 
+    def get_playcount(self):
+        """Return the number of times the song was played."""
+        return NotImplemented
+
+    def get_added(self):
+        """Return the date the song was added to the library."""
+        return NotImplemented
+
+    def get_last_played(self):
+        """Return the date the song was last played."""
+        return NotImplemented
+
+    def get_rating(self):
+        """Return the rating of the song."""
+        return NotImplemented
+
+
 class AutoQueueBase(object):
     """Generic base class for autoqueue plugins."""
     use_db = False
@@ -171,8 +190,7 @@ class AutoQueueBase(object):
         self.song = None
         self._blocked_artists = deque([])
         self._blocked_artists_times = deque([])
-        self.relaxors = None
-        self.restrictors = None
+        self.restrictions = None
         self._artists_to_update = {}
         self._tracks_to_update = {}
         self.prune_artists = []
@@ -222,11 +240,6 @@ class AutoQueueBase(object):
     def player_construct_tag_search(self, tags, restrictions=None):
         """construct a search that looks for songs with these
         tags"""
-        return NotImplemented
-
-    def player_construct_restrictions(
-        self, track_block_time, relaxors, restrictors):
-        """contstruct a search to further modify the searches"""
         return NotImplemented
 
     def player_set_variables_from_config(self):
@@ -299,6 +312,26 @@ class AutoQueueBase(object):
         return sqlite3.connect(
             self.get_db_path(), timeout=5.0, isolation_level="immediate")
 
+    def disallowed(self, song):
+        if song.get_artist() in self.get_blocked_artists():
+            return True
+        try:
+            lastplayed = song.get_last_played()
+        except NotImplemented:
+            return False
+        now = datetime.now()
+        delta = now - datetime.fromtimestamp(lastplayed)
+        days_ago = delta.days
+        try:
+            rating = song.get_rating()
+        except NotImplemented:
+            return self.track_block_time > days_ago
+        bdays = max(1, self.track_block_time)
+        suggested = rating**(log(bdays, 0.5))
+        self.log("last played %s days ago" % repr(days_ago))
+        self.log("suggested play: after %s days" % suggested)
+        return suggested > days_ago
+
     def on_song_started(self, song):
         """Should be called by the plugin when a new song starts. If
         the right conditions apply, we start looking for new songs to
@@ -348,8 +381,6 @@ class AutoQueueBase(object):
 
     def queue_song(self):
         """Queue a single track"""
-        restrictions = self.player_construct_restrictions(
-            self.track_block_time, self.relaxors, self.restrictors)
         self.unblock_artists()
         found = None
         generator = self.song_generator()
@@ -364,23 +395,20 @@ class AutoQueueBase(object):
                     yield
                 score, result = item
                 self.log("looking for: %s, %s" % (score, repr(result)))
-                search = self.player_construct_search(result, restrictions)
+                search = self.player_construct_search(result, self.restrictions)
                 artist = result.get('artist')
                 if artist:
                     if artist in blocked:
                         continue
                 songs = self.player_search(search)
                 if songs:
-                    song = random.choice(songs)
-                    songs.remove(song)
-                    while (
-                        song.get_artist() in blocked
-                        and songs):
+                    while songs:
                         song = random.choice(songs)
                         songs.remove(song)
+                        if not self.disallowed(song):
+                            found = song
+                            break
                         yield
-                    if not song.get_artist() in blocked:
-                        found = song
                 elif self.weed:
                     self.prune_titles.append(result.get("title"))
             except StopIteration:
@@ -755,8 +783,8 @@ class AutoQueueBase(object):
                     cursor2, self.max_artist_match, scale_to, offset=10000))
             else:
                 generators.append(
-                    self.get_similar_artists_from_lastfm(artist_name, artist_id)
-                    )
+                    self.get_similar_artists_from_lastfm(
+                    artist_name, artist_id))
         else:
             generators.append(
                 self.get_similar_artists_from_lastfm(artist_name, artist_id))
