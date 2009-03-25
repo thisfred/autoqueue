@@ -308,9 +308,12 @@ class AutoQueueBase(object):
             if self.connection:
                 return self.connection
             self.connection = sqlite3.connect(":memory:")
+            self.connection.text_factory = str
             return self.connection
-        return sqlite3.connect(
+        connection = sqlite3.connect(
             self.get_db_path(), timeout=5.0, isolation_level="immediate")
+        connection.text_factory = str
+        return connection
 
     def disallowed(self, song):
         if song.get_artist() in self.get_blocked_artists():

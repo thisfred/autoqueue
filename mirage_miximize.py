@@ -26,7 +26,7 @@ class MirageMiximizePlugin(SongsMenuPlugin):
         super(MirageMiximizePlugin, self).__init__(*args)
         self.mir = Mir()
         self.dbpath = os.path.join(self.player_get_userdir(), "similarity.db")
-        
+
     def player_get_userdir(self):
         """get the application user directory to store files"""
         try:
@@ -77,11 +77,12 @@ class MirageMiximizePlugin(SongsMenuPlugin):
         for cluster in clusterer.clusters:
             qsongs.extend([c for id, c in cluster])
         self.player_enqueue(qsongs)
-        
+
     def get_track(self, artist_name, title):
         """get track information from the database"""
         connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate") 
+            self.dbpath, timeout=5.0, isolation_level="immediate")
+        connection.text_factory = str
         title = title.encode("UTF-8")
         artist_id = self.get_artist(artist_name)[0]
         rows = connection.execute(
@@ -100,11 +101,12 @@ class MirageMiximizePlugin(SongsMenuPlugin):
             connection.close()
             return row
         connection.close()
-        
+
     def get_artist(self, artist_name):
         """get artist information from the database"""
         connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate") 
+            self.dbpath, timeout=5.0, isolation_level="immediate")
+        connection.text_factory = str
         artist_name = artist_name.encode("UTF-8")
         rows = connection.execute(
             "SELECT * FROM artists WHERE name = ?", (artist_name,))
@@ -123,6 +125,7 @@ class MirageMiximizePlugin(SongsMenuPlugin):
     def get_artist_tracks(self, artist_id):
         connection = sqlite3.connect(
             self.dbpath, timeout=5.0, isolation_level="immediate")
+        connection.text_factory = str
         rows = connection.execute(
             "SELECT tracks.id FROM tracks INNER JOIN artists"
             " ON tracks.artist = artists.id WHERE artists.id = ?",
@@ -138,13 +141,13 @@ def in_the_middle(song1, song2, cluster):
     if song1 in cluster:
         index = cluster.index(song1)
         if index > 0 and index < len(cluster) - 1:
-            return True        
+            return True
     if song2 in cluster:
         index = cluster.index(song2)
         if index > 0 and index < len(cluster) - 1:
-            return True        
+            return True
     return False
-    
+
 def at_the_ends(song1, song2, cluster):
     return (cluster[0] == song1 and cluster[-1] == song2) or (
         cluster[-1] == song1 and cluster[0] == song2)
@@ -163,7 +166,7 @@ class Pair():
 
     def songs(self):
         return [self.song1, self.song2]
-        
+
     def __cmp__(self, other):
         if self.score < other.score:
             return -1
@@ -178,7 +181,7 @@ class Clusterer(object):
         self.similarities = []
         self.build_similarity_matrix(songs, comparison_function)
         self.build_clusters()
-        
+
     def build_similarity_matrix(self, songs, comparison_function):
         for song in songs:
             for song2 in songs[songs.index(song) + 1:]:
@@ -199,7 +202,7 @@ class Clusterer(object):
             result = cluster1[:-1] + cluster2
         self.clean_similarities(result)
         return result
-    
+
     def merge_clusters(self):
         new = []
         clusters = self.clusters

@@ -372,9 +372,12 @@ class Db(object):
         if self.dbpath == ':memory:':
             if not self.connection:
                 self.connection = sqlite3.connect(':memory:')
+                self.connection.text_factory = str
             return self.connection
-        return sqlite3.connect(
+        connection = sqlite3.connect(
             self.dbpath, timeout=5.0, isolation_level="immediate")
+        connection.text_factory = str
+        return connection
 
     def add_track(self, trackid, scms):
         connection = self.get_database_connection()

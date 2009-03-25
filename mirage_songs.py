@@ -25,7 +25,7 @@ class MirageSongsPlugin(SongsMenuPlugin):
     def __init__(self, *args):
         super(MirageSongsPlugin, self).__init__(*args)
         self.mir = Mir()
-        self.dbpath = os.path.join(self.player_get_userdir(), "similarity.db")        
+        self.dbpath = os.path.join(self.player_get_userdir(), "similarity.db")
 
     def player_get_userdir(self):
         """get the application user directory to store files"""
@@ -56,7 +56,7 @@ class MirageSongsPlugin(SongsMenuPlugin):
                 yield
             yield
         print "done"
-        
+
     def plugin_songs(self, songs):
         fid = "mirage_songs" + str(datetime.now())
         copool.add(self.do_stuff, songs, funcid=fid)
@@ -64,7 +64,8 @@ class MirageSongsPlugin(SongsMenuPlugin):
     def get_track(self, artist_name, title):
         """get track information from the database"""
         connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate") 
+            self.dbpath, timeout=5.0, isolation_level="immediate")
+        connection.text_factory = str
         title = title.encode("UTF-8")
         artist_id = self.get_artist(artist_name)[0]
         rows = connection.execute(
@@ -83,11 +84,12 @@ class MirageSongsPlugin(SongsMenuPlugin):
             connection.close()
             return row
         connection.close()
-            
+
     def get_artist(self, artist_name):
         """get artist information from the database"""
         connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate") 
+            self.dbpath, timeout=5.0, isolation_level="immediate")
+        connection.text_factory = str
         artist_name = artist_name.encode("UTF-8")
         rows = connection.execute(
             "SELECT * FROM artists WHERE name = ?", (artist_name,))
