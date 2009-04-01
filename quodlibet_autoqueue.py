@@ -108,8 +108,8 @@ class Song(SongBase):
     def get_added(self):
         return self.song("~#added")
 
-    def get_last_played(self):
-        return self.song("~#lastplayed")
+    def get_last_started(self):
+        return self.song("~#laststarted")
 
     def get_rating(self):
         return self.song("~#rating")

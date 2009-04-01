@@ -22,7 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 from collections import deque
 from math import log
 from datetime import datetime, timedelta
-from time import strptime, sleep
+from time import strptime, sleep, time
 import urllib
 import random, os, heapq
 from xml.dom import minidom
@@ -157,7 +157,7 @@ class SongBase(object):
         """Return the date the song was added to the library."""
         return NotImplemented
 
-    def get_last_played(self):
+    def get_last_started(self):
         """Return the date the song was last played."""
         return NotImplemented
 
@@ -319,7 +319,7 @@ class AutoQueueBase(object):
         if song.get_artist() in self.get_blocked_artists():
             return True
         try:
-            lastplayed = song.get_last_played()
+            lastplayed = song.get_last_started()
         except NotImplemented:
             return False
         now = datetime.now()
@@ -330,9 +330,9 @@ class AutoQueueBase(object):
         except NotImplemented:
             return self.track_block_time > days_ago
         bdays = max(1, self.track_block_time)
-        suggested = rating**(log(bdays, 0.5))
-        self.log("last played %s days ago" % repr(days_ago))
-        self.log("suggested play: after %s days" % suggested)
+        suggested = 2 * bdays * (1 - rating)
+        self.log("rating: %s last played %s days ago, suggested play: after %s "
+                 "days" % (repr(rating), repr(days_ago), suggested))
         return suggested > days_ago
 
     def on_song_started(self, song):
@@ -359,6 +359,8 @@ class AutoQueueBase(object):
             self.player_execute_async(self.prune_db)
             self.player_execute_async(self.prune_search)
             self.player_execute_async(self.prune_delete)
+        fid = "analyze_track" + str(int(time()))
+        self.player_execute_async(self.analyze_track, song, funcid=fid)
 
     def queue_needs_songs(self):
         """determine whether the queue needs more songs added"""
