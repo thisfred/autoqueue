@@ -20,7 +20,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
 
 from collections import deque
-from math import log
 from datetime import datetime, timedelta
 from time import strptime, sleep, time
 import urllib
@@ -179,6 +178,7 @@ class AutoQueueBase(object):
         self.track_block_time = 30
         self.desired_queue_length = 0
         self.cache_time = 90
+        self.cached_misses = []
         self.by_mirage = False
         self.by_tracks = True
         self.by_artists = True
@@ -213,20 +213,6 @@ class AutoQueueBase(object):
     def player_get_userdir(self):
         """get the application user directory to store files"""
         return NotImplemented
-
-    def player_construct_search(self, result, restrictions=None):
-        artist = result.get('artist')
-        title = result.get('title')
-        tags = result.get('tags')
-        if title:
-            return self.player_construct_track_search(
-                artist, title, restrictions)
-        if artist:
-            return self.player_construct_artist_search(
-                artist, restrictions)
-        if tags:
-            return self.player_construct_tag_search(
-                tags, restrictions)
 
     def player_construct_track_search(self, artist, title, restrictions=None):
         """construct a search that looks for songs with this artist
@@ -353,14 +339,14 @@ class AutoQueueBase(object):
         if self.running:
             return
         self.song = song
+        fid = "analyze_track" + str(int(time()))
+        self.player_execute_async(self.analyze_track, song, funcid=fid)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             self.player_execute_async(self.fill_queue)
         if self.weed:
             self.player_execute_async(self.prune_db)
             self.player_execute_async(self.prune_search)
             self.player_execute_async(self.prune_delete)
-        fid = "analyze_track" + str(int(time()))
-        self.player_execute_async(self.analyze_track, song, funcid=fid)
 
     def queue_needs_songs(self):
         """determine whether the queue needs more songs added"""
@@ -384,6 +370,34 @@ class AutoQueueBase(object):
         for result in merge(*generators):
             yield result
 
+    def construct_search(
+        self, artist=None, title=None, tags=None, restrictions=None):
+        if title:
+            return self.player_construct_track_search(
+                artist, title, restrictions)
+        if artist:
+            return self.player_construct_artist_search(
+                artist, restrictions)
+        if tags:
+            return self.player_construct_tag_search(
+                tags, restrictions)
+
+    def search_and_filter(self, artist, title, tags):
+        if (artist, title, tags) in self.cached_misses:
+            return None
+        search = self.construct_search(artist, title, tags, self.restrictions)
+        songs = self.player_search(search)
+        if songs:
+            while songs:
+                song = random.choice(songs)
+                songs.remove(song)
+                if not self.disallowed(song):
+                    return song
+        elif self.weed:
+            self.prune_titles.append(title)
+        self.cached_misses.append((artist, title, tags))
+        return None
+
     def queue_song(self):
         """Queue a single track"""
         self.unblock_artists()
@@ -400,28 +414,21 @@ class AutoQueueBase(object):
                     yield
                 score, result = item
                 self.log("looking for: %s, %s" % (score, repr(result)))
-                search = self.player_construct_search(result, self.restrictions)
                 artist = result.get('artist')
                 if artist:
                     if artist in blocked:
                         continue
-                songs = self.player_search(search)
-                if songs:
-                    while songs:
-                        song = random.choice(songs)
-                        songs.remove(song)
-                        if not self.disallowed(song):
-                            found = song
-                            break
-                        yield
-                elif self.weed:
-                    self.prune_titles.append(result.get("title"))
+                found = self.search_and_filter(
+                    result.get("artist"), result.get("title"),
+                    result.get("tags"))
             except StopIteration:
                 break
         if found:
             self.player_enqueue(found)
         for dummy in exhaust(generator):
             yield
+        if not found:
+            yield "exhausted"
 
     def fill_queue(self):
         """search for appropriate songs and put them in the queue"""
@@ -431,7 +438,8 @@ class AutoQueueBase(object):
             for dummy in self.queue_song():
                 yield
         stop = False
-        while self.queue_needs_songs():
+        exhausted = False
+        while not exhausted and self.queue_needs_songs():
             for exhausted in self.queue_song():
                 yield
         if self.use_db:
