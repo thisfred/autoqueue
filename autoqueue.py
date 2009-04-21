@@ -1058,8 +1058,7 @@ class AutoQueueBase(object):
     def prune_search(self):
         while self._rows:
             item = self._rows.pop(0)
-            search = self.player_construct_search(
-                {'artist': item[0], 'title': item[1]})
+            search = self.construct_search(artist=item[0], title=item[1])
             songs = self.player_search(search)
             if not songs:
                 self._nrows.append(item)
