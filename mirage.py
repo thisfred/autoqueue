@@ -22,14 +22,13 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 
 import os, struct, math, sys
 from decimal import Decimal
-from datetime import datetime, timedelta
+from datetime import datetime
 from operator import itemgetter
 import cPickle as pickle
 from cStringIO import StringIO
 from ctypes import *
 import sqlite3
 from scipy import *
-import gst, gobject
 
 DEBUG = True
 
@@ -434,7 +433,7 @@ class Db(object):
         connection.commit()
         self.close_database_connection(connection)
 
-    def add_and_compare(self, trackid, scms, cutoff=10000, exclude_ids=None):
+    def add_and_compare(self, trackid, scms, cutoff=7500, exclude_ids=None):
         min_add = 5
         if not exclude_ids:
             exclude_ids = []
@@ -677,25 +676,3 @@ class Mir(object):
         t.stop()
         write_line("Mirage: playlist in: %s" % t.time)
         return keys
-
-## if __name__ == '__main__':
-##     mir = Mir()
-##     scms = mir.analyze('testfiles/test.mp3')
-##     scms2 = mir.analyze('testfiles/test2.mp3')
-##     scms3 = mir.analyze('testfiles/test3.ogg')
-##     scms4 = mir.analyze('testfiles/test4.ogg')
-##     scms5 = mir.analyze('testfiles/test5.ogg')
-##     scmses = [scms, scms2, scms3, scms4, scms5]
-
-##     testdb = Db(":memory:")
-##     for i, scms in enumerate(scmses):
-##         testdb.add_track(i, scms)
-
-##     print sorted(
-##         [id for (scms, id) in testdb.get_tracks(exclude_ids=['3','4'])]) # [0,1,2]
-
-##     scms3_db = testdb.get_track('3')
-##     scms4_db = testdb.get_track('4')
-##     c = ScmsConfiguration(20)
-##     print int(distance(scms3_db, scms4_db, c) * 100) # 9647
-
