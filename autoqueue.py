@@ -425,6 +425,8 @@ class AutoQueueBase(object):
                 break
         if found:
             self.player_enqueue(found)
+            for dummy in self.analyze_track(self.get_last_song()):
+                yield
         for dummy in exhaust(generator):
             yield
         if not found:
