@@ -353,10 +353,9 @@ class AutoQueueBase(object):
         time = self.player_get_queue_length()
         return time < self.desired_queue_length
 
-    def song_generator(self):
+    def song_generator(self, last_song):
         """yield songs that match the last song in the queue"""
         generators = []
-        last_song = self.get_last_song()
         if MIRAGE and self.by_mirage:
             for dummy in self.analyze_track(last_song):
                 yield
@@ -402,30 +401,33 @@ class AutoQueueBase(object):
         """Queue a single track"""
         self.unblock_artists()
         found = None
-        generator = self.song_generator()
+        last_songs = self.get_last_songs()
         deletes = []
-        while not found:
-            yield
-            blocked = self.get_blocked_artists()
-            try:
-                item = generator.next()
-                while not item:
+        while last_songs and not found:
+            last_song = last_songs.pop()
+            generator = self.song_generator(last_song)
+            while not found:
+                yield
+                blocked = self.get_blocked_artists()
+                try:
                     item = generator.next()
-                    yield
-                score, result = item
-                self.log("looking for: %s, %s" % (score, repr(result)))
-                artist = result.get('artist')
-                if artist:
-                    if artist in blocked:
-                        continue
-                found = self.search_and_filter(
-                    result.get("artist"), result.get("title"),
-                    result.get("tags"))
-            except StopIteration:
-                break
+                    while not item:
+                        item = generator.next()
+                        yield
+                    score, result = item
+                    self.log("looking for: %s, %s" % (score, repr(result)))
+                    artist = result.get('artist')
+                    if artist:
+                        if artist in blocked:
+                            continue
+                    found = self.search_and_filter(
+                        result.get("artist"), result.get("title"),
+                        result.get("tags"))
+                except StopIteration:
+                    break
         if found:
             self.player_enqueue(found)
-            for dummy in self.analyze_track(self.get_last_song()):
+            for dummy in self.analyze_track(self.get_last_songs()[-1]):
                 yield
         for dummy in exhaust(generator):
             yield
@@ -505,13 +507,11 @@ class AutoQueueBase(object):
             song.get_artist() for song in
             self.player_get_songs_in_queue()]
 
-    def get_last_song(self):
+    def get_last_songs(self):
         """return the last song in the queue or the currently playing
         song"""
-        queue = self.player_get_songs_in_queue()
-        if queue:
-            return queue[-1]
-        return self.song
+        queue = self.player_get_songs_in_queue() or []
+        return [self.song] + queue
 
     def get_similar_tracks_from_lastfm(self, artist_name, title, track_id):
         """get similar tracks to the last one in the queue"""
