@@ -3,6 +3,7 @@ version 0.3
 
 Copyright 2007-2009 Eric Casteleijn <thisfred@gmail.com>,
                     Daniel Nouri <daniel.nouri@gmail.com>
+                    Jasper OpdeCoul <jasper.opdecoul@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -339,8 +340,9 @@ class AutoQueueBase(object):
         if self.running:
             return
         self.song = song
-        fid = "analyze_track" + str(int(time()))
-        self.player_execute_async(self.analyze_track, song, funcid=fid)
+        if MIRAGE and self.by_mirage:
+            fid = "analyze_track" + str(int(time()))
+            self.player_execute_async(self.analyze_track, song, funcid=fid)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             self.player_execute_async(self.fill_queue)
         if self.weed:
@@ -427,8 +429,9 @@ class AutoQueueBase(object):
                     break
         if found:
             self.player_enqueue(found)
-            for dummy in self.analyze_track(self.get_last_songs()[-1]):
-                yield
+            if MIRAGE and self.by_mirage:
+                for dummy in self.analyze_track(self.get_last_songs()[-1]):
+                    yield
         for dummy in exhaust(generator):
             yield
         if not found:
