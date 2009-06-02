@@ -233,9 +233,9 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     def player_construct_track_search(self, artist, title, restrictions=None):
         """construct a search that looks for songs with this artist
         and title"""
+        search = '&(artist = "%s", title = "%s", version="")' % (
+            escape(artist), escape(title))
         if "(" in title:
-            search = '&(artist = "%s", title = "%s")' % (
-                escape(artist), escape(title))
             split = title.split("(")
             if not split[0]:
                 # (something) title [(version)]
@@ -250,10 +250,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 escape(vtitle),
                 escape(version))
             search = "|(%s, %s)" % (search, versioned)
-        else:
-            search = '&(artist = "%s", title = "%s", version="")' % (
-                escape(artist), escape(title))
-            versioned = ""
         if restrictions:
             search = "&(%s, %s)" % (search, restrictions)
         return search
