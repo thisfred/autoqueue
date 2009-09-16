@@ -44,14 +44,17 @@ class MirageSongsPlugin(SongsMenuPlugin):
             filename = song("~filename")
             track = self.get_track(artist_name, title)
             track_id, artist_id = track[0], track[1]
-            if db.get_track(track_id):
+            if db.has_scores(track_id):
                 continue
+            scms = db.get_track(track_id)
+            if not scms:
+                try:
+                    scms = self.mir.analyze(filename)
+                except:
+                    return
+                db.add_track(track_id, scms)
             exclude_ids = self.get_artist_tracks(artist_id)
-            try:
-                scms = self.mir.analyze(filename)
-            except:
-                return
-            for dummy in db.add_and_compare(
+            for dummy in db.add_neighbours(
                 track_id, scms, exclude_ids=exclude_ids):
                 yield
             yield

@@ -57,13 +57,6 @@ features are simply not possible to implement for some players.
   seconds. For instance 4440 will get you a queue of 74 minutes, which
   is a common size for blank audio CDs. Default: 0
 
-- relax: Filter to relax the block track rules: use any search
-  expression you can use in the quod libet search to allow some songs
-  to break the rules. For instance I use: '(#(added < 30
-  days),grouping=favorites)', so that my favorites, and anything I
-  added in the last month can be played more often than the block
-  track variable indicates. Default: ''
-
 - restrict: Filter to restrict which tracks autoqueue finds. For
   instance, you could use 'genre=reggae', to find only songs with the
   genre reggae or '&(#(date > 1979), #(date < 1990))' to find only

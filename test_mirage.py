@@ -108,10 +108,11 @@ class TestMir(object):
         c = ScmsConfiguration(20)
         assert_equals(124, int(distance(scms3_db, scms4_db, c)))
 
-    def test_add_and_compare(self):
+    def test_add_neighbours(self):
         testdb = Db(":memory:")
         for i, testscms in enumerate(scmses):
-            for dummy in testdb.add_and_compare(i, testscms):
+            testdb.add_track(i, testscms)
+            for dummy in testdb.add_neighbours(i, testscms):
                 pass
         connection = testdb.get_database_connection()
         distances = [

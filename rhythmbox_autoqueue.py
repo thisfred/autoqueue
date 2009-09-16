@@ -22,14 +22,14 @@ import rb, rhythmdb
 
 from autoqueue import AutoQueueBase, SongBase
 
-GCONFPATH = '/apps/rhythmbox/plugins/lastfm_queue/'
+GCONFPATH = '/apps/rhythmbox/plugins/autoqueue/'
 
 class Song(SongBase):
     """A wrapper object around rhythmbox song objects."""
     def __init__(self, song, db):
         self.song = song
         self.db = db
-        
+
     def get_artist(self):
         """return lowercase UNICODE name of artist"""
         return unicode(
@@ -53,6 +53,7 @@ class Song(SongBase):
             return urllib.unquote(location[7:])
         return None
 
+
 class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
     def __init__(self):
         rb.Plugin.__init__(self)
@@ -62,14 +63,14 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         self.gconfclient = gconf.client_get_default()
         self.verbose = False
         self.by_mirage = False
-        
+
     def activate(self, shell):
         self.shell = shell
         self.rdb = shell.get_property('db')
         sp = shell.get_player ()
         self.pec_id = sp.connect(
             'playing-song-changed', self.playing_entry_changed)
-        
+
     def deactivate(self, shell):
         self.rdb = None
         self.shell = None
@@ -85,7 +86,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
     def playing_entry_changed(self, sp, entry):
         if entry:
             self.on_song_started(Song(entry, self.rdb))
-        
+
     def player_get_userdir(self):
         """get the application user directory to store files"""
         folder = os.path.join(
@@ -93,7 +94,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         if not os.path.isdir(folder):
             os.mkdir(folder)
         return folder
-    
+
     def player_construct_track_search(self, artist, title, restrictions):
         """construct a search that looks for songs with this artist
         and title"""
@@ -103,7 +104,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         if restrictions:
             result += restrictions
         return result
-        
+
     def player_construct_tag_search(self, tags, exclude_artists, restrictions):
         """construct a search that looks for songs with these
         tags"""
@@ -116,7 +117,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         if restrictions:
             result += restrictions
         return result
-        
+
     def player_construct_restrictions(
         self, track_block_time, relaxors, restrictors):
         """contstruct a search to further modify the searches"""

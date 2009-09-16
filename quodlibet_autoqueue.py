@@ -7,11 +7,9 @@ it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation"""
 
 import const, gtk
-from datetime import datetime
 from plugins.events import EventPlugin
 from widgets import main
 from parse import Query
-from qltk import Frame
 from library import library
 from quodlibet.util import copool
 import config

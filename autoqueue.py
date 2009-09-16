@@ -187,6 +187,7 @@ class AutoQueueBase(object):
         self.running = False
         self.verbose = False
         self.weed = False
+        self.lastfm = True
         self.now = datetime.now()
         self.song = None
         self._blocked_artists = deque([])
@@ -340,7 +341,7 @@ class AutoQueueBase(object):
         if self.running:
             return
         self.song = song
-        if MIRAGE and self.by_mirage:
+        if MIRAGE:
             fid = "analyze_track" + str(int(time()))
             self.player_execute_async(self.analyze_track, song, funcid=fid)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
@@ -581,11 +582,14 @@ class AutoQueueBase(object):
 
     @Throttle(WAIT_BETWEEN_REQUESTS)
     def last_fm_request(self, url):
+        if not self.lastfm:
+            return None
         try:
             stream = urllib.urlopen(url)
             xmldoc = minidom.parse(stream).documentElement
             return xmldoc
         except:
+            self.lastfm = False
             return None
 
     def get_artist(self, artist_name, with_connection=None):
@@ -672,22 +676,25 @@ class AutoQueueBase(object):
         track = self.get_track(artist_name, title)
         track_id, artist_id = track[0], track[1]
         db = Db(self.get_db_path())
-        if db.get_track(track_id):
+        if db.has_scores(track_id):
             return
-        self.log("no mirage data found for %s, analyzing track" % filename)
+        yield
+        scms = db.get_track(track_id)
+        if not scms:
+            self.log("no mirage data found for %s, analyzing track" % filename)
+            try:
+                scms = self.mir.analyze(filename)
+            except MatrixDimensionMismatchException:
+                return
+            db.add_track(track_id, scms)
         exclude_ids = self.get_artist_tracks(artist_id)
-        try:
-            scms = self.mir.analyze(filename)
-        except MatrixDimensionMismatchException:
-            return
-        for dummy in db.add_and_compare(
-            track_id, scms, exclude_ids=exclude_ids):
+        for dummy in db.add_neighbours(track_id, scms, exclude_ids=exclude_ids):
             yield
         return
 
     def get_ordered_mirage_tracks(self, song):
         """get similar tracks from mirage acoustic analysis"""
-        maximum = 20000
+        maximum = 100
         scale_to = 10000
         artist_name = song.get_artist()
         title = song.get_title()
@@ -698,12 +705,12 @@ class AutoQueueBase(object):
         track = self.get_track(artist_name, title)
         track_id, artist_id, updated = track[0], track[1], track[3]
         db = Db(self.get_db_path())
-        for match, mtrack_id in db.get_neighbours(track_id):
+        for i, match, mtrack_id in db.get_neighbours(track_id):
             result = self.get_artist_and_title(mtrack_id)
             if not result:
                 continue
             track_artist, track_title = result
-            yield(scale(match, maximum, scale_to),
+            yield(scale(i, maximum, scale_to),
                   {'mirage_distance': match,
                    'artist': track_artist,
                    'title': track_title})

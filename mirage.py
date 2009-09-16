@@ -409,6 +409,14 @@ class Db(object):
         self.close_database_connection(connection)
         return None
 
+    def has_scores(self, trackid, no=10):
+        connection = self.get_database_connection()
+        cursor = connection.execute(
+            "SELECT COUNT(*) FROM distance WHERE track_1 = ?", (trackid,))
+        l = cursor.fetchone()[0]
+        self.close_database_connection(connection)
+        return l >= no
+
     def get_tracks(self, exclude_ids=None):
         if not exclude_ids:
             exclude_ids = []
@@ -433,53 +441,41 @@ class Db(object):
         connection.commit()
         self.close_database_connection(connection)
 
-    def add_and_compare(self, trackid, scms, cutoff=7500, exclude_ids=None):
-        min_add = 5
+    def add_neighbours(self, trackid, scms, exclude_ids=None):
+        connection = self.get_database_connection()
+        connection.commit()
+        connection.execute("DELETE FROM distance WHERE track_1 = ?", (trackid,))
+        self.close_database_connection(connection)
+        yield
+        min_add = 10
         if not exclude_ids:
             exclude_ids = []
-        self.add_track(trackid, scms)
         c = ScmsConfiguration(20)
-        add = []
-        best_of_the_rest = []
+        best = []
         for buf, otherid in self.get_tracks(
             exclude_ids=exclude_ids):
             if trackid == otherid:
                 continue
             other = instance_from_picklestring(buf)
             dist = int(distance(scms, other, c) * 1000)
-            if dist < cutoff:
-                add.append((trackid, otherid, dist))
-            else:
-                if len(add) > min_add - 1:
+            if len(best) > min_add - 1:
+                if dist > best[-1][0]:
                     continue
-                if len(best_of_the_rest) > min_add - 1:
-                    if dist > best_of_the_rest[-1][0]:
-                        continue
-                best_of_the_rest.append((dist, trackid, otherid))
-                best_of_the_rest.sort()
-                while len(best_of_the_rest) > min_add:
-                    best_of_the_rest.pop()
+            best.append((dist, trackid, otherid))
+            best.sort()
+            while len(best) > min_add:
+                best.pop()
             yield
         added = 0
-        if add:
+        if best:
             connection = self.get_database_connection()
-            while add:
+            while best:
                 added += 1
                 connection.execute(
-                    "INSERT INTO distance (track_1, track_2, distance) "
-                    "VALUES (?, ?, ?)", add.pop())
+                    "INSERT INTO distance (distance, track_1, track_2) "
+                    "VALUES (?, ?, ?)", best.pop())
             connection.commit()
             self.close_database_connection(connection)
-        connection = self.get_database_connection()
-        while best_of_the_rest and added < min_add:
-            dist, trackid, otherid = best_of_the_rest.pop(0)
-            connection.execute(
-                "INSERT INTO distance (track_1, track_2, distance) "
-                "VALUES (?, ?, ?)",
-                (trackid, otherid, dist))
-            added += 1
-        connection.commit()
-        self.close_database_connection(connection)
         print "added %d connections" % added
 
     def compare(self, id1, id2):
@@ -492,16 +488,12 @@ class Db(object):
         connection = self.get_database_connection()
         neighbours1 = [row for row in connection.execute(
             "SELECT distance, track_2 FROM distance WHERE track_1 = ? "
-            "ORDER BY distance ASC LIMIT 100",
-            (trackid,))]
-        neighbours2 = [row for row in connection.execute(
-            "SELECT distance, track_1 FROM distance WHERE track_2 = ? "
-            "ORDER BY distance ASC LIMIT 100",
+            "ORDER BY distance ASC",
             (trackid,))]
         self.close_database_connection(connection)
-        neighbours1.extend(neighbours2)
-        neighbours1.sort()
-        return neighbours1
+        return [
+            (i, distance, track) for (i, (distance, track)) in
+            enumerate(neighbours1)]
 
 
 class Mfcc(object):
@@ -535,7 +527,10 @@ class Mfcc(object):
         t = DbgTimer()
         t.start()
         mel = Matrix(self.filterweights.rows, m.columns)
-        mel.d = mel.d + dot(self.filterweights.d, m.d)
+        try:
+            mel.d = mel.d + dot(self.filterweights.d, m.d)
+        except ValueError:
+            raise MfccFailedException
         mel.d = vf(mel.d)
 
         try:
