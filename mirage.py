@@ -443,8 +443,8 @@ class Db(object):
 
     def add_neighbours(self, trackid, scms, exclude_ids=None):
         connection = self.get_database_connection()
-        connection.commit()
         connection.execute("DELETE FROM distance WHERE track_1 = ?", (trackid,))
+        connection.commit()
         self.close_database_connection(connection)
         yield
         min_add = 10
