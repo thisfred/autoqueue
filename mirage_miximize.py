@@ -66,6 +66,8 @@ class MirageMiximizePlugin(SongsMenuPlugin):
                 except:
                     return
                 db.add_track(track_id, scms)
+            yield
+        yield
         print "done"
         ids_and_songs = [
             (self.get_track(song.comma("artist").lower(), get_title(song))[0],
@@ -74,6 +76,7 @@ class MirageMiximizePlugin(SongsMenuPlugin):
         qsongs = []
         for cluster in clusterer.clusters:
             qsongs.extend([c for id, c in cluster])
+            yield
         self.player_enqueue(qsongs)
 
     def get_track(self, artist_name, title):
