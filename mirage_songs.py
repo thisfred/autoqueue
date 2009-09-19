@@ -53,11 +53,6 @@ class MirageSongsPlugin(SongsMenuPlugin):
                 except:
                     return
                 db.add_track(track_id, scms)
-            exclude_ids = self.get_artist_tracks(artist_id)
-            for dummy in db.add_neighbours(
-                track_id, scms, exclude_ids=exclude_ids):
-                yield
-            yield
         print "done"
 
     def plugin_songs(self, songs):

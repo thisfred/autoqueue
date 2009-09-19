@@ -66,11 +66,6 @@ class MirageMiximizePlugin(SongsMenuPlugin):
                 except:
                     return
                 db.add_track(track_id, scms)
-            exclude_ids = self.get_artist_tracks(artist_id)
-            for dummy in db.add_neighbours(
-                track_id, scms, exclude_ids=exclude_ids):
-                yield
-            yield
         print "done"
         ids_and_songs = [
             (self.get_track(song.comma("artist").lower(), get_title(song))[0],
