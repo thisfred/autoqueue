@@ -53,6 +53,8 @@ class MirageSongsPlugin(SongsMenuPlugin):
                 except:
                     return
                 db.add_track(track_id, scms)
+            yield
+        yield
         print "done"
 
     def plugin_songs(self, songs):
