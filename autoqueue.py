@@ -343,7 +343,8 @@ class AutoQueueBase(object):
         self.song = song
         if MIRAGE:
             fid = "analyze_track" + str(int(time()))
-            self.player_execute_async(self.analyze_track, song, funcid=fid)
+            self.player_execute_async(
+                self.analyze_track, song, funcid=fid, add_neighbours=False)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             self.player_execute_async(self.fill_queue)
         if self.weed:
@@ -666,16 +667,18 @@ class AutoQueueBase(object):
         self.close_database_connection(connection)
         return result
 
-    def analyze_track(self, song):
+    def analyze_track(self, song, add_neighbours=True):
         artist_name = song.get_artist()
         title = song.get_title()
         filename = song.get_filename()
+        yield
         if not filename:
             return
         length = song.get_length()
         track = self.get_track(artist_name, title)
         track_id, artist_id = track[0], track[1]
         db = Db(self.get_db_path())
+        yield
         if db.has_scores(track_id):
             return
         yield
@@ -687,9 +690,11 @@ class AutoQueueBase(object):
             except MatrixDimensionMismatchException:
                 return
             db.add_track(track_id, scms)
-        exclude_ids = self.get_artist_tracks(artist_id)
-        for dummy in db.add_neighbours(track_id, scms, exclude_ids=exclude_ids):
-            yield
+        yield
+        if add_neighbours:
+            exclude_ids = self.get_artist_tracks(artist_id)
+            for dummy in db.add_neighbours(track_id, scms, exclude_ids=exclude_ids):
+                yield
         return
 
     def get_ordered_mirage_tracks(self, song):
