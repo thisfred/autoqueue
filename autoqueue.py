@@ -35,7 +35,8 @@ except ImportError:
     SQL = False
 
 try:
-    from mirage import Mir, Db, MatrixDimensionMismatchException
+    from mirage import (
+        Mir, Db, MatrixDimensionMismatchException, MfccFailedException)
     MIRAGE = True
 except ImportError:
     MIRAGE = False
@@ -687,7 +688,7 @@ class AutoQueueBase(object):
             self.log("no mirage data found for %s, analyzing track" % filename)
             try:
                 scms = self.mir.analyze(filename)
-            except MatrixDimensionMismatchException:
+            except (MatrixDimensionMismatchException, MfccFailedException):
                 return
             db.add_track(track_id, scms)
         yield
