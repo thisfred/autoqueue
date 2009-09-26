@@ -553,7 +553,8 @@ class AutoQueueBase(object):
             if self.use_db:
                 self._tracks_to_update.setdefault(track_id, []).append(result)
             yield (
-                scale(match, self.max_track_match, 10000, invert=True), result)
+                scale(match, self.max_track_match, 10000, offset=1000,
+                      invert=True), result)
 
     def get_similar_artists_from_lastfm(self, artist_name, artist_id):
         """get similar artists"""
@@ -694,7 +695,8 @@ class AutoQueueBase(object):
         yield
         if add_neighbours:
             exclude_ids = self.get_artist_tracks(artist_id)
-            for dummy in db.add_neighbours(track_id, scms, exclude_ids=exclude_ids):
+            for dummy in db.add_neighbours(track_id, scms,
+                                           exclude_ids=exclude_ids):
                 yield
         return
 

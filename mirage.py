@@ -409,13 +409,24 @@ class Db(object):
         self.close_database_connection(connection)
         return None
 
-    def has_scores(self, trackid, no=10):
+    def has_scores(self, trackid, no=20):
         connection = self.get_database_connection()
         cursor = connection.execute(
             "SELECT COUNT(*) FROM distance WHERE track_1 = ?", (trackid,))
         l = cursor.fetchone()[0]
         self.close_database_connection(connection)
-        return l >= no
+        if l >= no:
+            return True
+        connection = self.get_database_connection()
+        cursor = connection.execute(
+            "SELECT COUNT(*) FROM distance WHERE track_2 = ? AND distance < "
+            "(SELECT MAX(distance) FROM distance WHERE track_1 <= ?);",
+            (trackid, trackid))
+        l = cursor.fetchone()[0]
+        self.close_database_connection(connection)
+        if l >= no:
+            return True
+        return False
 
     def get_tracks(self, exclude_ids=None):
         if not exclude_ids:
