@@ -415,8 +415,8 @@ class Db(object):
             "SELECT COUNT(*) FROM distance WHERE track_1 = ?", (trackid,))
         l = cursor.fetchone()[0]
         self.close_database_connection(connection)
-        if l >= no:
-            return True
+        if l < no:
+            return False
         connection = self.get_database_connection()
         cursor = connection.execute(
             "SELECT COUNT(*) FROM distance WHERE track_2 = ? AND distance < "
@@ -424,9 +424,9 @@ class Db(object):
             (trackid, trackid))
         l = cursor.fetchone()[0]
         self.close_database_connection(connection)
-        if l >= no:
-            return True
-        return False
+        if l > no:
+            return False
+        return True
 
     def get_tracks(self, exclude_ids=None):
         if not exclude_ids:
