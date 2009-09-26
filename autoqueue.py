@@ -750,7 +750,8 @@ class AutoQueueBase(object):
             (track_id,))]
         self.close_database_connection(connection)
         generators.append(
-            scale_transformer(cursor1, self.max_track_match, scale_to))
+            scale_transformer(cursor1, self.max_track_match, scale_to,
+                              offset=1000))
         if updated:
             updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
             if updated + timedelta(self.cache_time) > self.now:
@@ -766,7 +767,8 @@ class AutoQueueBase(object):
                     (track_id,))]
                 self.close_database_connection(connection2)
                 generators.append(
-                    scale_transformer(cursor2, self.max_track_match, scale_to))
+                    scale_transformer(cursor2, self.max_track_match, scale_to,
+                                      offset=1000))
             else:
                 generators.append(
                     self.get_similar_tracks_from_lastfm(
