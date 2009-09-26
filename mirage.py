@@ -452,13 +452,12 @@ class Db(object):
         connection.commit()
         self.close_database_connection(connection)
 
-    def add_neighbours(self, trackid, scms, exclude_ids=None):
+    def add_neighbours(self, trackid, scms, exclude_ids=None, add=20):
         connection = self.get_database_connection()
         connection.execute("DELETE FROM distance WHERE track_1 = ?", (trackid,))
         connection.commit()
         self.close_database_connection(connection)
         yield
-        min_add = 10
         if not exclude_ids:
             exclude_ids = []
         c = ScmsConfiguration(20)
@@ -469,12 +468,12 @@ class Db(object):
                 continue
             other = instance_from_picklestring(buf)
             dist = int(distance(scms, other, c) * 1000)
-            if len(best) > min_add - 1:
+            if len(best) > add - 1:
                 if dist > best[-1][0]:
                     continue
             best.append((dist, trackid, otherid))
             best.sort()
-            while len(best) > min_add:
+            while len(best) > add:
                 best.pop()
             yield
         added = 0

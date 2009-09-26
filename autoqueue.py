@@ -54,6 +54,9 @@ ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
 # be nice to last.fm
 WAIT_BETWEEN_REQUESTS = timedelta(0, 1)
 
+# XXX make configurable
+NEIGHBOURS = 20
+
 def exhaust(iterator):
     for i in iterator:
         yield
@@ -681,7 +684,7 @@ class AutoQueueBase(object):
         track_id, artist_id = track[0], track[1]
         db = Db(self.get_db_path())
         yield
-        if db.has_scores(track_id):
+        if db.has_scores(track_id, no=NEIGHBOURS):
             return
         yield
         scms = db.get_track(track_id)
@@ -696,7 +699,8 @@ class AutoQueueBase(object):
         if add_neighbours:
             exclude_ids = self.get_artist_tracks(artist_id)
             for dummy in db.add_neighbours(track_id, scms,
-                                           exclude_ids=exclude_ids):
+                                           exclude_ids=exclude_ids,
+                                           add=NEIGHBOURS):
                 yield
         return
 
