@@ -419,9 +419,10 @@ class Db(object):
             return False
         connection = self.get_database_connection()
         cursor = connection.execute(
-            "SELECT COUNT(*) FROM distance WHERE track_2 = ? AND distance < "
-            "(SELECT MAX(distance) FROM distance WHERE track_1 <= ?);",
-            (trackid, trackid))
+            "SELECT COUNT(track_1) FROM distance WHERE track_2 = ? AND "
+            "distance < (SELECT MAX(distance) FROM distance WHERE track_1 = ?) "
+            "AND track_1 NOT IN (SELECT track_2 FROM distance WHERE track_1 = "
+            "?)", (trackid, trackid, trackid))
         l = cursor.fetchone()[0]
         self.close_database_connection(connection)
         if l > no:
