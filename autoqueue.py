@@ -137,6 +137,10 @@ class SongBase(object):
         """return lowercase UNICODE name of artist"""
         return NotImplemented
 
+    def get_artists(self):
+        """return lowercase UNICODE name of artists and performers."""
+        return NotImplemented
+
     def get_title(self):
         """return lowercase UNICODE title of song"""
         return NotImplemented
@@ -308,8 +312,9 @@ class AutoQueueBase(object):
         return connection
 
     def disallowed(self, song):
-        if song.get_artist() in self.get_blocked_artists():
-            return True
+        for artist in song.get_artists():
+            if artist in self.get_blocked_artists():
+                return True
         try:
             lastplayed = song.get_last_started()
         except NotImplemented:
@@ -334,14 +339,15 @@ class AutoQueueBase(object):
         if song is None:
             return
         self.now = datetime.now()
-        artist_name = song.get_artist()
+        artist_names = song.get_artists()
         title = song.get_title()
-        if not (artist_name and title):
+        if not (artist_names and title):
             return
         # add the artist to the blocked list, so their songs won't be
         # played for a determined time
-        self.block_artist(artist_name)
-        self.prune_artists.append(artist_name)
+        for artist_name in artist_names:
+            self.block_artist(artist_name)
+            self.prune_artists.append(artist_name)
         if self.running:
             return
         self.song = song
@@ -512,9 +518,10 @@ class AutoQueueBase(object):
 
     def get_blocked_artists(self):
         """prevent artists already in the queue from being queued"""
-        return list(self._blocked_artists) + [
-            song.get_artist() for song in
-            self.player_get_songs_in_queue()]
+        blocked = []
+        for song in self.player_get_songs_in_queue():
+            blocked.extend(song.get_artists())
+        return list(self._blocked_artists) + blocked
 
     def get_last_songs(self):
         """return the last song in the queue or the currently playing

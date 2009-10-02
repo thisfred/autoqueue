@@ -81,6 +81,11 @@ class Song(SongBase):
         """return lowercase UNICODE name of artist"""
         return self.song.comma("artist").lower()
 
+    def get_artists(self):
+        """return lowercase UNICODE name of artists and performers."""
+        return [artist.lower() for artist in self.song.list("artist") +
+                self.song.list("performer")]
+
     def get_title(self):
         """return lowercase UNICODE title of song"""
         version = self.song.comma("version").lower()

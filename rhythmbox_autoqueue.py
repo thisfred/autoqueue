@@ -53,6 +53,9 @@ class Song(SongBase):
             return urllib.unquote(location[7:])
         return None
 
+    def get_last_started(self):
+        return self.db.entry_get(self.song, rhythmdb.PROP_LAST_PLAYED)
+
 
 class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
     def __init__(self):
@@ -63,6 +66,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         self.gconfclient = gconf.client_get_default()
         self.verbose = False
         self.by_mirage = False
+        self.log("initialized")
 
     def activate(self, shell):
         self.shell = shell
