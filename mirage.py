@@ -348,19 +348,6 @@ class Db(object):
     def __init__(self, path):
         self.dbpath = path
         self.connection = None
-        connection = self.get_database_connection()
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, "
-            "scms BLOB)")
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
-            "INTEGER, distance INTEGER)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS dtrack1x ON distance (track_1)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS dtrack2x ON distance (track_2)")
-        connection.commit()
-        self.close_database_connection(connection)
 
     def close_database_connection(self, connection):
         if self.dbpath == ':memory:':

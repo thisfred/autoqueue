@@ -408,6 +408,8 @@ class AutoQueueBase(object):
                 if not self.disallowed(song):
                     return song
         elif self.weed:
+            if filename:
+                self.prune_filenames.append(filename)
             self.prune_titles.append(title)
         self.cached_misses.append((artist, title, filename, tags))
         return None
@@ -758,8 +760,8 @@ class AutoQueueBase(object):
 
     def get_ordered_mirage_tracks(self, song):
         """get similar tracks from mirage acoustic analysis"""
-        maximum = 100
-        scale_to = 10000
+        maximum = 20
+        scale_to = 1000
         artist_name = song.get_artist()
         title = song.get_title()
         filename = song.get_filename()
@@ -1159,7 +1161,8 @@ class AutoQueueBase(object):
         connection = self.get_database_connection()
         connection.execute(
             'DELETE FROM artists WHERE artists.id in (%s) AND artists.id NOT '
-            'IN (SELECT tracks.artist from tracks);' % ",".join(artists))
+            'IN (SELECT tracks.artist from tracks);' %
+            ",".join([str(artist) for artist in artists]))
         connection.execute(
             'DELETE FROM artist_2_artist WHERE artist1 NOT IN (SELECT '
             'artists.id FROM artists) OR artist2 NOT IN (SELECT artists.id '
