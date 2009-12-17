@@ -75,6 +75,12 @@ def escape(the_string):
     """double escape quotes"""
     return the_string.replace('"', '\\"')
 
+def remove_role(artist):
+    if not artist.endswith(')'):
+        return artist
+    return artist.split('(')[0]
+
+
 class Song(SongBase):
     """A wrapper object around quodlibet song objects."""
     def get_artist(self):
@@ -83,8 +89,21 @@ class Song(SongBase):
 
     def get_artists(self):
         """return lowercase UNICODE name of artists and performers."""
-        return [artist.lower() for artist in self.song.list("artist") +
-                self.song.list("performer")]
+        artists = [artist.lower() for artist in self.song.list("artist")]
+        performers = [remove_role(artist.lower()) for artist in self.song.list(
+            "performer")]
+        if hasattr(self.song, '_song'):
+            for tag in self.song._song:
+                if tag.startswith('performer:'):
+                    performers.extend(
+                        [artist for artist in self.song.list(tag)])
+        else:
+            for tag in self.song:
+                if tag.startswith('performer:'):
+                    performers.extend(
+                        [artist for artist in self.song.list(tag)])
+        artists.extend(performers)
+        return set(artists)
 
     def get_title(self):
         """return lowercase UNICODE title of song"""
