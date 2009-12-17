@@ -432,8 +432,11 @@ class AutoQueueBase(object):
                         item = generator.next()
                         yield
                     score, result = item
-                    result['score'] = score
-                    self.log("looking for: %05d, %s" % (score, repr(result)))
+                    self.log("looking for: %05d: %05d %s - %s" % (
+                        score, result.get('db_score', 0) or
+                        result.get('lastfm_match', 0) or
+                        result.get('mirage_distance', 0),
+                        result.get('artist'), result.get('title')))
                     artist = result.get('artist')
                     if artist:
                         if artist in blocked:
@@ -1142,16 +1145,18 @@ class AutoQueueBase(object):
                     yield
         if self.prune_filenames:
             connection = self.get_database_connection()
+            print "deleting %s" % self.prune_filenames
             ids = ','.join([
                 str(row[0]) for row in connection.execute(
-                'SELECT id FROM files WHERE filename in (%s);' %
+                'DELETE FROM files WHERE filename in (%s);' %
                 (','.join(['"%s"' % filename for filename in
                            self.prune_filenames]),))])
             connection.execute(
-                'DELETE FROM distance WHERE track_1 IN (%s) or track_2 IN (%s);'
-                % (ids, ids))
+                'DELETE FROM distance WHERE track_1 NOT IN (SELECT id FROM '
+                'files) OR track_2 NOT IN (SELECT id FROM files);')
             connection.execute(
-                'DELETE FROM mirage WHERE trackid IN (%s);' % (ids,))
+                'DELETE FROM mirage WHERE trackid NOT IN (SELECT id FROM '
+                'files);')
             self.close_database_connection(connection)
             self.prune_filenames = []
             yield
