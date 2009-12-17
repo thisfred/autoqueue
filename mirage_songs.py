@@ -42,17 +42,16 @@ class MirageSongsPlugin(SongsMenuPlugin):
             title = get_title(song)
             print "%03d/%03d %s - %s" % (i + 1, l, artist_name, title)
             filename = song("~filename")
-            track = self.get_track(artist_name, title)
-            track_id, artist_id = track[0], track[1]
-            if db.has_scores(track_id):
+            file_id = self.get_file_id(filename)
+            if db.has_scores(file_id):
                 continue
-            scms = db.get_track(track_id)
+            scms = db.get_track(file_id)
             if not scms:
                 try:
                     scms = self.mir.analyze(filename)
                 except:
                     return
-                db.add_track(track_id, scms)
+                db.add_track(file_id, scms)
             yield
         yield
         print "done"
@@ -61,55 +60,24 @@ class MirageSongsPlugin(SongsMenuPlugin):
         fid = "mirage_songs" + str(datetime.now())
         copool.add(self.do_stuff, songs, funcid=fid)
 
-    def get_track(self, artist_name, title):
-        """get track information from the database"""
+    def get_file_id(self, filename):
+        """get file id from the database"""
         connection = sqlite3.connect(
             self.dbpath, timeout=5.0, isolation_level="immediate")
-        connection.text_factory = str
-        title = title.encode("UTF-8")
-        artist_id = self.get_artist(artist_name)[0]
+        filename = filename[-300:]
         rows = connection.execute(
-            "SELECT * FROM tracks WHERE artist = ? AND title = ?",
-            (artist_id, title))
-        for row in rows:
-            return row
-        connection.execute(
-            "INSERT INTO tracks (artist, title) VALUES (?, ?)",
-            (artist_id, title))
-        connection.commit()
-        rows = connection.execute(
-            "SELECT * FROM tracks WHERE artist = ? AND title = ?",
-            (artist_id, title))
+            "SELECT * FROM files WHERE filename = ?", (filename,))
         for row in rows:
             connection.close()
-            return row
-        connection.close()
-
-    def get_artist(self, artist_name):
-        """get artist information from the database"""
-        connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate")
-        connection.text_factory = str
-        artist_name = artist_name.encode("UTF-8")
-        rows = connection.execute(
-            "SELECT * FROM artists WHERE name = ?", (artist_name,))
-        for row in rows:
-            return row
+            return row[0]
         connection.execute(
-            "INSERT INTO artists (name) VALUES (?)", (artist_name,))
+            "INSERT INTO files (filename) VALUES (?)",
+            (filename,))
         connection.commit()
         rows = connection.execute(
-            "SELECT * FROM artists WHERE name = ?", (artist_name,))
+            "SELECT * FROM files WHERE filename = ?", (filename,))
         for row in rows:
             connection.close()
-            return row
+            return row[0]
         connection.close()
 
-    def get_artist_tracks(self, artist_id):
-        connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate")
-        rows = connection.execute(
-            "SELECT tracks.id FROM tracks INNER JOIN artists"
-            " ON tracks.artist = artists.id WHERE artists.id = ?",
-            (artist_id, ))
-        return [row[0] for row in rows]

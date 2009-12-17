@@ -394,7 +394,7 @@ class Db(object):
 
     def remove_tracks(self, trackids):
         connection = self.get_database_connection()
-        connection.execute("DELETE FROM mirage WHERE trackid IN ?", (
+        connection.execute("DELETE FROM mirage WHERE trackid IN (%s);" % (
             ','.join(trackids),))
         connection.commit()
         self.close_database_connection(connection)
