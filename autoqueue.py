@@ -1145,7 +1145,7 @@ class AutoQueueBase(object):
                     yield
         if self.prune_filenames:
             connection = self.get_database_connection()
-            print "deleting %s" % self.prune_filenames
+            self.log("deleting:\n\n%s" % '\n'.join(self.prune_filenames))
             ids = ','.join([
                 str(row[0]) for row in connection.execute(
                 'DELETE FROM files WHERE filename in (%s);' %
