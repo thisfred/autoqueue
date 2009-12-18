@@ -432,7 +432,7 @@ class AutoQueueBase(object):
                         item = generator.next()
                         yield
                     score, result = item
-                    self.log("looking for: %05d: %05d %s - %s" % (
+                    self.log("looking for: %05d: %06d %s - %s" % (
                         score, result.get('db_score', 0) or
                         result.get('lastfm_match', 0) or
                         result.get('mirage_distance', 0),
