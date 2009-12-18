@@ -1,9 +1,8 @@
-import sqlite3, os
-import const, gtk
+import os
+import const
 from plugins.songsmenu import SongsMenuPlugin
 from mirage import Mir, Db
 from quodlibet.util import copool
-from scipy import *
 
 def get_title(song):
     """return lowercase UNICODE title of song"""
@@ -55,83 +54,29 @@ class MirageMiximizePlugin(SongsMenuPlugin):
             title = get_title(song)
             print "%03d/%03d %s - %s" % (i + 1, l, artist_name, title)
             filename = song("~filename")
-            track = self.get_track(artist_name, title)
-            track_id, artist_id = track[0], track[1]
-            if db.has_scores(track_id):
-                continue
-            scms = db.get_track(track_id)
-            if not scms:
+            trackid_scms = db.get_track(filename)
+            if not trackid_scms:
                 try:
                     scms = self.mir.analyze(filename)
                 except:
                     return
-                db.add_track(track_id, scms)
+                db.add_track(filename, scms)
+                trackid = db.get_track_id(filename)
+            else:
+                trackid, scms = trackid_scms
             yield
+            if db.has_scores(trackid):
+                continue
         yield
         print "done"
         ids_and_songs = [
-            (self.get_track(song.comma("artist").lower(), get_title(song))[0],
-             song) for song in songs]
+            (db.get_track_id(song("~filename")), song) for song in songs]
         clusterer = Clusterer(ids_and_songs, db.compare)
         qsongs = []
         for cluster in clusterer.clusters:
             qsongs.extend([c for id, c in cluster])
             yield
         self.player_enqueue(qsongs)
-
-    def get_track(self, artist_name, title):
-        """get track information from the database"""
-        connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate")
-        connection.text_factory = str
-        title = title.encode("UTF-8")
-        artist_id = self.get_artist(artist_name)[0]
-        rows = connection.execute(
-            "SELECT * FROM tracks WHERE artist = ? AND title = ?",
-            (artist_id, title))
-        for row in rows:
-            return row
-        connection.execute(
-            "INSERT INTO tracks (artist, title) VALUES (?, ?)",
-            (artist_id, title))
-        connection.commit()
-        rows = connection.execute(
-            "SELECT * FROM tracks WHERE artist = ? AND title = ?",
-            (artist_id, title))
-        for row in rows:
-            connection.close()
-            return row
-        connection.close()
-
-    def get_artist(self, artist_name):
-        """get artist information from the database"""
-        connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate")
-        connection.text_factory = str
-        artist_name = artist_name.encode("UTF-8")
-        rows = connection.execute(
-            "SELECT * FROM artists WHERE name = ?", (artist_name,))
-        for row in rows:
-            return row
-        connection.execute(
-            "INSERT INTO artists (name) VALUES (?)", (artist_name,))
-        connection.commit()
-        rows = connection.execute(
-            "SELECT * FROM artists WHERE name = ?", (artist_name,))
-        for row in rows:
-            connection.close()
-            return row
-        connection.close()
-
-    def get_artist_tracks(self, artist_id):
-        connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate")
-        connection.text_factory = str
-        rows = connection.execute(
-            "SELECT tracks.id FROM tracks INNER JOIN artists"
-            " ON tracks.artist = artists.id WHERE artists.id = ?",
-            (artist_id, ))
-        return [row[0] for row in rows]
 
 def match(cluster1, cluster2):
     return (

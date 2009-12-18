@@ -170,11 +170,18 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         self.on_song_started(ssong)
 
     def plugin_on_removed(self, songs):
-        rartists = [Song(song).get_artist() for song in songs]
-        rtitles = [Song(song).get_title() for song in songs]
-        if self.weed:
-            self.prune_artists.extend(rartists)
-            self.prune_titles.extend(rtitles)
+        if not self.weed:
+            return
+        rartists = []
+        rtitles = []
+        rfilenames = []
+        for song in songs:
+            rartists.append(Song(song).get_artist())
+            rtitles.append(Song(song).get_title())
+            rfilenames.append(Song(song).get_filename())
+        self.prune_artists.extend(rartists)
+        self.prune_titles.extend(rtitles)
+        self.prune_filenames.extend(rfilenames)
 
     def PluginPreferences(self, parent):
         def bool_changed(widget):
@@ -251,6 +258,11 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             return const.USERDIR
         except AttributeError:
             return const.DIR
+
+    def player_construct_file_search(self, filename, restrictions=None):
+        """construct a search that looks for songs with this filename"""
+        search = '~filename="%s"' % (escape(filename),)
+        return search
 
     def player_construct_track_search(self, artist, title, restrictions=None):
         """construct a search that looks for songs with this artist
