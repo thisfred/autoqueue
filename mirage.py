@@ -365,10 +365,10 @@ class Db(object):
         connection.text_factory = str
         return connection
 
-    def add_track(self, trackid, scms):
+    def add_track(self, filename, scms):
         connection = self.get_database_connection()
-        connection.execute("INSERT INTO mirage (trackid, scms) VALUES (?, ?)",
-                       (trackid,
+        connection.execute("INSERT INTO mirage (filename, scms) VALUES (?, ?)",
+                       (filename,
                         sqlite3.Binary(instance_to_picklestring(scms))))
         connection.commit()
         self.close_database_connection(connection)
@@ -386,20 +386,31 @@ class Db(object):
         connection.commit()
         self.close_database_connection(connection)
 
-    def get_track(self, trackid):
+    def get_track(self, filename):
         connection = self.get_database_connection()
         rows = connection.execute(
-            "SELECT scms FROM mirage WHERE trackid = ?", (trackid,))
+            "SELECT trackid, scms FROM mirage WHERE filename = ?", (filename,))
         for row in rows:
             self.close_database_connection(connection)
-            return instance_from_picklestring(row[0])
+            return (row[0], instance_from_picklestring(row[1]))
+        self.close_database_connection(connection)
+        return None
+
+    def get_track_id(self, filename):
+        connection = self.get_database_connection()
+        rows = connection.execute(
+            "SELECT trackid FROM mirage WHERE filename = ?", (filename,))
+        for row in rows:
+            self.close_database_connection(connection)
+            return row[0]
         self.close_database_connection(connection)
         return None
 
     def has_scores(self, trackid, no=20):
         connection = self.get_database_connection()
         cursor = connection.execute(
-            "SELECT COUNT(*) FROM distance WHERE track_1 = ?", (trackid,))
+            'SELECT COUNT(*) FROM distance WHERE track_1 = ?',
+            (trackid,))
         l = cursor.fetchone()[0]
         self.close_database_connection(connection)
         if l < no:

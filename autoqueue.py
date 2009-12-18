@@ -436,7 +436,7 @@ class AutoQueueBase(object):
                         score, result.get('db_score', 0) or
                         result.get('lastfm_match', 0) or
                         result.get('mirage_distance', 0),
-                        result.get('artist'), result.get('title')))
+                        result.get('artist'), result.get('title', '*')))
                     artist = result.get('artist')
                     if artist:
                         if artist in blocked:
@@ -666,38 +666,12 @@ class AutoQueueBase(object):
         if not with_connection:
             self.close_database_connection(connection)
 
-    def get_file_id(self, filename, with_connection=None):
-        """get track information from the database"""
-        filename = filename[-300:]
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        rows = connection.execute(
-            "SELECT id FROM files WHERE filename = ?", (filename,))
-        for row in rows:
-            if not with_connection:
-                self.close_database_connection(connection)
-            return row[0]
-        connection.execute(
-            "INSERT INTO files (filename) VALUES (?)",
-            (filename,))
-        connection.commit()
-        rows = connection.execute(
-            "SELECT id FROM files WHERE filename = ?", (filename,))
-        for row in rows:
-            if not with_connection:
-                self.close_database_connection(connection)
-            return row[0]
-        if not with_connection:
-            self.close_database_connection(connection)
-
     def get_artist_title_filename(self, file_id):
         """Get artist and title by filename"""
         result = None
         connection = self.get_database_connection()
         rows = connection.execute(
-            'SELECT files.filename FROM files WHERE files.id = ?', (file_id, ))
+            'SELECT filename FROM mirage WHERE trackid = ?', (file_id, ))
         for row in rows:
             filename = row[0]
             break
@@ -706,7 +680,7 @@ class AutoQueueBase(object):
         for song in self.player_search(search):
             return (song.get_artist(), song.get_title(), filename)
 
-    def get_artists_files(self, artist_names):
+    def get_artists_mirage_ids(self, artist_names):
         """Get all known file ids for this artist."""
         filenames = []
         for artist_name in artist_names:
@@ -715,7 +689,7 @@ class AutoQueueBase(object):
                 filenames.append(song.get_filename())
         connection = self.get_database_connection()
         rows = connection.execute(
-            'SELECT files.id FROM files WHERE files.filename IN (%s)' %
+            'SELECT trackid FROM mirage WHERE filename IN (%s)' %
             (','.join(['"%s"' % filename for filename in filenames]), ))
         result = [row[0] for row in rows]
         self.close_database_connection(connection)
@@ -738,24 +712,25 @@ class AutoQueueBase(object):
         yield
         if not filename:
             return
-        file_id = self.get_file_id(filename)
         db = Db(self.get_db_path())
-        yield
-        if db.has_scores(file_id, no=NEIGHBOURS):
-            return
-        yield
-        scms = db.get_track(file_id)
-        if not scms:
+        trackid_scms = db.get_track(filename)
+        if not trackid_scms:
             self.log("no mirage data found for %s, analyzing track" % filename)
             try:
                 scms = self.mir.analyze(filename)
             except (MatrixDimensionMismatchException, MfccFailedException):
                 return
-            db.add_track(file_id, scms)
+            db.add_track(filename, scms)
+            trackid = db.get_track_id(filename)
+        else:
+            trackid, scms = trackid_scms
+        yield
+        if db.has_scores(trackid, no=NEIGHBOURS):
+            return
         yield
         if add_neighbours:
-            exclude_ids = self.get_artists_files(artist_names)
-            for dummy in db.add_neighbours(file_id, scms,
+            exclude_ids = self.get_artists_mirage_ids(artist_names)
+            for dummy in db.add_neighbours(trackid, scms,
                                            exclude_ids=exclude_ids,
                                            add=NEIGHBOURS):
                 yield
@@ -772,9 +747,9 @@ class AutoQueueBase(object):
             artist_name, title))
         if not self.use_db:
             raise StopIteration
-        file_id = self.get_file_id(filename)
         db = Db(self.get_db_path())
-        for i, match, mfile_id in db.get_neighbours(file_id):
+        trackid = db.get_track_id(filename)
+        for i, match, mfile_id in db.get_neighbours(trackid):
             result = self.get_artist_title_filename(mfile_id)
             if not result:
                 continue
@@ -1073,11 +1048,14 @@ class AutoQueueBase(object):
             'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, artist'
             ' INTEGER, title VARCHAR(100), updated DATE)')
         connection.execute(
-            'CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY, '
-            'filename VARCHAR(300))')
-        connection.execute(
             'CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, track2'
             ' INTEGER, match INTEGER)')
+        connection.execute(
+            'CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, '
+            'filename VARCHAR(300), scms BLOB)')
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
+            "INTEGER, distance INTEGER)")
         connection.execute(
             "CREATE INDEX IF NOT EXISTS a2aa1x ON artist_2_artist (artist1)")
         connection.execute(
@@ -1087,13 +1065,7 @@ class AutoQueueBase(object):
         connection.execute(
             "CREATE INDEX IF NOT EXISTS t2tt2x ON track_2_track (track2)")
         connection.execute(
-            "CREATE INDEX IF NOT EXISTS ffnx ON files (filename)")
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, "
-            "scms BLOB)")
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
-            "INTEGER, distance INTEGER)")
+            "CREATE INDEX IF NOT EXISTS mfnx ON mirage (filename)")
         connection.execute(
             "CREATE INDEX IF NOT EXISTS dtrack1x ON distance (track_1)")
         connection.execute(
@@ -1148,15 +1120,12 @@ class AutoQueueBase(object):
             self.log("deleting:\n\n%s" % '\n'.join(self.prune_filenames))
             ids = ','.join([
                 str(row[0]) for row in connection.execute(
-                'DELETE FROM files WHERE filename in (%s);' %
+                'DELETE FROM mirage WHERE filename in (%s);' %
                 (','.join(['"%s"' % filename for filename in
                            self.prune_filenames]),))])
             connection.execute(
-                'DELETE FROM distance WHERE track_1 NOT IN (SELECT id FROM '
-                'files) OR track_2 NOT IN (SELECT id FROM files);')
-            connection.execute(
-                'DELETE FROM mirage WHERE trackid NOT IN (SELECT id FROM '
-                'files);')
+                'DELETE FROM distance WHERE track_1 NOT IN (SELECT trackid FROM'
+                ' mirage) OR track_2 NOT IN (SELECT trackid FROM mirage);')
             self.close_database_connection(connection)
             self.prune_filenames = []
             yield

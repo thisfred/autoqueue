@@ -1,10 +1,9 @@
-import sqlite3, os
+import os
 import const
 from datetime import datetime
 from plugins.songsmenu import SongsMenuPlugin
 from mirage import Mir, Db
 from quodlibet.util import copool
-
 
 def get_title(song):
     """return lowercase UNICODE title of song"""
@@ -42,42 +41,16 @@ class MirageSongsPlugin(SongsMenuPlugin):
             title = get_title(song)
             print "%03d/%03d %s - %s" % (i + 1, l, artist_name, title)
             filename = song("~filename")
-            file_id = self.get_file_id(filename)
-            if db.has_scores(file_id):
-                continue
-            scms = db.get_track(file_id)
-            if not scms:
+            trackid_scms = db.get_track(filename)
+            if not trackid_scms:
                 try:
                     scms = self.mir.analyze(filename)
                 except:
                     return
-                db.add_track(file_id, scms)
+                db.add_track(filename, scms)
             yield
-        yield
         print "done"
 
     def plugin_songs(self, songs):
         fid = "mirage_songs" + str(datetime.now())
         copool.add(self.do_stuff, songs, funcid=fid)
-
-    def get_file_id(self, filename):
-        """get file id from the database"""
-        connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate")
-        filename = filename[-300:]
-        rows = connection.execute(
-            "SELECT * FROM files WHERE filename = ?", (filename,))
-        for row in rows:
-            connection.close()
-            return row[0]
-        connection.execute(
-            "INSERT INTO files (filename) VALUES (?)",
-            (filename,))
-        connection.commit()
-        rows = connection.execute(
-            "SELECT * FROM files WHERE filename = ?", (filename,))
-        for row in rows:
-            connection.close()
-            return row[0]
-        connection.close()
-
