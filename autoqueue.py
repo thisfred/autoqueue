@@ -394,7 +394,8 @@ class AutoQueueBase(object):
             return self.player_construct_tag_search(
                 tags, restrictions)
 
-    def search_and_filter(self, artist, title, filename, tags):
+    def search_and_filter(self, artist=None, title=None, filename=None,
+                          tags=None):
         if (artist, title, filename, tags) in self.cached_misses:
             return None
         search = self.construct_search(
@@ -441,9 +442,16 @@ class AutoQueueBase(object):
                     if artist:
                         if artist in blocked:
                             continue
-                    found = self.search_and_filter(
-                        result.get("artist"), result.get("title"),
-                        result.get("filename"), result.get("tags"))
+                    filename = result.get("filename")
+                    tags = result.get("tags")
+                    if filename:
+                        found = self.search_and_filter(filename=filename)
+                    elif tags:
+                        found = self.search_and_filter(tags=tags)
+                    else:
+                        found = self.search_and_filter(
+                            artist=result.get("artist"),
+                            title=result.get("title"))
                 except StopIteration:
                     break
         if found:
@@ -672,13 +680,17 @@ class AutoQueueBase(object):
         connection = self.get_database_connection()
         rows = connection.execute(
             'SELECT filename FROM mirage WHERE trackid = ?', (file_id, ))
+        filename = None
         for row in rows:
             filename = row[0]
             break
         connection.close()
+        if not filename:
+            return
         search = self.player_construct_file_search(filename)
         for song in self.player_search(search):
             return (song.get_artist(), song.get_title(), filename)
+        self.prune_filenames.append(filename)
 
     def get_artists_mirage_ids(self, artist_names):
         """Get all known file ids for this artist."""
@@ -1116,19 +1128,22 @@ class AutoQueueBase(object):
                     self.close_database_connection(connection)
                     yield
         if self.prune_filenames:
+            while self.prune_filenames:
+                filename = self.prune_filenames.pop(0)
+                connection = self.get_database_connection()
+                self.log("deleting: %s" % filename)
+                connection.execute(
+                    'DELETE FROM mirage WHERE filename = ?;', (filename,))
+                connection.commit()
+                self.close_database_connection(connection)
+                yield
             connection = self.get_database_connection()
-            self.log("deleting:\n\n%s" % '\n'.join(self.prune_filenames))
-            ids = ','.join([
-                str(row[0]) for row in connection.execute(
-                'DELETE FROM mirage WHERE filename in (%s);' %
-                (','.join(['"%s"' % filename for filename in
-                           self.prune_filenames]),))])
             connection.execute(
-                'DELETE FROM distance WHERE track_1 NOT IN (SELECT trackid FROM'
-                ' mirage) OR track_2 NOT IN (SELECT trackid FROM mirage);')
+                'DELETE FROM distance WHERE track_1 NOT IN (SELECT trackid '
+                'FROM mirage) OR track_2 NOT IN (SELECT trackid FROM '
+                'mirage);')
+            connection.commit()
             self.close_database_connection(connection)
-            self.prune_filenames = []
-            yield
 
     def delete_orphan_artists(self, artists):
         """Delete artists that have no tracks."""
@@ -1141,6 +1156,7 @@ class AutoQueueBase(object):
             'DELETE FROM artist_2_artist WHERE artist1 NOT IN (SELECT '
             'artists.id FROM artists) OR artist2 NOT IN (SELECT artists.id '
             'FROM artists);')
+        connection.commit()
         connection.close()
 
     def prune_search(self):
