@@ -75,8 +75,8 @@ def transform_artistresult(aresult):
               'db_score': aresult[2]}
     return (score, result)
 
-def scale(score, max, scale_to, offset=0, invert=False):
-    scaled = float(score) / float(max)
+def scale(score, maximum, scale_to, offset=0, invert=False):
+    scaled = float(score) / float(maximum)
     if not invert:
         return int(scaled * scale_to) + offset
     return int((1 - scaled) * scale_to) + offset
@@ -360,8 +360,8 @@ class AutoQueueBase(object):
 
     def queue_needs_songs(self):
         """determine whether the queue needs more songs added"""
-        time = self.player_get_queue_length()
-        return time < self.desired_queue_length
+        queue_length = self.player_get_queue_length()
+        return queue_length < self.desired_queue_length
 
     def song_generator(self, last_song):
         """yield songs that match the last song in the queue"""
@@ -420,7 +420,6 @@ class AutoQueueBase(object):
         self.unblock_artists()
         found = None
         last_songs = self.get_last_songs()
-        deletes = []
         while last_songs and not found:
             last_song = last_songs.pop()
             generator = self.song_generator(last_song)
@@ -433,11 +432,18 @@ class AutoQueueBase(object):
                         item = generator.next()
                         yield
                     score, result = item
-                    self.log("looking for: %05d: %06d %s - %s" % (
+                    look_for = result.get('artist')
+                    if look_for:
+                        title = result.get('title')
+                        if title:
+                            look_for += ' - ' + title
+                    else:
+                        look_for = result.get("filename")
+                    self.log("looking for: %05d: %06d %s" % (
                         score, result.get('db_score', 0) or
                         result.get('lastfm_match', 0) or
                         result.get('mirage_distance', 0),
-                        result.get('artist'), result.get('title', '*')))
+                        look_for))
                     artist = result.get('artist')
                     if artist:
                         if artist in blocked:
@@ -471,7 +477,6 @@ class AutoQueueBase(object):
         if self.desired_queue_length == 0:
             for dummy in self.queue_song():
                 yield
-        stop = False
         exhausted = False
         while not exhausted and self.queue_needs_songs():
             for exhausted in self.queue_song():
@@ -674,24 +679,6 @@ class AutoQueueBase(object):
         if not with_connection:
             self.close_database_connection(connection)
 
-    def get_artist_title_filename(self, file_id):
-        """Get artist and title by filename"""
-        result = None
-        connection = self.get_database_connection()
-        rows = connection.execute(
-            'SELECT filename FROM mirage WHERE trackid = ?', (file_id, ))
-        filename = None
-        for row in rows:
-            filename = row[0]
-            break
-        connection.close()
-        if not filename:
-            return
-        search = self.player_construct_file_search(filename)
-        for song in self.player_search(search):
-            return (song.get_artist(), song.get_title(), filename)
-        self.prune_filenames.append(filename)
-
     def get_artists_mirage_ids(self, artist_names):
         """Get all known file ids for this artist."""
         filenames = []
@@ -762,15 +749,10 @@ class AutoQueueBase(object):
         db = Db(self.get_db_path())
         trackid = db.get_track_id(filename)
         for i, match, mfile_id in db.get_neighbours(trackid):
-            result = self.get_artist_title_filename(mfile_id)
-            if not result:
-                continue
-            track_artist, track_title, track_filename = result
+            filename = db.get_filename(mfile_id)
             yield(scale(i, maximum, scale_to),
                   {'mirage_distance': match,
-                   'artist': track_artist,
-                   'title': track_title,
-                   'filename': track_filename})
+                   'filename': filename})
 
     def get_ordered_similar_tracks(self, song):
         """get similar tracks from the database sorted by descending

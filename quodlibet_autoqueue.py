@@ -317,7 +317,8 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def player_construct_artist_search(self, artist, restrictions=None):
         """construct a search that looks for songs with this artist"""
-        search = 'artist = "%s"' % escape(artist)
+        search = '|(artist = "%s",performer="%s")' % (
+            escape(artist), escape(artist))
         if restrictions:
             search = "&(%s, %s)" % (search, restrictions)
         return search
