@@ -297,21 +297,15 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         excluding = '&(%s)' % ', '.join(
             ["!artist ='%s'" % escape(a) for a in exclude_artists])
         for tag in tags:
-            if tag.startswith("artist:") or tag.startswith(
-                "album:"):
-                stripped = ":".join(tag.split(":")[1:])
-            else:
-                stripped = tag
-            stripped = escape(stripped)
-            search_tags.extend([
-                'grouping = "%s"' % stripped,
-                'grouping = "artist:%s"' % stripped,
-                'grouping = "album:%s"' % stripped])
+            stripped = escape(tag)
+            search_tags.append(
+                '|(grouping = "%s",grouping = "artist:%s",'
+                'grouping = "album:%s")' % (stripped, stripped, stripped))
         if restrictions:
-            search = "&(|(%s),%s,%s)" % (
+            search = "&(&(%s),%s,%s)" % (
                 ",".join(search_tags), excluding, restrictions)
         else:
-            search = "&(|(%s),%s)" % (
+            search = "&(&(%s),%s)" % (
                 ",".join(search_tags), excluding)
         return search
 

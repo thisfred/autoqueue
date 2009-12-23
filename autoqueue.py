@@ -23,7 +23,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 from collections import deque
 from datetime import datetime, timedelta
 from time import strptime, sleep, time
-import urllib
+import urllib, itertools
 import random, os, heapq
 from xml.dom import minidom
 from cPickle import Pickler, Unpickler
@@ -320,8 +320,18 @@ class AutoQueueBase(object):
             for result in self.get_ordered_similar_artists(last_song):
                 yield result
         if self.by_tags:
-            for result in self.get_ordered_tag_search(last_song):
-                yield result
+            tags = last_song.get_tags()
+            tagset = set([])
+            for tag in tags:
+                if tag.startswith("artist:") or tag.startswith(
+                    "album:"):
+                    stripped = ":".join(tag.split(":")[1:])
+                else:
+                    stripped = tag
+                tagset.add(stripped)
+            for i in range(len(tagset), 0, -1):
+                for combination in itertools.combinations(tagset, i):
+                    yield {'score': i, 'tags': combination,}
 
     def construct_search(self, artist=None, title=None, tags=None,
                          filename=None, restrictions=None):
@@ -541,7 +551,7 @@ class AutoQueueBase(object):
             if matchnode:
                 match = int(float(matchnode[0].firstChild.nodeValue) * 100)
             result = {
-                'lastfm_match': match,
+                'score': match,
                 'artist': name,}
             if self.use_db:
                 self._artists_to_update.setdefault(artist_id, []).append(result)
@@ -768,11 +778,6 @@ class AutoQueueBase(object):
             for result in self.get_similar_artists_from_lastfm(
                     artist_name, artist_id):
                 yield result
-
-    def get_ordered_tag_search(self, song):
-        tags = song.get_tags()
-        if tags:
-            yield 20000, {'tags': tags}
 
     def _get_artist_match(self, artist1, artist2, with_connection=None):
         """get artist match score from database"""
