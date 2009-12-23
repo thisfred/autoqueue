@@ -57,61 +57,6 @@ WAIT_BETWEEN_REQUESTS = timedelta(0, 1)
 # XXX make configurable
 NEIGHBOURS = 20
 
-def exhaust(iterator):
-    for i in iterator:
-        yield
-
-def transform_trackresult(tresult):
-    score = tresult[0]
-    result = {
-        'artist': tresult[1],
-        'title': tresult[2],
-        'db_score': tresult[3],}
-    return (score, result)
-
-def transform_artistresult(aresult):
-    score = aresult[0]
-    result = {'artist': aresult[1],
-              'db_score': aresult[2]}
-    return (score, result)
-
-def scale(score, maximum, scale_to, offset=0, invert=False):
-    scaled = float(score) / float(maximum)
-    if not invert:
-        return int(scaled * scale_to) + offset
-    return int((1 - scaled) * scale_to) + offset
-
-def scale_transformer(orig, maximum, scale_to, offset=0):
-    for result in orig:
-        yield (scale(result[0], maximum, scale_to,
-                    offset=offset, invert=True),) + result[1:] + (result[0],)
-
-def merge(*subsequences):
-    # prepare a priority queue whose items are pairs of the form
-    # (current-value, iterator), one each per (non-empty) subsequence
-    heap = [  ]
-    for subseq in subsequences:
-        iterator = iter(subseq)
-        for current_value in iterator:
-            # subseq is not empty, therefore add this subseq's pair
-            # (current-value, iterator) to the list
-            heap.append((current_value, iterator))
-            break
-    # make the priority queue into a heap
-    heapq.heapify(heap)
-    while heap:
-        # get and yield lowest current value (and corresponding iterator)
-        current_value, iterator = heap[0]
-        yield current_value
-        for current_value in iterator:
-            # subseq is not finished, therefore add this subseq's pair
-            # (current-value, iterator) back into the priority queue
-            heapq.heapreplace(heap, (current_value, iterator))
-            break
-        else:
-            # subseq has been exhausted, therefore remove it from the queue
-            heapq.heappop(heap)
-
 
 class Throttle(object):
     def __init__(self, wait):
@@ -181,8 +126,6 @@ class AutoQueueBase(object):
     in_memory = False
     def __init__(self):
         self.connection = None
-        self.max_track_match = 10000
-        self.max_artist_match = 10000
         self.artist_block_time = 1
         self.track_block_time = 30
         self.desired_queue_length = 0
@@ -365,19 +308,20 @@ class AutoQueueBase(object):
 
     def song_generator(self, last_song):
         """yield songs that match the last song in the queue"""
-        generators = []
         if MIRAGE and self.by_mirage:
             for dummy in self.analyze_track(last_song):
                 yield
-            generators.append(self.get_ordered_mirage_tracks(last_song))
+            for result in self.get_ordered_mirage_tracks(last_song):
+                yield result
         if self.by_tracks:
-            generators.append(self.get_ordered_similar_tracks(last_song))
+            for result in self.get_ordered_similar_tracks(last_song):
+                yield result
         if self.by_artists:
-            generators.append(self.get_ordered_similar_artists(last_song))
+            for result in self.get_ordered_similar_artists(last_song):
+                yield result
         if self.by_tags:
-            generators.append(self.get_ordered_tag_search(last_song))
-        for result in merge(*generators):
-            yield result
+            for result in self.get_ordered_tag_search(last_song):
+                yield result
 
     def construct_search(self, artist=None, title=None, tags=None,
                          filename=None, restrictions=None):
@@ -426,12 +370,10 @@ class AutoQueueBase(object):
             while not found:
                 yield
                 blocked = self.get_blocked_artists()
-                try:
-                    item = generator.next()
-                    while not item:
-                        item = generator.next()
+                for result in generator:
+                    if not result:
                         yield
-                    score, result = item
+                        continue
                     look_for = result.get('artist')
                     if look_for:
                         title = result.get('title')
@@ -439,11 +381,8 @@ class AutoQueueBase(object):
                             look_for += ' - ' + title
                     else:
                         look_for = result.get("filename")
-                    self.log("looking for: %05d: %06d %s" % (
-                        score, result.get('db_score', 0) or
-                        result.get('lastfm_match', 0) or
-                        result.get('mirage_distance', 0),
-                        look_for))
+                    self.log("looking for: %06d %s" % (
+                        result.get('score', 0), look_for))
                     artist = result.get('artist')
                     if artist:
                         if artist in blocked:
@@ -458,15 +397,12 @@ class AutoQueueBase(object):
                         found = self.search_and_filter(
                             artist=result.get("artist"),
                             title=result.get("title"))
-                except StopIteration:
                     break
         if found:
             self.player_enqueue(found)
             if MIRAGE and self.by_mirage:
                 for dummy in self.analyze_track(self.get_last_songs()[-1]):
                     yield
-        for dummy in exhaust(generator):
-            yield
         if not found:
             yield "exhausted"
 
@@ -560,8 +496,9 @@ class AutoQueueBase(object):
             urllib.quote_plus(enc_title))
         xmldoc = self.last_fm_request(url)
         if xmldoc is None:
-            raise StopIteration
+            return []
         nodes = xmldoc.getElementsByTagName("track")
+        results = []
         for node in nodes:
             similar_artist = similar_title = ''
             match = None
@@ -577,14 +514,13 @@ class AutoQueueBase(object):
                     and match is not None):
                     break
             result = {
-                'lastfm_match': match,
+                'score': match,
                 'artist': similar_artist,
                 'title': similar_title,}
             if self.use_db:
                 self._tracks_to_update.setdefault(track_id, []).append(result)
-            yield (
-                scale(match, self.max_track_match, 10000, offset=1000,
-                      invert=True), result)
+            results.append(result)
+        return results
 
     def get_similar_artists_from_lastfm(self, artist_name, artist_id):
         """get similar artists"""
@@ -594,8 +530,9 @@ class AutoQueueBase(object):
             urllib.quote_plus(enc_artist_name))
         xmldoc = self.last_fm_request(url)
         if xmldoc is None:
-            raise StopIteration
+            return []
         nodes = xmldoc.getElementsByTagName("artist")
+        results = []
         for node in nodes:
             name = node.getElementsByTagName(
                 "name")[0].firstChild.nodeValue.lower()
@@ -608,10 +545,8 @@ class AutoQueueBase(object):
                 'artist': name,}
             if self.use_db:
                 self._artists_to_update.setdefault(artist_id, []).append(result)
-            yield (
-                scale(
-                match, self.max_artist_match, 10000, offset=10000, invert=True),
-                result)
+            results.append(result)
+        return results
 
     @Throttle(WAIT_BETWEEN_REQUESTS)
     def last_fm_request(self, url):
@@ -621,7 +556,9 @@ class AutoQueueBase(object):
             stream = urllib.urlopen(url)
             xmldoc = minidom.parse(stream).documentElement
             return xmldoc
-        except:
+        except Exception, e:
+            self.log("Error: %s" % e)
+            self.log("xmldoc: %s" % xmldoc)
             self.lastfm = False
             return None
 
@@ -737,133 +674,105 @@ class AutoQueueBase(object):
 
     def get_ordered_mirage_tracks(self, song):
         """get similar tracks from mirage acoustic analysis"""
-        maximum = 20
-        scale_to = 1000
         artist_name = song.get_artist()
         title = song.get_title()
         filename = song.get_filename()
         self.log("Getting similar tracks from mirage for: %s - %s" % (
             artist_name, title))
         if not self.use_db:
-            raise StopIteration
+            return
         db = Db(self.get_db_path())
         trackid = db.get_track_id(filename)
-        for i, match, mfile_id in db.get_neighbours(trackid):
+        for match, mfile_id in db.get_neighbours(trackid):
             filename = db.get_filename(mfile_id)
-            yield(scale(i, maximum, scale_to),
-                  {'mirage_distance': match,
-                   'filename': filename})
+            yield {'score': match, 'filename': filename}
 
-    def get_ordered_similar_tracks(self, song):
-        """get similar tracks from the database sorted by descending
-        match score"""
-        scale_to = 10000
-        artist_name = song.get_artist()
-        title = song.get_title()
+    def get_similar_tracks_from_db(self, track_id):
+        """Get similar tracks from the database sorted by descending
+        match score."""
         connection = self.get_database_connection()
-        track = self.get_track(artist_name, title, with_connection=connection)
-        track_id, updated = track[0], track[3]
-        if not self.use_db:
-            for result in scale_transformer(
-                self.get_similar_tracks_from_lastfm(
-                artist_name, title, track_id), self.max_track_match, scale_to):
-                yield result
-        generators = []
-        cursor1 = [row for row in connection.execute(
-            "SELECT track_2_track.match, artists.name, tracks.title  FROM"
-            " track_2_track INNER JOIN tracks ON track_2_track.track1"
-            " = tracks.id INNER JOIN artists ON artists.id = tracks.artist"
-            " WHERE track_2_track.track2 = ? ORDER BY track_2_track.match DESC",
+        results = [row for row in connection.execute(
+            "SELECT track_2_track.match, artists.name, tracks.title"
+            " FROM track_2_track INNER JOIN tracks ON"
+            " track_2_track.track2 = tracks.id INNER JOIN artists ON"
+            " artists.id = tracks.artist WHERE track_2_track.track1"
+            " = ? ORDER BY track_2_track.match DESC",
             (track_id,))]
         self.close_database_connection(connection)
-        generators.append(
-            scale_transformer(cursor1, self.max_track_match, scale_to,
-                              offset=1000))
+        for score, artist, title in results:
+            yield {'score': score, 'artist': artist, 'title': title}
+
+    def get_ordered_similar_tracks(self, song):
+        """get similar tracks from last.fm/the database sorted by
+        descending match score"""
+
+        artist_name = song.get_artist()
+        title = song.get_title()
+        track = self.get_track(artist_name, title)
+        track_id, updated = track[0], track[3]
+        if not self.use_db:
+            for result in self.get_similar_tracks_from_lastfm(artist_name,
+                                                              title, track_id):
+                yield result
         if updated:
             updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
             if updated + timedelta(self.cache_time) > self.now:
                 self.log("Getting similar tracks from db for: %s - %s" % (
                     artist_name, title))
-                connection2 = self.get_database_connection()
-                cursor2 = [row for row in connection2.execute(
-                    "SELECT track_2_track.match, artists.name, tracks.title"
-                    " FROM track_2_track INNER JOIN tracks ON"
-                    " track_2_track.track2 = tracks.id INNER JOIN artists ON"
-                    " artists.id = tracks.artist WHERE track_2_track.track1"
-                    " = ? ORDER BY track_2_track.match DESC",
-                    (track_id,))]
-                self.close_database_connection(connection2)
-                generators.append(
-                    scale_transformer(cursor2, self.max_track_match, scale_to,
-                                      offset=1000))
+                for result in self.get_similar_tracks_from_db(
+                        track_id):
+                    yield result
             else:
-                generators.append(
-                    self.get_similar_tracks_from_lastfm(
-                    artist_name, title, track_id))
+                for result in self.get_similar_tracks_from_lastfm(
+                        artist_name, title, track_id):
+                    yield result
         else:
-            generators.append(
-                self.get_similar_tracks_from_lastfm(
-                artist_name, title, track_id))
-        for result in merge(*generators):
-            if len(result) > 2:
-                result = transform_trackresult(result)
-            yield result
+            for result in self.get_similar_tracks_from_lastfm(
+                    artist_name, title, track_id):
+                yield result
+
+    def get_similar_artists_from_db(self, artist_id):
+        connection = self.get_database_connection()
+        results = [row for row in connection.execute(
+            "SELECT match, name FROM artist_2_artist INNER JOIN"
+            " artists ON artist_2_artist.artist2 = artists.id WHERE"
+            " artist_2_artist.artist1 = ? ORDER BY match DESC;",
+            (artist_id,))]
+        self.close_database_connection(connection)
+        for score, artist in results:
+            yield {'score': score, 'artist': artist}
 
     def get_ordered_similar_artists(self, song):
         """get similar artists from the database sorted by descending
         match score"""
-        scale_to = 10000
         artist_name = song.get_artist()
-        connection = self.get_database_connection()
-        artist = self.get_artist(artist_name, with_connection=connection)
+        artist = self.get_artist(artist_name)
         artist_id, updated = artist[0], artist[2]
         if not self.use_db:
             for result in self.get_similar_artists_from_lastfm(
                 artist_name, artist_id):
                 yield result
-        generators = []
-        cursor1 = [row for row in connection.execute(
-            "SELECT match, name  FROM artist_2_artist INNER JOIN artists"
-            " ON artist_2_artist.artist1 = artists.id WHERE"
-            " artist_2_artist.artist2 = ? ORDER BY match DESC",
-            (artist_id,))]
-        self.close_database_connection(connection)
-        generators.append(
-            scale_transformer(
-            cursor1, self.max_artist_match, scale_to, offset=10000))
         if updated:
             updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
             if updated + timedelta(self.cache_time) > self.now:
                 self.log(
                     "Getting similar artists from db for: %s " %
                     artist_name)
-                connection2 = self.get_database_connection()
-                cursor2 = [row for row in connection2.execute(
-                    "SELECT match, name  FROM artist_2_artist INNER JOIN"
-                    " artists ON artist_2_artist.artist2 = artists.id WHERE"
-                    " artist_2_artist.artist1 = ? ORDER BY match DESC;",
-                    (artist_id,))]
-                self.close_database_connection(connection2)
-                generators.append(
-                    scale_transformer(
-                    cursor2, self.max_artist_match, scale_to, offset=10000))
+                for result in self.get_similar_artists_from_db(artist_id):
+                    yield result
             else:
-                generators.append(
-                    self.get_similar_artists_from_lastfm(
-                    artist_name, artist_id))
+                for result in self.get_similar_artists_from_lastfm(
+                        artist_name, artist_id):
+                    yield result
         else:
-            generators.append(
-                self.get_similar_artists_from_lastfm(artist_name, artist_id))
-        for result in merge(*generators):
-            if type(result[1]) != dict:
-                result = transform_artistresult(result)
-            yield result
+            for result in self.get_similar_artists_from_lastfm(
+                    artist_name, artist_id):
+                yield result
 
     def get_ordered_tag_search(self, song):
         tags = song.get_tags()
-        if not tags:
-            raise StopIteration
-        yield 20000, {'tags': tags}
+        if tags:
+            yield 20000, {'tags': tags}
 
     def _get_artist_match(self, artist1, artist2, with_connection=None):
         """get artist match score from database"""
@@ -993,11 +902,11 @@ class AutoQueueBase(object):
             if self._get_artist_match(
                 artist_id, id2, with_connection=connection):
                 self._update_artist_match(
-                    artist_id, id2, artist['lastfm_match'],
+                    artist_id, id2, artist['score'],
                     with_connection=connection)
                 continue
             self._insert_artist_match(
-                artist_id, id2, artist['lastfm_match'],
+                artist_id, id2, artist['score'],
                 with_connection=connection)
         self._update_artist(artist_id, with_connection=connection)
         connection.commit()
@@ -1011,11 +920,11 @@ class AutoQueueBase(object):
                 track['artist'], track['title'], with_connection=connection)[0]
             if self._get_track_match(track_id, id2, with_connection=connection):
                 self._update_track_match(
-                    track_id, id2, track['lastfm_match'],
+                    track_id, id2, track['score'],
                     with_connection=connection)
                 continue
             self._insert_track_match(
-                track_id, id2, track['lastfm_match'],
+                track_id, id2, track['score'],
                 with_connection=connection)
         self._update_track(track_id, with_connection=connection)
         connection.commit()

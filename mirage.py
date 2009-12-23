@@ -510,15 +510,12 @@ class Db(object):
 
     def get_neighbours(self, trackid):
         connection = self.get_database_connection()
-        neighbours1 = [row for row in connection.execute(
+        neighbours = [row for row in connection.execute(
             "SELECT distance, track_2 FROM distance WHERE track_1 = ? "
             "ORDER BY distance ASC",
             (trackid,))]
         self.close_database_connection(connection)
-        return [
-            (i, distance, track) for (i, (distance, track)) in
-            enumerate(neighbours1)]
-
+        return neighbours
 
 class Mfcc(object):
     def __init__(self, winsize, srate, filters, cc):
