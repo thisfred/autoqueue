@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
-import random
-from collections import deque
+import unittest
 from datetime import datetime, timedelta
 from xml.dom import minidom
-from nose.tools import assert_equals, assert_not_equals
 from autoqueue import SongBase, AutoQueueBase, Throttle
-
 
 WAIT_BETWEEN_REQUESTS = timedelta(0,0,10)
 
@@ -102,7 +99,7 @@ class MockSong(SongBase):
 
 
 class MockAutoQueue(AutoQueueBase):
-    def __init__(self):
+    def setUp(self):
         self.player = MockPlayer(self.started)
         self.use_db = True
         self.in_memory = True
@@ -168,21 +165,21 @@ class MockAutoQueue(AutoQueueBase):
     def analyze_track(self, song):
         yield
 
-class TestSong(object):
-    def setup(self):
+class TestSong(unittest.TestCase):
+    def setUp(self):
         songobject = (
             'Joni Mitchell', 'Carey', ['matala', 'crete', 'places', 'villages',
                                        'islands', 'female vocals'])
         self.song = MockSong(*songobject)
 
     def test_get_artist(self):
-        assert_equals('joni mitchell', self.song.get_artist())
+        self.assertEqual('joni mitchell', self.song.get_artist())
 
     def test_get_title(self):
-        assert_equals('carey', self.song.get_title())
+        self.assertEqual('carey', self.song.get_title())
 
     def test_get_tags(self):
-        assert_equals(['matala', 'crete', 'places', 'villages', 'islands',
+        self.assertEqual(['matala', 'crete', 'places', 'villages', 'islands',
                        'female vocals'], self.song.get_tags())
 
 
@@ -194,31 +191,31 @@ def throttled_method():
 def unthrottled_method():
     return
 
-class TestAutoQueue(object):
-    def setup(self):
+class TestAutoQueue(unittest.TestCase):
+    def setUp(self):
         self.autoqueue = MockAutoQueue()
 
     def test_in_memory(self):
-        assert_equals(True, self.autoqueue.in_memory)
+        self.assertEqual(True, self.autoqueue.in_memory)
 
     def test_get_database_connection(self):
         connection = self.autoqueue.get_database_connection()
         cursor = connection.cursor()
         cursor.execute("SELECT * FROM tracks;")
         rows = cursor.fetchall()
-        assert_equals([], rows)
+        self.assertEqual([], rows)
 
     def test_get_artist(self):
         artist = 'joni mitchell'
         row = self.autoqueue.get_artist(artist)
-        assert_equals((artist, None), row[1:])
+        self.assertEqual((artist, None), row[1:])
 
     def test_get_track(self):
         artist = "nina simone"
         title = "i think it's going to rain today"
         artist_id = self.autoqueue.get_artist(artist)[0]
         row = self.autoqueue.get_track(artist, title)
-        assert_equals((artist_id, title, None), row[1:])
+        self.assertEqual((artist_id, title, None), row[1:])
 
     def test_get_similar_artists_from_lastfm(self):
         artist = 'joni mitchell'
@@ -251,7 +248,7 @@ class TestAutoQueue(object):
             (14523,
              {'lastfm_match': 5477, 'artist': u'neil young & crazy horse'})]
         sim = [track for track in similar_artists][:22]
-        assert_equals(td, sim)
+        self.assertEqual(td, sim)
         artist = u'habib koité & bamada'
         row = self.autoqueue.get_artist(artist)
         artist_id = row[0]
@@ -286,7 +283,7 @@ class TestAutoQueue(object):
              {'lastfm_match': 326,
               'artist': u'ali farka tour\xe9 and ry cooder'}),
             (19682, {'lastfm_match': 318, 'artist': u'sali sidibe'})]
-        assert_equals(td, sim)
+        self.assertEqual(td, sim)
 
     def test_get_similar_tracks_from_lastfm(self):
         artist = 'nina simone'
@@ -339,7 +336,7 @@ class TestAutoQueue(object):
                {'title': u'mellow mood', 'lastfm_match': 426,
                 'artist': u'jimmy smith and wes montgomery'})]
         sim = [track for track in similar_tracks][:14]
-        assert_equals(td, sim)
+        self.assertEqual(td, sim)
 
     def test_get_ordered_similar_artists(self):
         song = MockSong('nina simone', 'ne me quitte pas')
@@ -358,12 +355,12 @@ class TestAutoQueue(object):
                      'artist': u'ella fitzgerald & louis armstrong'}),
             (15113, {'lastfm_match': 4887, 'artist': u'blossom dearie'})]
         for i, item in enumerate(td):
-            assert_equals(td[i], similar_artists.next())
+            self.assertEqual(td[i], similar_artists.next())
         row = self.autoqueue.get_artist(artist)
-        assert_equals((artist, None), row[1:])
+        self.assertEqual((artist, None), row[1:])
         artist = 'dionne warwick'
         row = self.autoqueue.get_artist(artist)
-        assert_equals((artist, None), row[1:])
+        self.assertEqual((artist, None), row[1:])
 
     def test_get_ordered_similar_tracks(self):
         song = MockSong('joni mitchell', 'carey')
@@ -413,56 +410,56 @@ class TestAutoQueue(object):
              {'title': u"that's the spirit", 'lastfm_match': 449,
               'artist': u'judee sill'})]
         sim = [track for track in similar_tracks][:14]
-        assert_equals(td, sim)
+        self.assertEqual(td, sim)
         artist_id = self.autoqueue.get_artist(artist)[0]
         row = self.autoqueue.get_track(artist, title)
-        assert_equals((artist_id, title, None), row[1:])
+        self.assertEqual((artist_id, title, None), row[1:])
         artist = 'leonard cohen'
         title = 'suzanne'
         artist_id = self.autoqueue.get_artist(artist)[0]
         row = self.autoqueue.get_track(artist, title)
-        assert_equals((artist_id, title, None), row[1:])
+        self.assertEqual((artist_id, title, None), row[1:])
 
     def test_queue_needs_songs(self):
         self.autoqueue.desired_queue_length = 4
-        assert_equals(True, self.autoqueue.queue_needs_songs())
+        self.assertEqual(True, self.autoqueue.queue_needs_songs())
         test_song = MockSong('Joni Mitchell', 'Carey')
         for i in range(4):
             self.autoqueue.player_enqueue(test_song)
-        assert_equals(False, self.autoqueue.queue_needs_songs())
+        self.assertEqual(False, self.autoqueue.queue_needs_songs())
 
     def test_on_song_started(self):
         test_song = MockSong('Joni Mitchell', 'Carey')
         self.autoqueue.started(test_song)
         songs_in_queue = self.autoqueue.player_get_songs_in_queue()
-        assert_equals('joanna newsom', songs_in_queue[0].get_artist())
-        assert_equals('peach, plum, pear', songs_in_queue[0].get_title())
+        self.assertEqual('joanna newsom', songs_in_queue[0].get_artist())
+        self.assertEqual('peach, plum, pear', songs_in_queue[0].get_title())
 
     def test_block_artist(self):
         artist_name = 'joni mitchell'
         self.autoqueue.block_artist(artist_name)
-        assert_equals(True, self.autoqueue.is_blocked(artist_name))
-        assert_equals([artist_name], self.autoqueue.get_blocked_artists())
+        self.assertEqual(True, self.autoqueue.is_blocked(artist_name))
+        self.assertEqual([artist_name], self.autoqueue.get_blocked_artists())
 
     def test_get_last_song(self):
         test_song = MockSong('Nina Simone', "I Think It's Going to Rain Today",
                              ['forecasts', 'predictions', 'today',
                               'female vocals', 'weather', 'rain'])
         self.autoqueue.player_enqueue(test_song)
-        assert_equals(
+        self.assertEqual(
             'nina simone', self.autoqueue.get_last_song().get_artist())
-        assert_equals(
+        self.assertEqual(
             "i think it's going to rain today",
             self.autoqueue.get_last_song().get_title())
         self.autoqueue.player.play_song_from_queue()
-        assert_equals(
+        self.assertEqual(
             'marlena shaw', self.autoqueue.get_last_song().get_artist())
-        assert_equals(
+        self.assertEqual(
             'will i find my love today?',
             self.autoqueue.get_last_song().get_title())
 
 
-class TestThrottle(object):
+class TestThrottle(unittest.TestCase):
     def test_throttle(self):
         now = datetime.now()
         times = 0
@@ -471,5 +468,5 @@ class TestThrottle(object):
             times += 1
             if datetime.now() > (now + timedelta(0,0,1000)):
                 break
-        assert_equals(True, times < 100)
+        self.assertEqual(True, times < 100)
 

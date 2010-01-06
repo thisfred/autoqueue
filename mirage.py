@@ -20,10 +20,9 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
 
-import os, struct, math, sys
+import os, struct, math
 from decimal import Decimal
 from datetime import datetime
-from operator import itemgetter
 import cPickle as pickle
 from cStringIO import StringIO
 from ctypes import *
@@ -221,7 +220,6 @@ class AudioDecoder(object):
         size = c_int(0)
         ret = c_int(0)
 
-        #frames_requested = self.seconds * self.rate / self.winsize
         data = mirageaudio_decode(
             self.ma, filename, byref(frames), byref(size), byref(ret))
         if ret == -1:
@@ -261,7 +259,6 @@ class Matrix(object):
 
     def multiply(self, m2):
         if self.columns != m2.rows:
-            print self.columns, m2.rows
             raise MatrixDimensionMismatchException
         m3 = Matrix(self.rows, m2.columns)
         m3.d = dot(self.d, m2.d)
@@ -455,7 +452,7 @@ class Db(object):
         connection.commit()
         self.close_database_connection(connection)
 
-    def add_neighbours(self, trackid, scms, exclude_ids=None, add=20):
+    def add_neighbours(self, trackid, scms, exclude_ids=None, neighbours=20):
         connection = self.get_database_connection()
         connection.execute("DELETE FROM distance WHERE track_1 = ?", (trackid,))
         connection.commit()
@@ -471,12 +468,12 @@ class Db(object):
                 continue
             other = instance_from_picklestring(buf)
             dist = int(distance(scms, other, c) * 1000)
-            if len(best) > add - 1:
+            if len(best) > neighbours - 1:
                 if dist > best[-1][0]:
                     continue
             best.append((dist, trackid, otherid))
             best.sort()
-            while len(best) > add:
+            while len(best) > neighbours:
                 best.pop()
             yield
         added = 0
@@ -503,7 +500,10 @@ class Db(object):
             'SELECT filename FROM mirage WHERE trackid = ?', (trackid, ))
         filename = None
         for row in rows:
-            filename = row[0]
+            try:
+                filename = unicode(row[0], 'utf-8')
+            except UnicodeDecodeError:
+                break
             break
         connection.close()
         return filename

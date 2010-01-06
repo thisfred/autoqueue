@@ -261,6 +261,8 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def player_construct_file_search(self, filename, restrictions=None):
         """construct a search that looks for songs with this filename"""
+        if not filename:
+            return
         search = '~filename="%s"' % (escape(filename),)
         return search
 

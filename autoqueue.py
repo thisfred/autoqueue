@@ -24,7 +24,7 @@ from collections import deque
 from datetime import datetime, timedelta
 from time import strptime, sleep, time
 import urllib, itertools
-import random, os, heapq
+import random, os
 from xml.dom import minidom
 from cPickle import Pickler, Unpickler
 
@@ -355,6 +355,8 @@ class AutoQueueBase(object):
         search = self.construct_search(
             artist=artist, title=title, filename=filename, tags=tags,
             restrictions=self.restrictions)
+        if not search:
+            return
         songs = self.player_search(search)
         if songs:
             while songs:
@@ -367,7 +369,6 @@ class AutoQueueBase(object):
                 self.prune_filenames.append(filename)
             self.prune_titles.append(title)
         self.cached_misses.append((artist, title, filename, tags))
-        return None
 
     def queue_song(self):
         """Queue a single track"""
@@ -678,7 +679,7 @@ class AutoQueueBase(object):
             exclude_ids = self.get_artists_mirage_ids(artist_names)
             for dummy in db.add_neighbours(trackid, scms,
                                            exclude_ids=exclude_ids,
-                                           add=NEIGHBOURS):
+                                           neighbours=NEIGHBOURS):
                 yield
         return
 

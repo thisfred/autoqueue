@@ -1,7 +1,4 @@
-import sqlite3
-from numpy import array, zeros
-from nose.tools import assert_equals
-from mirage import Mir, Matrix, Vector, Db, ScmsConfiguration
+from mirage import Mir, Matrix, Db, ScmsConfiguration
 from mirage import distance
 from decimal import Decimal, getcontext
 
@@ -23,7 +20,7 @@ class TestMir(object):
         for i in range(mat.rows):
             for j in range(mat.columns):
                 mat.d[i, j] = (i + j) / (i + 1.0)
-        assert_equals(
+        self.assertEqual(
             [decimize(t) for t in list(mat.d.flatten())],
             [decimize(t) for t in [0.0, 1.0, 2.0, 3.0, 4.0,
              0.5, 1.0, 1.5, 2.0, 2.5,
@@ -46,7 +43,7 @@ class TestMir(object):
                 mat2.d[i, j] = j / (i + 1.0)
 
         mat3 = mat.multiply(mat2)
-        assert_equals(
+        self.assertEquals(
             [decimize(t) for t in list(mat3.d.flatten())],
             [decimize(t) for t in [0.0, 2.71666666667, 5.43333333333, 8.15,
              0.0, 2.5, 5.0, 7.5,
