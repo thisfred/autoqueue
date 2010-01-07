@@ -322,6 +322,8 @@ class AutoQueueBase(object):
                 yield result
         if self.by_tags:
             tags = last_song.get_tags()
+            if not tags:
+                return
             tagset = set([])
             for tag in tags:
                 if tag.startswith("artist:") or tag.startswith(
