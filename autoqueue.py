@@ -254,16 +254,14 @@ class AutoQueueBase(object):
         for artist in song.get_artists():
             if artist in self.get_blocked_artists():
                 return True
-        try:
-            lastplayed = song.get_last_started()
-        except NotImplemented:
+        lastplayed = song.get_last_started()
+        if lastplayed is NotImplemented:
             return False
         now = datetime.now()
         delta = now - datetime.fromtimestamp(lastplayed)
         days_ago = delta.days
-        try:
-            rating = song.get_rating()
-        except NotImplemented:
+        rating = song.get_rating()
+        if rating is NotImplemented:
             return self.track_block_time > days_ago
         bdays = max(1, self.track_block_time)
         suggested = 2 * bdays * (1 - rating)

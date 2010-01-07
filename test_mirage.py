@@ -1,24 +1,29 @@
-import unittest, gobject, sqlite3
+import unittest, sqlite3
 from mirage import Mir, Matrix, Db, ScmsConfiguration
 from mirage import distance
 from decimal import Decimal, getcontext
 
 # we have to do this or the tests break badly
-gobject.threads_init()
 import pygst
 pygst.require("0.10")
 
 import gst
-if gst.pygst_version >= (0, 10, 10):
-    import gst.pbutils
 
 mir = Mir()
-scms = mir.analyze('testfiles/test.mp3')
-scms2 = mir.analyze('testfiles/test2.mp3')
-scms3 = mir.analyze('testfiles/test3.ogg')
-scms4 = mir.analyze('testfiles/test4.ogg')
-scms5 = mir.analyze('testfiles/test5.ogg')
-scmses = [scms, scms2, scms3, scms4, scms5]
+
+filenames = [
+    'testfiles/test.mp3', 'testfiles/test2.mp3', 'testfiles/test3.ogg',
+    'testfiles/test4.ogg', 'testfiles/test5.ogg']
+
+scmses = {}
+for filename in filenames:
+    scmses[filename] = mir.analyze(filename)
+
+scms = scmses[filenames[0]]
+scms2 = scmses[filenames[1]]
+scms3 = scmses[filenames[2]]
+scms4 = scmses[filenames[3]]
+scms5 = scmses[filenames[4]]
 
 def decimize(f):
     return Decimal(str(f))
@@ -26,8 +31,8 @@ def decimize(f):
 
 class TestMir(unittest.TestCase):
     def setUp(self):
-        self.db = Db(":memory:")
         connection = sqlite3.connect(":memory:")
+        self.db = Db(":memory:", connection=connection)
         connection.text_factory = str
         connection.execute(
             'CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, '
@@ -117,42 +122,49 @@ class TestMir(unittest.TestCase):
         self.assertEqual(0, int(distance(scms5, scms5, c)))
 
     def test_add_track(self):
-        testdb = Db(":memory:")
-        for i, scms in enumerate(scmses):
-            self.db.add_track(i, scms)
+        for filename in filenames:
+            self.db.add_track(filename, scmses[filename])
         self.assertEqual(
-            [0,1,2],
+            [1,2,3,4,5],
+            sorted([id for (scms, id) in
+                    self.db.get_tracks()]))
+        self.assertEqual(
+            [1,2,5],
             sorted([id for (scms, id) in
                     self.db.get_tracks(exclude_ids=['3','4'])]))
 
     def test_get_track(self):
-        for i, testscms in enumerate(scmses):
-            self.db.add_track(i, testscms)
-        scms3_db = self.db.get_track('3')
-        scms4_db = self.db.get_track('4')
+        for filename in filenames:
+            self.db.add_track(filename, scmses[filename])
+        scms3_db = self.db.get_track(filenames[2])[1]
+        scms4_db = self.db.get_track(filenames[3])[1]
         c = ScmsConfiguration(20)
-        self.assertEqual(124, int(distance(scms3_db, scms4_db, c)))
+        self.assertEqual(49, int(distance(scms3_db, scms4_db, c)))
 
     def test_add_neighbours(self):
-        for i, testscms in enumerate(scmses):
-            self.db.add_track(i, testscms)
-            for dummy in self.db.add_neighbours(i, testscms):
+        for filename in filenames:
+            testscms = scmses[filename]
+            self.db.add_track(filename, testscms)
+            track_id = self.db.get_track_id(filename)
+            for dummy in self.db.add_neighbours(track_id, testscms):
                 pass
         connection = self.db.get_database_connection()
         distances = [
             row for row in connection.execute("SELECT * FROM distance")]
         self.assertEqual(
-            [(1, 0, 70338), (2, 1, 16563), (2, 0, 49060), (3, 2, 49652),
-             (3, 1, 59503), (3, 0, 69551), (4, 2, 84223), (4, 1, 124312),
-             (4, 3, 124450), (4, 0, 235246)],
+            [(2, 1, 70338), (3, 1, 49060), (3, 2, 16563), (4, 1, 69551),
+             (4, 2, 59503), (4, 3, 49652), (5, 1, 235246), (5, 4, 124450),
+             (5, 2, 124312), (5, 3, 84223)],
             distances)
 
     def test_get_neighbours(self):
-        scmses = [scms, scms2, scms3, scms4, scms5]
-        for i, testscms in enumerate(scmses):
-            for dummy in self.db.add_and_compare(i, testscms):
+        for filename in filenames:
+            testscms = scmses[filename]
+            self.db.add_track(filename, testscms)
+            track_id = self.db.get_track_id(filename)
+            for dummy in self.db.add_neighbours(track_id, testscms):
                 pass
         self.assertEqual(
-            [(49060, 2), (69551, 3), (70338, 1), (235246, 4)],
-            [a for a in self.db.get_neighbours(0)])
+            [(84223, 3), (124312, 2), (124450, 4), (235246, 1)],
+            [a for a in self.db.get_neighbours(5)])
 

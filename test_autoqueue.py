@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
-import unittest
+import unittest, gobject
 from datetime import datetime, timedelta
 from xml.dom import minidom
 from autoqueue import SongBase, AutoQueueBase, Throttle
+
+# we have to do this or the tests break badly
+gobject.threads_init()
 
 WAIT_BETWEEN_REQUESTS = timedelta(0,0,10)
 
@@ -83,13 +86,18 @@ class MockPlayer(object):
 
 
 class MockSong(SongBase):
-    def __init__(self, artist, title, tags=None):
+    def __init__(self, artist, title, tags=None, performers=None):
         self.artist = artist
         self.title = title
         self.tags = tags
+        self.performers = performers or []
 
     def get_artist(self):
         return self.artist.lower()
+
+    def get_artists(self):
+        return [self.artist.lower()] + [
+            performer.lower() for performer in self.performers]
 
     def get_title(self):
         return self.title.lower()
@@ -99,7 +107,7 @@ class MockSong(SongBase):
 
 
 class MockAutoQueue(AutoQueueBase):
-    def setUp(self):
+    def __init__(self):
         self.player = MockPlayer(self.started)
         self.use_db = True
         self.in_memory = True
@@ -162,7 +170,7 @@ class MockAutoQueue(AutoQueueBase):
         except:
             return None
 
-    def analyze_track(self, song):
+    def analyze_track(self, song, add_neighbours=False):
         yield
 
 class TestSong(unittest.TestCase):
@@ -194,8 +202,6 @@ def unthrottled_method():
 class TestAutoQueue(unittest.TestCase):
     def setUp(self):
         self.autoqueue = MockAutoQueue()
-
-    def test_in_memory(self):
         self.assertEqual(True, self.autoqueue.in_memory)
 
     def test_get_database_connection(self):
@@ -223,30 +229,28 @@ class TestAutoQueue(unittest.TestCase):
         similar_artists = self.autoqueue.get_similar_artists_from_lastfm(
             artist, artist_id)
         td = [
-            (10000, {'lastfm_match': 10000, 'artist': u'rickie lee jones'}),
-            (10728, {'lastfm_match': 9271, 'artist': u'carole king'}),
-            (11331, {'lastfm_match': 8669, 'artist': u'ani difranco'}),
-            (11873, {'lastfm_match': 8127, 'artist': u'joan baez'}),
-            (12527, {'lastfm_match': 7473, 'artist': u'neil young'}),
-            (12949, {'lastfm_match': 7051, 'artist': u'martha wainwright'}),
-            (12955, {'lastfm_match': 7044, 'artist': u'indigo girls'}),
-            (13120, {'lastfm_match': 6880, 'artist': u'james taylor'}),
-            (13295, {'lastfm_match': 6705, 'artist': u'paul simon'}),
-            (13323, {'lastfm_match': 6677, 'artist': u'dar williams'}),
-            (13596,
-             {'lastfm_match': 6404, 'artist': u'crosby, stills, nash & young'}),
-            (13771, {'lastfm_match': 6229, 'artist': u'k.d. lang'}),
-            (13849, {'lastfm_match': 6151, 'artist': u'simon & garfunkel'}),
-            (13935, {'lastfm_match': 6064, 'artist': u'joan armatrading'}),
-            (14041, {'lastfm_match': 5959, 'artist': u'patty griffin'}),
-            (14117, {'lastfm_match': 5883, 'artist': u'leonard cohen'}),
-            (14160, {'lastfm_match': 5840, 'artist': u'tim buckley'}),
-            (14298, {'lastfm_match': 5702, 'artist': u'suzanne vega'}),
-            (14351, {'lastfm_match': 5649, 'artist': u'janis ian'}),
-            (14409, {'lastfm_match': 5591, 'artist': u'kate bush'}),
-            (14445, {'lastfm_match': 5555, 'artist': u'cat stevens'}),
-            (14523,
-             {'lastfm_match': 5477, 'artist': u'neil young & crazy horse'})]
+            {'score': 10000, 'artist': u'rickie lee jones'},
+            {'score': 9271, 'artist': u'carole king'},
+            {'score': 8669, 'artist': u'ani difranco'},
+            {'score': 8127, 'artist': u'joan baez'},
+            {'score': 7473, 'artist': u'neil young'},
+            {'score': 7051, 'artist': u'martha wainwright'},
+            {'score': 7044, 'artist': u'indigo girls'},
+            {'score': 6880, 'artist': u'james taylor'},
+            {'score': 6705, 'artist': u'paul simon'},
+            {'score': 6677, 'artist': u'dar williams'},
+            {'score': 6404, 'artist': u'crosby, stills, nash & young'},
+            {'score': 6229, 'artist': u'k.d. lang'},
+            {'score': 6151, 'artist': u'simon & garfunkel'},
+            {'score': 6064, 'artist': u'joan armatrading'},
+            {'score': 5959, 'artist': u'patty griffin'},
+            {'score': 5883, 'artist': u'leonard cohen'},
+            {'score': 5840, 'artist': u'tim buckley'},
+            {'score': 5702, 'artist': u'suzanne vega'},
+            {'score': 5649, 'artist': u'janis ian'},
+            {'score': 5591, 'artist': u'kate bush'},
+            {'score': 5555, 'artist': u'cat stevens'},
+            {'score': 5477, 'artist': u'neil young & crazy horse'}]
         sim = [track for track in similar_artists][:22]
         self.assertEqual(td, sim)
         artist = u'habib koité & bamada'
@@ -256,33 +260,30 @@ class TestAutoQueue(unittest.TestCase):
             artist, artist_id)
         sim = [track for track in similar_artists][:22]
         td = [
-            (10000, {'lastfm_match': 10000, 'artist': u'salif keita'}),
-            (10463, {'lastfm_match': 9536, 'artist': u'mamou sidib\xe9'}),
-            (10669,
-             {'lastfm_match': 9330, 'artist': u'k\xe9l\xe9tigui diabat\xe9'}),
-            (10941, {'lastfm_match': 9058, 'artist': u'ali farka tour\xe9'}),
-            (11082, {'lastfm_match': 8917, 'artist': u'habib koit\xe9'}),
-            (11431, {'lastfm_match': 8569, 'artist': u'amadou & mariam'}),
-            (14050, {'lastfm_match': 5950, 'artist': u'tinariwen'}),
-            (14174, {'lastfm_match': 5826, 'artist': u'boubacar traor\xe9'}),
-            (14629, {'lastfm_match': 5371, 'artist': u'oliver mtukudzi'}),
-            (19619, {'lastfm_match': 381, 'artist': u'super rail band'}),
-            (19641, {'lastfm_match': 359, 'artist': u'lobi traor\xe9'}),
-            (19642,
-             {'lastfm_match': 358,
-              'artist': u'ali farka tour\xe9 & toumani diabat\xe9'}),
-            (19642, {'lastfm_match': 358, 'artist': u'tartit'}),
-            (19645, {'lastfm_match': 355, 'artist': u'issa bagayogo'}),
-            (19651, {'lastfm_match': 349, 'artist': u'kasse mady diabate'}),
-            (19653, {'lastfm_match': 347, 'artist': u'rokia traor\xe9'}),
-            (19654, {'lastfm_match': 346, 'artist': u'daby tour\xe9'}),
-            (19654, {'lastfm_match': 346, 'artist': u'oumou sangar\xe9'}),
-            (19660, {'lastfm_match': 340, 'artist': u'luciana souza'}),
-            (19663, {'lastfm_match': 337, 'artist': u'kandia kouyate'}),
-            (19674,
-             {'lastfm_match': 326,
-              'artist': u'ali farka tour\xe9 and ry cooder'}),
-            (19682, {'lastfm_match': 318, 'artist': u'sali sidibe'})]
+            {'score': 10000, 'artist': u'salif keita'},
+            {'score': 9536, 'artist': u'mamou sidib\xe9'},
+            {'score': 9330, 'artist': u'k\xe9l\xe9tigui diabat\xe9'},
+            {'score': 9058, 'artist': u'ali farka tour\xe9'},
+            {'score': 8917, 'artist': u'habib koit\xe9'},
+            {'score': 8569, 'artist': u'amadou & mariam'},
+            {'score': 5950, 'artist': u'tinariwen'},
+            {'score': 5826, 'artist': u'boubacar traor\xe9'},
+            {'score': 5371, 'artist': u'oliver mtukudzi'},
+            {'score': 381, 'artist': u'super rail band'},
+            {'score': 359, 'artist': u'lobi traor\xe9'},
+            {'score': 358,
+              'artist': u'ali farka tour\xe9 & toumani diabat\xe9'},
+            {'score': 358, 'artist': u'tartit'},
+            {'score': 355, 'artist': u'issa bagayogo'},
+            {'score': 349, 'artist': u'kasse mady diabate'},
+            {'score': 347, 'artist': u'rokia traor\xe9'},
+            {'score': 346, 'artist': u'daby tour\xe9'},
+            {'score': 346, 'artist': u'oumou sangar\xe9'},
+            {'score': 340, 'artist': u'luciana souza'},
+            {'score': 337, 'artist': u'kandia kouyate'},
+            {'score': 326,
+              'artist': u'ali farka tour\xe9 and ry cooder'},
+            {'score': 318, 'artist': u'sali sidibe'}]
         self.assertEqual(td, sim)
 
     def test_get_similar_tracks_from_lastfm(self):
@@ -292,49 +293,35 @@ class TestAutoQueue(unittest.TestCase):
         track_id = track[0]
         similar_tracks = self.autoqueue.get_similar_tracks_from_lastfm(
             artist, title, track_id)
-        td = [(9553,
-               {'title': u'how long has this been going o',
-                'lastfm_match': 447, 'artist': u'ella fitzgerald'}),
-              (9554,
-               {'title': u'our love is here to stay', 'lastfm_match': 446,
-                'artist': u'dinah washington'}),
-              (9556,
-               {'title': u'love for sale', 'lastfm_match': 444,
-                'artist': u'dinah washington'}),
-              (9557,
-               {'title': u'will i find my love today?', 'lastfm_match': 443,
-                'artist': u'marlena shaw'}),
-              (9557,
-               {'title': u'a couple of loosers', 'lastfm_match': 443,
-                'artist': u'marlena shaw'}),
-              (9562,
-               {'title': u'reasons', 'lastfm_match': 438,
-                'artist': u'minnie riperton'}),
-              (9562,
+        td = [{'title': u'how long has this been going o',
+                'score': 447, 'artist': u'ella fitzgerald'},
+               {'title': u'our love is here to stay', 'score': 446,
+                'artist': u'dinah washington'},
+               {'title': u'love for sale', 'score': 444,
+                'artist': u'dinah washington'},
+               {'title': u'will i find my love today?', 'score': 443,
+                'artist': u'marlena shaw'},
+               {'title': u'a couple of loosers', 'score': 443,
+                'artist': u'marlena shaw'},
+               {'title': u'reasons', 'score': 438,
+                'artist': u'minnie riperton'},
                {'title': u'sorry (digitally remastered 02)',
-                'lastfm_match': 438,
-                'artist': u'natalie cole'}),
-              (9562,
+                'score': 438,
+                'artist': u'natalie cole'},
                {'title': u'stand by (digitally remastered 02)',
-                'lastfm_match': 438, 'artist': u'natalie cole'}),
-              (9564,
-               {'title': u'adventures in paradise', 'lastfm_match': 436,
-                'artist': u'minnie riperton'}),
-              (9564,
-               {'title': u"i've got my love to keep me wa", 'lastfm_match': 436,
-                'artist': u'ella fitzgerald'}),
-              (9572,
-               {'title': u'find him', 'lastfm_match': 428,
-                'artist': u'cassandra wilson'}),
-              (9572,
+                'score': 438, 'artist': u'natalie cole'},
+               {'title': u'adventures in paradise', 'score': 436,
+                'artist': u'minnie riperton'},
+               {'title': u"i've got my love to keep me wa", 'score': 436,
+                'artist': u'ella fitzgerald'},
+               {'title': u'find him', 'score': 428,
+                'artist': u'cassandra wilson'},
                {'title': u'almost like being in love (lp version)',
-                'lastfm_match': 428, 'artist': u'della reese'}),
-              (9574,
-               {'title': u'jacaranda bougainvillea', 'lastfm_match': 426,
-                'artist': u'al jarreau'}),
-              (9574,
-               {'title': u'mellow mood', 'lastfm_match': 426,
-                'artist': u'jimmy smith and wes montgomery'})]
+                'score': 428, 'artist': u'della reese'},
+               {'title': u'jacaranda bougainvillea', 'score': 426,
+                'artist': u'al jarreau'},
+               {'title': u'mellow mood', 'score': 426,
+                'artist': u'jimmy smith and wes montgomery'}]
         sim = [track for track in similar_tracks][:14]
         self.assertEqual(td, sim)
 
@@ -343,17 +330,17 @@ class TestAutoQueue(unittest.TestCase):
         artist = song.get_artist()
         similar_artists = self.autoqueue.get_ordered_similar_artists(song)
         td = [
-            (10000, {'lastfm_match': 10000, 'artist': u'billie holiday'}),
-            (12066, {'lastfm_match': 7934, 'artist': u'ella fitzgerald'}),
-            (12598, {'lastfm_match': 7402, 'artist': u'sarah vaughan'}),
-            (13268, {'lastfm_match': 6731, 'artist': u'dinah washington'}),
-            (13481, {'lastfm_match': 6518, 'artist': u'madeleine peyroux'}),
-            (13958, {'lastfm_match': 6042, 'artist': u'etta james'}),
-            (14935, {'lastfm_match': 5065, 'artist': u'peggy lee'}),
-            (15016, {'lastfm_match': 4984, 'artist': u'julie london'}),
-            (15095, {'lastfm_match': 4905,
-                     'artist': u'ella fitzgerald & louis armstrong'}),
-            (15113, {'lastfm_match': 4887, 'artist': u'blossom dearie'})]
+            {'score': 10000, 'artist': u'billie holiday'},
+            {'score': 7934, 'artist': u'ella fitzgerald'},
+            {'score': 7402, 'artist': u'sarah vaughan'},
+            {'score': 6731, 'artist': u'dinah washington'},
+            {'score': 6518, 'artist': u'madeleine peyroux'},
+            {'score': 6042, 'artist': u'etta james'},
+            {'score': 5065, 'artist': u'peggy lee'},
+            {'score': 4984, 'artist': u'julie london'},
+            {'score': 4905,
+                     'artist': u'ella fitzgerald & louis armstrong'},
+            {'score': 4887, 'artist': u'blossom dearie'}]
         for i, item in enumerate(td):
             self.assertEqual(td[i], similar_artists.next())
         row = self.autoqueue.get_artist(artist)
@@ -368,47 +355,33 @@ class TestAutoQueue(unittest.TestCase):
         title = song.get_title()
         similar_tracks = self.autoqueue.get_ordered_similar_tracks(song)
         td = [
-            (9162,
-             {'title': u'things behind the sun', 'lastfm_match': 838,
-              'artist': u'nick drake'}),
-            (9193,
-             {'title': u'horn', 'lastfm_match': 807, 'artist': u'nick drake'}),
-            (9285,
-             {'title': u'peach, plum, pear', 'lastfm_match': 715,
-              'artist': u'joanna newsom'}),
-            (9300,
-             {'title': u'suzanne', 'lastfm_match': 700,
-              'artist': u'leonard cohen'}),
-            (9309,
-             {'title': u'sprout and the bean', 'lastfm_match': 691,
-              'artist': u'joanna newsom'}),
-            (9336,
-             {'title': u"blowin' in the wind", 'lastfm_match': 664,
-              'artist': u'bob dylan'}),
-            (9365,
-             {'title': u'famous blue raincoat', 'lastfm_match': 635,
-              'artist': u'leonard cohen'}),
-            (9402,
-             {'title': u'song for the asking', 'lastfm_match': 598,
-              'artist': u'simon & garfunkel'}),
-            (9407,
-             {'title': u"the times they are a-changin'", 'lastfm_match': 593,
-              'artist': u'bob dylan'}),
-            (9465,
-             {'title': u'keep the customer satisfied', 'lastfm_match': 535,
-              'artist': u'simon & garfunkel'}),
-            (9480,
-             {'title': u'peace train', 'lastfm_match': 520,
-              'artist': u'cat stevens'}),
-            (9489,
-             {'title': u'fire and rain', 'lastfm_match': 511,
-              'artist': u'james taylor'}),
-            (9549,
-             {'title': u'enough to be on your way', 'lastfm_match': 451,
-              'artist': u'james taylor'}),
-            (9551,
-             {'title': u"that's the spirit", 'lastfm_match': 449,
-              'artist': u'judee sill'})]
+            {'title': u'things behind the sun', 'score': 838,
+             'artist': u'nick drake'},
+            {'title': u'horn', 'score': 807, 'artist': u'nick drake'},
+            {'title': u'peach, plum, pear', 'score': 715,
+             'artist': u'joanna newsom'},
+            {'title': u'suzanne', 'score': 700,
+             'artist': u'leonard cohen'},
+            {'title': u'sprout and the bean', 'score': 691,
+             'artist': u'joanna newsom'},
+            {'title': u"blowin' in the wind", 'score': 664,
+             'artist': u'bob dylan'},
+            {'title': u'famous blue raincoat', 'score': 635,
+             'artist': u'leonard cohen'},
+            {'title': u'song for the asking', 'score': 598,
+             'artist': u'simon & garfunkel'},
+            {'title': u"the times they are a-changin'", 'score': 593,
+             'artist': u'bob dylan'},
+            {'title': u'keep the customer satisfied', 'score': 535,
+             'artist': u'simon & garfunkel'},
+            {'title': u'peace train', 'score': 520,
+             'artist': u'cat stevens'},
+            {'title': u'fire and rain', 'score': 511,
+             'artist': u'james taylor'},
+            {'title': u'enough to be on your way', 'score': 451,
+             'artist': u'james taylor'},
+            {'title': u"that's the spirit", 'score': 449,
+             'artist': u'judee sill'}]
         sim = [track for track in similar_tracks][:14]
         self.assertEqual(td, sim)
         artist_id = self.autoqueue.get_artist(artist)[0]
@@ -440,23 +413,6 @@ class TestAutoQueue(unittest.TestCase):
         self.autoqueue.block_artist(artist_name)
         self.assertEqual(True, self.autoqueue.is_blocked(artist_name))
         self.assertEqual([artist_name], self.autoqueue.get_blocked_artists())
-
-    def test_get_last_song(self):
-        test_song = MockSong('Nina Simone', "I Think It's Going to Rain Today",
-                             ['forecasts', 'predictions', 'today',
-                              'female vocals', 'weather', 'rain'])
-        self.autoqueue.player_enqueue(test_song)
-        self.assertEqual(
-            'nina simone', self.autoqueue.get_last_song().get_artist())
-        self.assertEqual(
-            "i think it's going to rain today",
-            self.autoqueue.get_last_song().get_title())
-        self.autoqueue.player.play_song_from_queue()
-        self.assertEqual(
-            'marlena shaw', self.autoqueue.get_last_song().get_artist())
-        self.assertEqual(
-            'will i find my love today?',
-            self.autoqueue.get_last_song().get_title())
 
 
 class TestThrottle(unittest.TestCase):

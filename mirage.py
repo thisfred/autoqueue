@@ -347,9 +347,9 @@ class Vector(Matrix):
 
 
 class Db(object):
-    def __init__(self, path):
+    def __init__(self, path, connection=None):
         self.dbpath = path
-        self.connection = None
+        self.connection = connection
 
     def close_database_connection(self, connection):
         if self.dbpath == ':memory:':
