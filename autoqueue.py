@@ -78,6 +78,9 @@ class SongBase(object):
     def __init__(self, song):
         self.song = song
 
+    def __str__(self):
+        return "<Song: %s - %s>" % (self.get_artist(), self.get_title())
+
     def get_artist(self):
         """return lowercase UNICODE name of artist"""
         return NotImplemented
@@ -376,36 +379,35 @@ class AutoQueueBase(object):
         while last_songs and not found:
             last_song = last_songs.pop()
             generator = self.song_generator(last_song)
-            while not found:
-                yield
-                blocked = self.get_blocked_artists()
-                for result in generator:
-                    if not result:
-                        yield
+            blocked = self.get_blocked_artists()
+            for result in generator:
+                if not result:
+                    yield
+                    continue
+                look_for = result.get('artist')
+                if look_for:
+                    title = result.get('title')
+                    if title:
+                        look_for += ' - ' + title
+                else:
+                    look_for = result.get("filename")
+                self.log("looking for: %06d %s" % (
+                    result.get('score', 0), look_for))
+                artist = result.get('artist')
+                if artist:
+                    if artist in blocked:
                         continue
-                    look_for = result.get('artist')
-                    if look_for:
-                        title = result.get('title')
-                        if title:
-                            look_for += ' - ' + title
-                    else:
-                        look_for = result.get("filename")
-                    self.log("looking for: %06d %s" % (
-                        result.get('score', 0), look_for))
-                    artist = result.get('artist')
-                    if artist:
-                        if artist in blocked:
-                            continue
-                    filename = result.get("filename")
-                    tags = result.get("tags")
-                    if filename:
-                        found = self.search_and_filter(filename=filename)
-                    elif tags:
-                        found = self.search_and_filter(tags=tags)
-                    else:
-                        found = self.search_and_filter(
-                            artist=result.get("artist"),
-                            title=result.get("title"))
+                filename = result.get("filename")
+                tags = result.get("tags")
+                if filename:
+                    found = self.search_and_filter(filename=filename)
+                elif tags:
+                    found = self.search_and_filter(tags=tags)
+                else:
+                    found = self.search_and_filter(
+                        artist=result.get("artist"),
+                        title=result.get("title"))
+                if found:
                     break
         if found:
             self.player_enqueue(found)
