@@ -758,29 +758,29 @@ class AutoQueueBase(object):
     def get_ordered_similar_artists(self, song):
         """get similar artists from the database sorted by descending
         match score"""
-        artist_name = song.get_artist()
-        artist = self.get_artist(artist_name)
-        artist_id, updated = artist[0], artist[2]
-        if not self.use_db:
-            for result in self.get_similar_artists_from_lastfm(
-                artist_name, artist_id):
-                yield result
-        if updated:
-            updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
-            if updated + timedelta(self.cache_time) > self.now:
-                self.log(
-                    "Getting similar artists from db for: %s " %
-                    artist_name)
-                for result in self.get_similar_artists_from_db(artist_id):
+        for artist_name in song.get_artists():
+            artist = self.get_artist(artist_name)
+            artist_id, updated = artist[0], artist[2]
+            if not self.use_db:
+                for result in self.get_similar_artists_from_lastfm(
+                    artist_name, artist_id):
                     yield result
+            if updated:
+                updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
+                if updated + timedelta(self.cache_time) > self.now:
+                    self.log(
+                        "Getting similar artists from db for: %s " %
+                        artist_name)
+                    for result in self.get_similar_artists_from_db(artist_id):
+                        yield result
+                else:
+                    for result in self.get_similar_artists_from_lastfm(
+                            artist_name, artist_id):
+                        yield result
             else:
                 for result in self.get_similar_artists_from_lastfm(
                         artist_name, artist_id):
                     yield result
-        else:
-            for result in self.get_similar_artists_from_lastfm(
-                    artist_name, artist_id):
-                yield result
 
     def _get_artist_match(self, artist1, artist2, with_connection=None):
         """get artist match score from database"""
