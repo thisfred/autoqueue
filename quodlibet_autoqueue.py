@@ -261,6 +261,8 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def player_construct_file_search(self, filename, restrictions=None):
         """construct a search that looks for songs with this filename"""
+        if not filename:
+            return
         search = '~filename="%s"' % (escape(filename),)
         return search
 
@@ -297,27 +299,22 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         excluding = '&(%s)' % ', '.join(
             ["!artist ='%s'" % escape(a) for a in exclude_artists])
         for tag in tags:
-            if tag.startswith("artist:") or tag.startswith(
-                "album:"):
-                stripped = ":".join(tag.split(":")[1:])
-            else:
-                stripped = tag
-            stripped = escape(stripped)
-            search_tags.extend([
-                'grouping = "%s"' % stripped,
-                'grouping = "artist:%s"' % stripped,
-                'grouping = "album:%s"' % stripped])
+            stripped = escape(tag)
+            search_tags.append(
+                '|(grouping = "%s",grouping = "artist:%s",'
+                'grouping = "album:%s")' % (stripped, stripped, stripped))
         if restrictions:
-            search = "&(|(%s),%s,%s)" % (
+            search = "&(&(%s),%s,%s)" % (
                 ",".join(search_tags), excluding, restrictions)
         else:
-            search = "&(|(%s),%s)" % (
+            search = "&(&(%s),%s)" % (
                 ",".join(search_tags), excluding)
         return search
 
     def player_construct_artist_search(self, artist, restrictions=None):
         """construct a search that looks for songs with this artist"""
-        search = 'artist = "%s"' % escape(artist)
+        search = '|(artist = "%s",performer="%s")' % (
+            escape(artist), escape(artist))
         if restrictions:
             search = "&(%s, %s)" % (search, restrictions)
         return search

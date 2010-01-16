@@ -20,10 +20,9 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
 
-import os, struct, math, sys
+import os, struct, math
 from decimal import Decimal
 from datetime import datetime
-from operator import itemgetter
 import cPickle as pickle
 from cStringIO import StringIO
 from ctypes import *
@@ -32,8 +31,10 @@ from scipy import *
 
 DEBUG = True
 
+
 class MirageAudio(Structure):
     pass
+
 
 cdll.LoadLibrary("/usr/lib/banshee-1/Extensions/libmirageaudio.so")
 libmirageaudio = CDLL("libmirageaudio.so")
@@ -59,7 +60,11 @@ class MirAnalysisImpossibleException(Exception):
     pass
 
 
-class MirageAudio(Structure):
+class AudioDecoderErrorException(Exception):
+    pass
+
+
+class AudioDecoderCanceledException(Exception):
     pass
 
 
@@ -89,7 +94,7 @@ def distance(scms1, scms2, scmsconf):
             idx + i]
         for k in range (i+1, dim):
             val += 2 * s1cov[idx + k] * s2icov[idx + k] + 2 * s2cov[
-                idx + k] * s1icov[idx + k];
+                idx + k] * s1icov[idx + k]
 
     for i in range(dim):
         scmsconf.mdiff[i] = s1mean[i] - s2mean[i]
@@ -215,7 +220,6 @@ class AudioDecoder(object):
         size = c_int(0)
         ret = c_int(0)
 
-        frames_requested = self.seconds * self.rate / self.winsize
         data = mirageaudio_decode(
             self.ma, filename, byref(frames), byref(size), byref(ret))
         if ret == -1:
@@ -255,7 +259,6 @@ class Matrix(object):
 
     def multiply(self, m2):
         if self.columns != m2.rows:
-            print self.columns, m2.rows
             raise MatrixDimensionMismatchException
         m3 = Matrix(self.rows, m2.columns)
         m3.d = dot(self.d, m2.d)
@@ -310,15 +313,14 @@ class Matrix(object):
 
     def load(self, filename):
         f = open(filename, 'rb')
-        bytes = f.read(4)
-        self.rows = struct.unpack('=l', bytes)[0]
-        bytes = f.read(4)
-        self.columns = struct.unpack('=l', bytes)[0]
+        thebytes = f.read(4)
+        self.rows = struct.unpack('=l', thebytes)[0]
+        thebytes = f.read(4)
+        self.columns = struct.unpack('=l', thebytes)[0]
         arr = fromfile(file=f, dtype=single)
         self.d = arr.reshape(self.rows, self.columns)
 
     def inverse(self):
-        # XXX breaks if rows > cols ?
         e = array([Decimal()] * ((self.rows + 1) * (self.columns + 1)))
         e = e.reshape([self.rows + 1, self.columns + 1])
         for i in range(1, self.rows + 1):
@@ -345,9 +347,9 @@ class Vector(Matrix):
 
 
 class Db(object):
-    def __init__(self, path):
+    def __init__(self, path, connection=None):
         self.dbpath = path
-        self.connection = None
+        self.connection = connection
 
     def close_database_connection(self, connection):
         if self.dbpath == ':memory:':
@@ -418,9 +420,8 @@ class Db(object):
         connection = self.get_database_connection()
         cursor = connection.execute(
             "SELECT COUNT(track_1) FROM distance WHERE track_2 = ? AND "
-            "distance < (SELECT MAX(distance) FROM distance WHERE track_1 = ?) "
-            "AND track_1 NOT IN (SELECT track_2 FROM distance WHERE track_1 = "
-            "?)", (trackid, trackid, trackid))
+            "distance < (SELECT MAX(distance) FROM distance WHERE track_1 = ?);"
+            , (trackid, trackid))
         l = cursor.fetchone()[0]
         self.close_database_connection(connection)
         if l > no:
@@ -451,7 +452,7 @@ class Db(object):
         connection.commit()
         self.close_database_connection(connection)
 
-    def add_neighbours(self, trackid, scms, exclude_ids=None, add=20):
+    def add_neighbours(self, trackid, scms, exclude_ids=None, neighbours=20):
         connection = self.get_database_connection()
         connection.execute("DELETE FROM distance WHERE track_1 = ?", (trackid,))
         connection.commit()
@@ -467,12 +468,12 @@ class Db(object):
                 continue
             other = instance_from_picklestring(buf)
             dist = int(distance(scms, other, c) * 1000)
-            if len(best) > add - 1:
+            if len(best) > neighbours - 1:
                 if dist > best[-1][0]:
                     continue
             best.append((dist, trackid, otherid))
             best.sort()
-            while len(best) > add:
+            while len(best) > neighbours:
                 best.pop()
             yield
         added = 0
@@ -493,17 +494,28 @@ class Db(object):
         t2 = self.get_track(id2)
         return int(distance(t1, t2, c) * 1000)
 
+    def get_filename(self, trackid):
+        connection = self.get_database_connection()
+        rows = connection.execute(
+            'SELECT filename FROM mirage WHERE trackid = ?', (trackid, ))
+        filename = None
+        for row in rows:
+            try:
+                filename = unicode(row[0], 'utf-8')
+            except UnicodeDecodeError:
+                break
+            break
+        connection.close()
+        return filename
+
     def get_neighbours(self, trackid):
         connection = self.get_database_connection()
-        neighbours1 = [row for row in connection.execute(
+        neighbours = [row for row in connection.execute(
             "SELECT distance, track_2 FROM distance WHERE track_1 = ? "
             "ORDER BY distance ASC",
             (trackid,))]
         self.close_database_connection(connection)
-        return [
-            (i, distance, track) for (i, (distance, track)) in
-            enumerate(neighbours1)]
-
+        return neighbours
 
 class Mfcc(object):
     def __init__(self, winsize, srate, filters, cc):
@@ -642,41 +654,3 @@ class Mir(object):
         t.stop()
         return scms
 
-    def similar_tracks(ids, exclude, db, length=0):
-        seed_scms = []
-        for i in range(len(ids)):
-            seed_scms.append(db.get_track(ids[i]))
-        ht = {}
-        mapping = []
-        read = 1
-
-        t = DbgTimer()
-        t.start()
-
-        c = ScmsConfiguration(self.mfcccoefficients)
-
-        cursor = db.get_tracks(exclude)
-        for row in cursor.fetchall():
-            cur_scms = instance_from_picklestring(row[0])
-            cur_id = row[1]
-            d = 0.0
-            count = 0.0
-            for j in range(len(seed_scms)):
-                dcur = distance(seed_scms[j], cur_scms, c)
-                if dcur >= 0:
-                    d += dcur
-                    count += 1
-                else:
-                    write_line(
-                        "Mirage: Faulty SCMS id=" + mapping[i] + "d=" + d)
-                    # XXX Almost certainly wrong
-                    d = float(sys.maxint)
-                    break
-            if d >= 0:
-                ht[mapping[i]] = d/count
-        keys = [key for (key, value) in sorted(ht.items(), key=itemgetter(1))]
-        if length:
-            keys = keys[:length]
-        t.stop()
-        write_line("Mirage: playlist in: %s" % t.time)
-        return keys
