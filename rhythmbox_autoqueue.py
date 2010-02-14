@@ -35,6 +35,9 @@ class Song(SongBase):
         return unicode(
             self.db.entry_get(self.song, rhythmdb.PROP_ARTIST).lower(), 'utf-8')
 
+    def get_artists(self):
+        return [self.get_artist()]
+
     def get_title(self):
         """return lowercase UNICODE title of song"""
         return unicode(

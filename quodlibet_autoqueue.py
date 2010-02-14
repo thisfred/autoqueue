@@ -295,20 +295,15 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         tags"""
         search = ''
         search_tags = []
-        exclude_artists = self.get_blocked_artists()
-        excluding = '&(%s)' % ', '.join(
-            ["!artist ='%s'" % escape(a) for a in exclude_artists])
         for tag in tags:
             stripped = escape(tag)
             search_tags.append(
                 '|(grouping = "%s",grouping = "artist:%s",'
                 'grouping = "album:%s")' % (stripped, stripped, stripped))
         if restrictions:
-            search = "&(&(%s),%s,%s)" % (
-                ",".join(search_tags), excluding, restrictions)
+            search = "&(&(%s),%s)" % (",".join(search_tags), restrictions)
         else:
-            search = "&(&(%s),%s)" % (
-                ",".join(search_tags), excluding)
+            search = "&(%s)" % (",".join(search_tags))
         return search
 
     def player_construct_artist_search(self, artist, restrictions=None):

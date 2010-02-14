@@ -86,7 +86,8 @@ class MockPlayer(object):
 
 
 class MockSong(SongBase):
-    def __init__(self, artist, title, tags=None, performers=None):
+    def __init__(self, filename, artist, title, tags=None, performers=None):
+        self.filename = filename
         self.artist = artist
         self.title = title
         self.tags = tags
@@ -105,6 +106,21 @@ class MockSong(SongBase):
     def get_tags(self):
         return self.tags
 
+    def get_filename(self):
+        return "/home/eric/ogg/%s/%s-%s.ogg" % (
+            self.get_artist(), self.get_artist(), self.get_title())
+
+    def get_length(self):
+        return 180
+
+    def get_playcount(self):
+        return 0
+
+    def get_last_started(self):
+        return 0
+
+    def get_rating(self):
+        return .5
 
 class MockAutoQueue(AutoQueueBase):
     def __init__(self):
@@ -118,45 +134,60 @@ class MockAutoQueue(AutoQueueBase):
     def started(self, song):
         self.on_song_started(song)
 
+    def player_get_userdir(self):
+        """Get the application user directory to store files."""
+
+    def player_construct_file_search(self, filename, restrictions=None):
+        """Construct a search that looks for songs with this artist
+        and title.
+
+        """
+        return NotImplemented
+
     def player_construct_track_search(self, artist, title, restrictions=None):
+        """Construct a search that looks for songs with this artist
+        and title.
+
+        """
         search = {'artist': artist, 'title': title}
         if restrictions:
             search.update(restrictions)
         return search
 
     def player_construct_artist_search(self, artist, restrictions=None):
-        """construct a search that looks for songs with this artist"""
+        """Construct a search that looks for songs with this artist."""
         search = {'artist': artist}
         if restrictions:
             search.update(restrictions)
         return search
 
     def player_construct_tag_search(self, tags, restrictions=None):
-        """construct a search that looks for songs with these
-        tags"""
+        """Construct a search that looks for songs with these
+        tags.
+
+        """
         exclude_artists = self.get_blocked_artists()
         search = {'tags': tags, 'not_artist': exclude_artists}
         if restrictions:
             search.update(restrictions)
         return search
 
-    def player_construct_restrictions(
-        self, track_block_time, relaxors, restrictors):
-        """contstruct a search to further modify the searches"""
-        return {}
-
     def player_get_queue_length(self):
-        return len(self.player.queue)
+        """Get the current length of the queue."""
+        return sum([song.get_length() for song in self.player.queue])
 
     def player_enqueue(self, song):
+        """Put the song at the end of the queue."""
         self.player.queue.append(song)
 
     def player_search(self, search):
+        """Perform a player search."""
         return [
             MockSong(*song) for song in self.player.library if
             self.player.satisfies_criteria(song, search)]
 
     def player_get_songs_in_queue(self):
+        """Return (wrapped) song objects for the songs in the queue."""
         return self.player.queue
 
     def last_fm_request(self, url):
@@ -172,24 +203,6 @@ class MockAutoQueue(AutoQueueBase):
 
     def analyze_track(self, song, add_neighbours=False):
         yield
-
-class TestSong(unittest.TestCase):
-    def setUp(self):
-        songobject = (
-            'Joni Mitchell', 'Carey', ['matala', 'crete', 'places', 'villages',
-                                       'islands', 'female vocals'])
-        self.song = MockSong(*songobject)
-
-    def test_get_artist(self):
-        self.assertEqual('joni mitchell', self.song.get_artist())
-
-    def test_get_title(self):
-        self.assertEqual('carey', self.song.get_title())
-
-    def test_get_tags(self):
-        self.assertEqual(['matala', 'crete', 'places', 'villages', 'islands',
-                       'female vocals'], self.song.get_tags())
-
 
 @Throttle(WAIT_BETWEEN_REQUESTS)
 def throttled_method():

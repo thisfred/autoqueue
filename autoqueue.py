@@ -105,14 +105,6 @@ class SongBase(object):
         """return length in seconds"""
         return NotImplemented
 
-    def get_playcount(self):
-        """Return the number of times the song was played."""
-        return NotImplemented
-
-    def get_added(self):
-        """Return the date the song was added to the library."""
-        return NotImplemented
-
     def get_last_started(self):
         """Return the date the song was last played."""
         return NotImplemented
@@ -163,54 +155,65 @@ class AutoQueueBase(object):
             self.mir = Mir()
 
     def close_database_connection(self, connection):
+        """Close the database connection."""
         if self.in_memory:
             return
         connection.close()
 
     def player_get_userdir(self):
-        """get the application user directory to store files"""
+        """Get the application user directory to store files."""
         return NotImplemented
 
     def player_construct_file_search(self, filename, restrictions=None):
-        """construct a search that looks for songs with this artist
-        and title"""
+        """Construct a search that looks for songs with this artist
+        and title.
+
+        """
         return NotImplemented
 
     def player_construct_track_search(self, artist, title, restrictions=None):
-        """construct a search that looks for songs with this artist
-        and title"""
+        """Construct a search that looks for songs with this artist
+        and title.
+
+        """
         return NotImplemented
 
     def player_construct_artist_search(self, artist, restrictions=None):
-        """construct a search that looks for songs with this artist"""
+        """Construct a search that looks for songs with this artist."""
         return NotImplemented
 
     def player_construct_tag_search(self, tags, restrictions=None):
-        """construct a search that looks for songs with these
-        tags"""
+        """Construct a search that looks for songs with these
+        tags.
+
+        """
         return NotImplemented
 
     def player_set_variables_from_config(self):
-        """Initialize user settings from the configuration storage"""
+        """Initialize user settings from the configuration storage."""
         return NotImplemented
 
     def player_get_queue_length(self):
-        """Get the current length of the queue"""
+        """Get the current length of the queue."""
         return 0
 
     def player_enqueue(self, song):
-        """Put the song at the end of the queue"""
+        """Put the song at the end of the queue."""
         return NotImplemented
 
     def player_search(self, search):
-        """perform a player search"""
+        """Perform a player search."""
         return NotImplemented
 
     def player_get_songs_in_queue(self):
-        """return (wrapped) song objects for the songs in the queue"""
+        """Return (wrapped) song objects for the songs in the queue."""
         return []
 
     def player_execute_async(self, method, *args, **kwargs):
+        """Override this if the player has a way to exectute methods
+        asynchronously, like the copooling in autoqueue.
+
+        """
         if 'funcid' in kwargs:
             del kwargs['funcid']
         for dummy in method(*args, **kwargs):
@@ -391,9 +394,14 @@ class AutoQueueBase(object):
                     title = result.get('title')
                     if title:
                         look_for += ' - ' + title
+                elif result.get('filename'):
+                    look_for = result['filename']
+                elif result.get('tags'):
+                    look_for = result['tags']
                 else:
-                    look_for = result.get("filename")
-                self.log("looking for: %06d %s" % (
+                    self.log(result)
+                    result = '??'
+                self.log('looking for: %06d %s' % (
                     result.get('score', 0), look_for))
                 artist = result.get('artist')
                 if artist:
@@ -567,11 +575,14 @@ class AutoQueueBase(object):
             return None
         try:
             stream = urllib.urlopen(url)
+        except Exception, e:
+            self.log("Error: %s" % e)
+            return None
+        try:
             xmldoc = minidom.parse(stream).documentElement
             return xmldoc
         except Exception, e:
             self.log("Error: %s" % e)
-            self.log("xmldoc: %s" % xmldoc)
             self.lastfm = False
             return None
 
