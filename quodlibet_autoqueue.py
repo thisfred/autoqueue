@@ -264,6 +264,8 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         if not filename:
             return
         search = '~filename="%s"' % (escape(filename),)
+        if restrictions:
+            search = "&(%s, %s)" % (search, restrictions)
         return search
 
     def player_construct_track_search(self, artist, title, restrictions=None):

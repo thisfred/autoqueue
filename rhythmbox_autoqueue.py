@@ -67,8 +67,8 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         self.store_blocked_artists = True
         AutoQueueBase.__init__(self)
         self.gconfclient = gconf.client_get_default()
-        self.verbose = False
-        self.by_mirage = False
+        self.verbose = True
+        self.by_mirage = True
         self.log("initialized")
 
     def activate(self, shell):
@@ -102,7 +102,18 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
             os.mkdir(folder)
         return folder
 
-    def player_construct_track_search(self, artist, title, restrictions):
+    def player_construct_file_search(self, filename, restrictions=None):
+        """construct a search that looks for songs with this filename"""
+        if not filename:
+            return
+        result = (
+            rhythmdb.QUERY_PROP_EQUALS, rhythmdb.PROP_LOCATION,
+            filename.encode('utf-8'))
+        if restrictions:
+            result += restrictions
+        return result
+
+    def player_construct_track_search(self, artist, title, restrictions=None):
         """construct a search that looks for songs with this artist
         and title"""
         result = (rhythmdb.QUERY_PROP_EQUALS, rhythmdb.PROP_ARTIST_FOLDED,
@@ -112,12 +123,12 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
             result += restrictions
         return result
 
-    def player_construct_tag_search(self, tags, exclude_artists, restrictions):
+    def player_construct_tag_search(self, tags, restrictions=None):
         """construct a search that looks for songs with these
         tags"""
         return None
 
-    def player_construct_artist_search(self, artist, restrictions):
+    def player_construct_artist_search(self, artist, restrictions=None):
         """construct a search that looks for songs with this artist"""
         result = (rhythmdb.QUERY_PROP_EQUALS, rhythmdb.PROP_ARTIST_FOLDED,
                   artist.encode('utf-8'))

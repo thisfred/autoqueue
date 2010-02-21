@@ -490,8 +490,8 @@ class Db(object):
 
     def compare(self, id1, id2):
         c = ScmsConfiguration(20)
-        t1 = self.get_track(id1)
-        t2 = self.get_track(id2)
+        t1 = self.get_track(id1)[1]
+        t2 = self.get_track(id2)[1]
         return int(distance(t1, t2, c) * 1000)
 
     def get_filename(self, trackid):

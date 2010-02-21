@@ -399,8 +399,8 @@ class AutoQueueBase(object):
                 elif result.get('tags'):
                     look_for = result['tags']
                 else:
-                    self.log(result)
-                    result = '??'
+                    self.log(repr(result))
+                    look_for = repr(result)
                 self.log('looking for: %06d %s' % (
                     result.get('score', 0), look_for))
                 artist = result.get('artist')

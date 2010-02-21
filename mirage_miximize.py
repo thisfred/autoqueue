@@ -69,8 +69,7 @@ class MirageMiximizePlugin(SongsMenuPlugin):
                 continue
         yield
         print "done"
-        ids_and_songs = [
-            (db.get_track_id(song("~filename")), song) for song in songs]
+        ids_and_songs = [(song("~filename"), song) for song in songs]
         clusterer = Clusterer(ids_and_songs, db.compare)
         qsongs = []
         for cluster in clusterer.clusters:
