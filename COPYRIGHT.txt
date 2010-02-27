@@ -1,14 +1,16 @@
-Copyright 2007-2008
-                    
-Autoqueue, and its different incarnations:
+Copyright 2007-2010
+
+Autoqueue, and the mirage bindings:
 
 Eric Casteleijn <thisfred@gmail.com>
 Daniel Nouri <daniel.nouri@gmail.com>
+Paolo Tranquilli <redsun82@gmail.com>
+Jasper OpdeCoul <jasper.opdecoul@gmail.com>
 Rick van Hattem
 
-The original mirage software, and the res directory in this directory:
+The original mirage software, and the res directory in mirage:
 
-ds:Dominik Schnitzer 
+ds:Dominik Schnitzer
 bertrand:Bertrand Lorentz
 
 

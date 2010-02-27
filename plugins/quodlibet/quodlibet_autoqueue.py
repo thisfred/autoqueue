@@ -6,7 +6,7 @@ This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation"""
 
-import const, gtk
+import gtk
 from plugins.events import EventPlugin
 from widgets import main
 from parse import Query
@@ -251,13 +251,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     # Implement the player specific methods needed by autoqueue
     def player_execute_async(self, method, *args, **kwargs):
         copool.add(method, *args, **kwargs)
-
-    def player_get_userdir(self):
-        """get the application user directory to store files"""
-        try:
-            return const.USERDIR
-        except AttributeError:
-            return const.DIR
 
     def player_construct_file_search(self, filename, restrictions=None):
         """construct a search that looks for songs with this filename"""

@@ -94,14 +94,6 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         if entry:
             self.on_song_started(Song(entry, self.rdb))
 
-    def player_get_userdir(self):
-        """get the application user directory to store files"""
-        folder = os.path.join(
-            os.getenv('HOME'), '.gnome2', 'rhythmbox', 'autoqueue')
-        if not os.path.isdir(folder):
-            os.mkdir(folder)
-        return folder
-
     def player_construct_file_search(self, filename, restrictions=None):
         """construct a search that looks for songs with this filename"""
         if not filename:

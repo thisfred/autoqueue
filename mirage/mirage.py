@@ -1,7 +1,7 @@
 """Mirage integration for autoqueue.
 version 0.3
 
-Copyright 2007-2009 Eric Casteleijn <thisfred@gmail.com>,
+Copyright 2007-2010 Eric Casteleijn <thisfred@gmail.com>,
                     Paolo Tranquilli <redsun82@gmail.com>
 
 
