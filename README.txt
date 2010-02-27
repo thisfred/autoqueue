@@ -29,11 +29,6 @@ features are simply not possible to implement for some players.
   console, obviously.) Useful for debugging, but also for seeing how
   autoqueue actually works. Disabled by default.
 
-- random picks: When this is enabled, autoqueue doesn't automatically
-  use the best available track according to the similarity score, but
-  a random pick from all the similar tracks/artists. Disabled by
-  default.
-
 - caching: Keep a local cache of similarity results from last.fm. Look
   database with all the retrieved information. Enabled by default.  in
   your plugin directory for the file 'similarity.db'. It's a sqlite3
