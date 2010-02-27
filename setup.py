@@ -10,7 +10,7 @@ setup(
     description='A cross music player plugin that queues similar tracks.',
     url='https://launchpad.net/autoqueue',
     data_files= [
-        ('/usr/lib/rhythmbox/plugins/autoqueue',
+        ('/usr/lib/rhythmbox/plugins/rhythmbox_autoqueue',
          ['plugins/rhythmbox/autoqueue.rb-plugin',
           'plugins/rhythmbox/__init__.py']),
         ('/usr/share/pyshared/quodlibet/plugins/events/',
