@@ -28,7 +28,7 @@ print optional
 
 setup(
     name='autoqueue',
-    version='0.2beta1',
+    version='0.2beta2',
     packages=['autoqueue', 'mirage'],
     package_dir={
         'autoqueue': 'autoqueue',

@@ -123,6 +123,8 @@ class SongBase(object):
 class SimilarityData(object):
     """Mixin for database access."""
 
+    in_memory = False
+
     def __init__(self):
         self._data_dir = None
         self.create_db()
@@ -478,7 +480,6 @@ class SimilarityData(object):
 
 class AutoQueueBase(SimilarityData):
     """Generic base class for autoqueue plugins."""
-    in_memory = False
     def __init__(self):
         super(AutoQueueBase, self).__init__()
         self.connection = None
@@ -531,14 +532,12 @@ class AutoQueueBase(SimilarityData):
     def player_construct_file_search(self, filename, restrictions=None):
         """Construct a search that looks for songs with this artist
         and title.
-
         """
         return NotImplemented
 
     def player_construct_track_search(self, artist, title, restrictions=None):
         """Construct a search that looks for songs with this artist
         and title.
-
         """
         return NotImplemented
 
@@ -549,7 +548,6 @@ class AutoQueueBase(SimilarityData):
     def player_construct_tag_search(self, tags, restrictions=None):
         """Construct a search that looks for songs with these
         tags.
-
         """
         return NotImplemented
 
