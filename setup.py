@@ -21,12 +21,12 @@ setup(
     provides=['mirage', 'autoqueue'],
     data_files= [
         ('/usr/lib/rhythmbox/plugins/rhythmbox_autoqueue',
-         ['plugins/rhythmbox/autoqueue.rb-plugin',
-          'plugins/rhythmbox/__init__.py']),
+         ['rhythmbox_autoqueue/autoqueue.rb-plugin',
+          'rhythmbox_autoqueue/__init__.py']),
         ('/usr/share/pyshared/quodlibet/plugins/events/',
-         ['plugins/quodlibet/quodlibet_autoqueue.py']),
+         ['quodlibet_autoqueue.py']),
         ('/usr/share/pyshared/quodlibet/plugins/songsmenu/',
-         ['plugins/quodlibet/mirage_songs.py',
-          'plugins/quodlibet/mirage_miximize.py']),
+         ['mirage_songs.py',
+          'mirage_miximize.py']),
         ]
     )
