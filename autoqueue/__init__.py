@@ -124,10 +124,7 @@ class SimilarityData(object):
     """Mixin for database access."""
 
     in_memory = False
-
-    def __init__(self):
-        self._data_dir = None
-        self.create_db()
+    _data_dir = None
 
     def close_database_connection(self, connection):
         """Close the database connection."""
@@ -148,6 +145,7 @@ class SimilarityData(object):
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
         self._data_dir = data_dir
+        self.create_db()
         return data_dir
 
     def get_db_path(self):
@@ -481,9 +479,8 @@ class SimilarityData(object):
 class AutoQueueBase(SimilarityData):
     """Generic base class for autoqueue plugins."""
     def __init__(self):
-        super(AutoQueueBase, self).__init__()
         self.connection = None
-        self.artist_block_time = 1
+        self.artist_block_time = 7
         self.track_block_time = 30
         self.desired_queue_length = 0
         self.cache_time = 90
