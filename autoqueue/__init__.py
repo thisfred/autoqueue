@@ -29,7 +29,7 @@ from xml.dom import minidom
 from cPickle import Pickler, Unpickler
 
 try:
-    import xdg
+    import xdg.BaseDirectory
     XDG = True
 except ImportError:
     XDG = False
@@ -425,7 +425,6 @@ class SimilarityData(object):
     def create_db(self):
         """ Set up a database for the artist and track similarity scores
         """
-        self.log("create_db")
         connection = self.get_database_connection()
         connection.execute(
             'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name'
@@ -481,6 +480,7 @@ class AutoQueueBase(SimilarityData):
     """Generic base class for autoqueue plugins."""
     in_memory = False
     def __init__(self):
+        super(AutoQueueBase, self).__init__()
         self.connection = None
         self.artist_block_time = 1
         self.track_block_time = 30
@@ -518,15 +518,15 @@ class AutoQueueBase(SimilarityData):
 
         Defaults to $XDG_CACHE_HOME/autoqueue on Gnome.
         """
-        if self._data_dir:
-            return self._data_dir
+        if self._cache_dir:
+            return self._cache_dir
         if not XDG:
             return NotImplemented
-        data_dir = os.path.join(xdg.BaseDirectory.xdg_cache_home, 'autoqueue')
-        if not os.path.exists(data_dir):
-            os.makedirs(data_dir)
-        self._data_dir = data_dir
-        return data_dir
+        cache_dir = os.path.join(xdg.BaseDirectory.xdg_cache_home, 'autoqueue')
+        if not os.path.exists(cache_dir):
+            os.makedirs(cache_dir)
+        self._cache_dir = cache_dir
+        return cache_dir
 
     def player_construct_file_search(self, filename, restrictions=None):
         """Construct a search that looks for songs with this artist

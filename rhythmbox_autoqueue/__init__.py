@@ -63,7 +63,6 @@ class Song(SongBase):
 class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
     def __init__(self):
         rb.Plugin.__init__(self)
-        self.use_db = True
         AutoQueueBase.__init__(self)
         self.gconfclient = gconf.client_get_default()
         self.verbose = True
