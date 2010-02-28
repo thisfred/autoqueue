@@ -105,7 +105,7 @@ class Song(autoqueue.SongBase):
         self._file = file
         self.time = time
         self.__dict__.update(**kwargs)
-        
+
     def get_artist(self):
         '''return lowercase UNICODE name of artist'''
         return unicode(self.artist.lower(), 'utf-8')
@@ -124,7 +124,7 @@ class Song(autoqueue.SongBase):
 
     def get_filename(self):
         return '/var/lib/mpd/music/' + self.file
-    
+
     @property
     def file(self):
         '''file is an immutable attribute that's used for the hash method'''
@@ -203,11 +203,11 @@ class Search(object):
         >>> search = Search(artist='test')
         >>> search.parameters
         {'artist': set(['test'])}
-        
+
         >>> search = Search()
         >>> search.parameters
         {}
-        
+
         >>> search = Search('artist', 'test')
         >>> search.parameters
         {'artist': set(['test'])}
@@ -220,7 +220,7 @@ class Search(object):
     def add_parameters(self, **parameters):
         '''
         Add one or more parameters to the search query
-        
+
         Use with named arguments, the key must be in ALLOWED_FIELDS
 
         >>> search = Search()
@@ -233,7 +233,7 @@ class Search(object):
     def add_parameter(self, field, value):
         '''
         Add a parameter to the search query
-        
+
         field - must be in ALLOWED_FIELDS
         value - a literal string to be searched for
 
@@ -310,7 +310,7 @@ class Daemon(object):
 
     def exit(self):
         '''Kill the daemon and remove the PID file
-        
+
         This method will be called automatically when the process is
         terminated'''
         del self.pid_file
@@ -340,7 +340,7 @@ class Daemon(object):
             while i > 0 and cls.is_running(pid):
                 i -= KILL_CHECK_DELAY
                 time.sleep(KILL_CHECK_DELAY)
-            
+
             if cls.is_running(pid):
                 print >>sys.stderr, 'Sending KILL signal to process %d' % pid
                 os.kill(pid, signal.SIGKILL)
@@ -395,8 +395,6 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
         self.host, self.port = host, port
         self.client = mpd.MPDClient()
         self.connect()
-        self.use_db = True
-        self.store_blocked_artists = True
         autoqueue.AutoQueueBase.__init__(self)
         self.random = True
         self.verbose = True
@@ -459,7 +457,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
         '''construct a search that looks for songs with this artist
         and title'''
         return Search(artist=artist, title=title)
-    
+
     def player_construct_tag_search(self, tags, exclude_artists, restrictions):
         '''construct a search that looks for songs with these tags'''
         return None
@@ -467,7 +465,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
     def player_construct_artist_search(self, artist, restrictions):
         '''construct a search that looks for songs with this artist'''
         return Search(artist=artist)
-        
+
     def player_construct_restrictions(
         self, track_block_time, relaxors, restrictors):
         '''construct a search to further modify the searches'''
@@ -475,7 +473,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
 
     def player_search(self, search):
         '''perform a player search'''
-        
+
         results = self.client.search(*search.get_parameters())
 
         '''Make all search results lowercase and strip whitespace'''
@@ -495,14 +493,14 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
     def player_enqueue(self, song):
         '''Put the song at the end of the queue'''
         self.client.add(song.file)
-        
+
     def player_get_userdir(self):
         '''get the application user directory to store files'''
         return expand_path(SETTINGS_PATH)
 
     def player_current_song(self):
         return Song(**self.client.currentsong())
-    
+
     def player_song(self, song_id):
         return Song(**self.client.playlistid(song_id)[0])
 
@@ -516,7 +514,7 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
         '''return (wrapped) song objects for the songs in the queue'''
         id = self.player_current_song_id()
         return [s for i, s in enumerate(self.player_playlist()) if i >= id]
-        
+
     def player_get_queue_length(self):
         length = sum(self.player_get_songs_in_queue(), Song(time=0))
         return int(length) - self.player_current_song_time()
@@ -552,7 +550,7 @@ def main():
 
     options, args = parser.parse_args()
     options.pid_file = os.path.abspath(options.pid_file)
-    
+
     if os.path.isfile(options.pid_file):
         try:
             pid = open(options.pid_file).readline()
@@ -578,7 +576,7 @@ def main():
     except IOError, e:
         print >>sys.stderr, 'Error: PID file "%s" not writable: %s' % (options.pid_file, e)
         sys.exit(3)
-    
+
     if options.daemonic:
         Daemon.daemonize()
     plugin = AutoQueuePlugin(options.host, options.port, options.pid_file)

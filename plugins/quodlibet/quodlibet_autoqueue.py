@@ -37,15 +37,9 @@ INT_SETTINGS = {
         'label': 'queue (seconds)'},
     'cache_time': {
         'value': 90,
-        'label': 'cache (days)'},
-    'backup_songs':{
-        'value': 10,
-        'label': 'no. of backup songs'},
+        'label': 'cache information from lastfm (days)'},
     }
 BOOL_SETTINGS = {
-    'cache': {
-        'value': SQL and True,
-        'label': 'caching'},
     'by_mirage': {
         'value': False,
         'label': 'use mirage'},
@@ -141,13 +135,11 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     """The actual plugin class"""
     PLUGIN_ID = "AutoQueue"
     PLUGIN_NAME = _("Auto Queue")
-    PLUGIN_VERSION = "0.1"
+    PLUGIN_VERSION = "0.2"
 
     __enabled = False
 
     def __init__(self):
-        self.use_db = True
-        self.store_blocked_artists = True
         EventPlugin.__init__(self)
         AutoQueueBase.__init__(self)
 

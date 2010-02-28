@@ -125,7 +125,6 @@ class MockSong(SongBase):
 class MockAutoQueue(AutoQueueBase):
     def __init__(self):
         self.player = MockPlayer(self.started)
-        self.use_db = True
         self.in_memory = True
         super(MockAutoQueue, self).__init__()
         self.by_tags = True

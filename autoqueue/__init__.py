@@ -125,8 +125,7 @@ class SimilarityData(object):
 
     def __init__(self):
         self._data_dir = None
-        if self.use_db:
-            self.create_db()
+        self.create_db()
 
     def close_database_connection(self, connection):
         """Close the database connection."""
@@ -480,8 +479,6 @@ class SimilarityData(object):
 
 class AutoQueueBase(SimilarityData):
     """Generic base class for autoqueue plugins."""
-    use_db = False
-    store_blocked_artists = False
     in_memory = False
     def __init__(self):
         self.connection = None
@@ -512,8 +509,7 @@ class AutoQueueBase(SimilarityData):
         self._nrows = []
         self.player_set_variables_from_config()
         self._cache_dir = None
-        if self.store_blocked_artists:
-            self.get_blocked_artists_pickle()
+        self.get_blocked_artists_pickle()
         if MIRAGE:
             self.mir = Mir()
 
@@ -788,17 +784,16 @@ class AutoQueueBase(SimilarityData):
         while not exhausted and self.queue_needs_songs():
             for exhausted in self.queue_song():
                 yield
-        if self.use_db:
-            for artist_id in self._artists_to_update:
-                self._update_similar_artists(
-                    artist_id, self._artists_to_update[artist_id])
-                yield
-            for track_id in self._tracks_to_update:
-                self._update_similar_tracks(
-                    track_id, self._tracks_to_update[track_id])
-                yield
-            self._artists_to_update = {}
-            self._tracks_to_update = {}
+        for artist_id in self._artists_to_update:
+            self._update_similar_artists(
+                artist_id, self._artists_to_update[artist_id])
+            yield
+        for track_id in self._tracks_to_update:
+            self._update_similar_tracks(
+                track_id, self._tracks_to_update[track_id])
+            yield
+        self._artists_to_update = {}
+        self._tracks_to_update = {}
         self.running = False
 
     def block_artist(self, artist_name):
@@ -810,22 +805,20 @@ class AutoQueueBase(SimilarityData):
         self.log("Blocked artist: %s (%s)" % (
             artist_name,
             len(self._blocked_artists)))
-        if self.store_blocked_artists:
-            dump = os.path.join(
-                self.player_get_cache_dir(), "autoqueue_block_cache")
-            try:
-                os.remove(dump)
-            except OSError:
-                pass
+        dump = os.path.join(
+            self.player_get_cache_dir(), "autoqueue_block_cache")
+        try:
+            os.remove(dump)
+        except OSError:
+            pass
         if len(self._blocked_artists) == 0:
             return
-        if self.store_blocked_artists:
-            pickle_file = open(dump, 'w')
-            pickler = Pickler(pickle_file, -1)
-            to_dump = (self._blocked_artists,
-                       self._blocked_artists_times)
-            pickler.dump(to_dump)
-            pickle_file.close()
+        pickle_file = open(dump, 'w')
+        pickler = Pickler(pickle_file, -1)
+        to_dump = (self._blocked_artists,
+                   self._blocked_artists_times)
+        pickler.dump(to_dump)
+        pickle_file.close()
 
     def unblock_artists(self):
         """release blocked artists when they've been in the penalty
@@ -888,8 +881,7 @@ class AutoQueueBase(SimilarityData):
                 'score': match,
                 'artist': similar_artist,
                 'title': similar_title,}
-            if self.use_db:
-                self._tracks_to_update.setdefault(track_id, []).append(result)
+            self._tracks_to_update.setdefault(track_id, []).append(result)
             results.append(result)
         return results
 
@@ -914,8 +906,7 @@ class AutoQueueBase(SimilarityData):
             result = {
                 'score': match,
                 'artist': name,}
-            if self.use_db:
-                self._artists_to_update.setdefault(artist_id, []).append(result)
+            self._artists_to_update.setdefault(artist_id, []).append(result)
             results.append(result)
         return results
 
@@ -982,8 +973,6 @@ class AutoQueueBase(SimilarityData):
         filename = song.get_filename()
         self.log("Getting similar tracks from mirage for: %s - %s" % (
             artist_name, title))
-        if not self.use_db:
-            return
         db = Db(self.get_db_path())
         trackid = db.get_track_id(filename)
         for match, mfile_id in db.get_neighbours(trackid):
@@ -998,10 +987,6 @@ class AutoQueueBase(SimilarityData):
         title = song.get_title()
         track = self.get_track(artist_name, title)
         track_id, updated = track[0], track[3]
-        if not self.use_db:
-            for result in self.get_similar_tracks_from_lastfm(artist_name,
-                                                              title, track_id):
-                yield result
         if updated:
             updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
             if updated + timedelta(self.cache_time) > self.now:
@@ -1025,10 +1010,6 @@ class AutoQueueBase(SimilarityData):
         for artist_name in song.get_artists():
             artist = self.get_artist(artist_name)
             artist_id, updated = artist[0], artist[2]
-            if not self.use_db:
-                for result in self.get_similar_artists_from_lastfm(
-                    artist_name, artist_id):
-                    yield result
             if updated:
                 updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
                 if updated + timedelta(self.cache_time) > self.now:
