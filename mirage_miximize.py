@@ -1,7 +1,6 @@
-import os
-import const
 from plugins.songsmenu import SongsMenuPlugin
 from mirage import Mir, Db
+from autoqueue import SimilarityData
 from quodlibet.util import copool
 
 def get_title(song):
@@ -13,7 +12,7 @@ def get_title(song):
     return title
 
 
-class MirageMiximizePlugin(SongsMenuPlugin):
+class MirageMiximizePlugin(SongsMenuPlugin, SimilarityData):
     PLUGIN_ID = "Mirage Miximize"
     PLUGIN_NAME = _("Mirage Miximize")
     PLUGIN_DESC = _("Add selected songs to the queue in ideal order based on"
@@ -24,14 +23,6 @@ class MirageMiximizePlugin(SongsMenuPlugin):
     def __init__(self, *args):
         super(MirageMiximizePlugin, self).__init__(*args)
         self.mir = Mir()
-        self.dbpath = os.path.join(self.player_get_userdir(), "similarity.db")
-
-    def player_get_userdir(self):
-        """get the application user directory to store files"""
-        try:
-            return const.USERDIR
-        except AttributeError:
-            return const.DIR
 
     def player_enqueue(self, songs):
         """Put the song at the end of the queue"""
@@ -46,7 +37,7 @@ class MirageMiximizePlugin(SongsMenuPlugin):
         copool.add(self.do_stuff, songs)
 
     def do_stuff(self, songs):
-        db = Db(self.dbpath)
+        db = Db(self.get_dbpath())
         l = len(songs)
         print "mirage analysis"
         for i, song in enumerate(songs):

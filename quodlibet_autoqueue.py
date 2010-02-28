@@ -6,7 +6,7 @@ This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation"""
 
-import const, gtk
+import gtk
 from plugins.events import EventPlugin
 from widgets import main
 from parse import Query
@@ -37,15 +37,9 @@ INT_SETTINGS = {
         'label': 'queue (seconds)'},
     'cache_time': {
         'value': 90,
-        'label': 'cache (days)'},
-    'backup_songs':{
-        'value': 10,
-        'label': 'no. of backup songs'},
+        'label': 'cache information from lastfm (days)'},
     }
 BOOL_SETTINGS = {
-    'cache': {
-        'value': SQL and True,
-        'label': 'caching'},
     'by_mirage': {
         'value': False,
         'label': 'use mirage'},
@@ -141,13 +135,11 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     """The actual plugin class"""
     PLUGIN_ID = "AutoQueue"
     PLUGIN_NAME = _("Auto Queue")
-    PLUGIN_VERSION = "0.1"
+    PLUGIN_VERSION = "0.2"
 
     __enabled = False
 
     def __init__(self):
-        self.use_db = True
-        self.store_blocked_artists = True
         EventPlugin.__init__(self)
         AutoQueueBase.__init__(self)
 
@@ -251,13 +243,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     # Implement the player specific methods needed by autoqueue
     def player_execute_async(self, method, *args, **kwargs):
         copool.add(method, *args, **kwargs)
-
-    def player_get_userdir(self):
-        """get the application user directory to store files"""
-        try:
-            return const.USERDIR
-        except AttributeError:
-            return const.DIR
 
     def player_construct_file_search(self, filename, restrictions=None):
         """construct a search that looks for songs with this filename"""

@@ -1,7 +1,7 @@
 """AutoQueue: an automatic queueing plugin library.
 version 0.3
 
-Copyright 2007-2009 Eric Casteleijn <thisfred@gmail.com>,
+Copyright 2007-2010 Eric Casteleijn <thisfred@gmail.com>,
                     Daniel Nouri <daniel.nouri@gmail.com>
                     Jasper OpdeCoul <jasper.opdecoul@gmail.com>
 
@@ -27,6 +27,12 @@ import urllib, itertools
 import random, os
 from xml.dom import minidom
 from cPickle import Pickler, Unpickler
+
+try:
+    import xdg.BaseDirectory
+    XDG = True
+except ImportError:
+    XDG = False
 
 try:
     import sqlite3
@@ -114,12 +120,367 @@ class SongBase(object):
         return NotImplemented
 
 
-class AutoQueueBase(object):
+class SimilarityData(object):
+    """Mixin for database access."""
+
+    def __init__(self):
+        self._data_dir = None
+        self.create_db()
+
+    def close_database_connection(self, connection):
+        """Close the database connection."""
+        if self.in_memory:
+            return
+        connection.close()
+
+    def player_get_data_dir(self):
+        """Get the directory to store user data.
+
+        Defaults to $XDG_DATA_HOME/autoqueue on Gnome.
+        """
+        if self._data_dir:
+            return self._data_dir
+        if not XDG:
+            return NotImplemented
+        data_dir = os.path.join(xdg.BaseDirectory.xdg_data_home, 'autoqueue')
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+        self._data_dir = data_dir
+        return data_dir
+
+    def get_db_path(self):
+        if self.in_memory:
+            return ":memory:"
+        return os.path.join(self.player_get_data_dir(), "similarity.db")
+
+    def get_database_connection(self):
+        """get database reference"""
+        if self.in_memory:
+            if self.connection:
+                return self.connection
+            self.connection = sqlite3.connect(":memory:")
+            self.connection.text_factory = str
+            return self.connection
+        connection = sqlite3.connect(
+            self.get_db_path(), timeout=5.0, isolation_level="immediate")
+        connection.text_factory = str
+        return connection
+
+    def get_artist(self, artist_name, with_connection=None):
+        """get artist information from the database"""
+        if with_connection:
+            connection = with_connection
+        else:
+            connection = self.get_database_connection()
+        artist_name = artist_name.encode("UTF-8")
+        rows = connection.execute(
+            "SELECT * FROM artists WHERE name = ?", (artist_name,))
+        for row in rows:
+            if not with_connection:
+                self.close_database_connection(connection)
+            return row
+        connection.execute(
+            "INSERT INTO artists (name) VALUES (?)", (artist_name,))
+        connection.commit()
+        rows = connection.execute(
+            "SELECT * FROM artists WHERE name = ?", (artist_name,))
+        for row in rows:
+            if not with_connection:
+                self.close_database_connection(connection)
+            return row
+        if not with_connection:
+            self.close_database_connection(connection)
+
+    def get_track(self, artist_name, title, with_connection=None):
+        """get track information from the database"""
+        if with_connection:
+            connection = with_connection
+        else:
+            connection = self.get_database_connection()
+        title = title.encode("UTF-8")
+        artist_id = self.get_artist(artist_name, with_connection=connection)[0]
+        rows = connection.execute(
+            "SELECT * FROM tracks WHERE artist = ? AND title = ?",
+            (artist_id, title))
+        for row in rows:
+            if not with_connection:
+                self.close_database_connection(connection)
+            return row
+        connection.execute(
+            "INSERT INTO tracks (artist, title) VALUES (?, ?)",
+            (artist_id, title))
+        connection.commit()
+        rows = connection.execute(
+            "SELECT * FROM tracks WHERE artist = ? AND title = ?",
+            (artist_id, title))
+        for row in rows:
+            if not with_connection:
+                self.close_database_connection(connection)
+            return row
+        if not with_connection:
+            self.close_database_connection(connection)
+
+    def get_ids_for_filenames(self, filenames):
+        connection = self.get_database_connection()
+        rows = connection.execute(
+            'SELECT trackid FROM mirage WHERE filename IN (%s)' %
+            (','.join(['"%s"' % filename for filename in filenames]), ))
+        result = [row[0] for row in rows]
+        self.close_database_connection(connection)
+        return result
+
+    def get_artist_tracks(self, artist_id):
+        connection = self.get_database_connection()
+        result = []
+        rows = connection.execute(
+            "SELECT tracks.id FROM tracks INNER JOIN artists"
+            " ON tracks.artist = artists.id WHERE artists.id = ?",
+            (artist_id, ))
+        result = [row[0] for row in rows]
+        self.close_database_connection(connection)
+        return result
+
+    def get_similar_tracks_from_db(self, track_id):
+        """Get similar tracks from the database sorted by descending
+        match score."""
+        connection = self.get_database_connection()
+        results = [row for row in connection.execute(
+            "SELECT track_2_track.match, artists.name, tracks.title"
+            " FROM track_2_track INNER JOIN tracks ON"
+            " track_2_track.track2 = tracks.id INNER JOIN artists ON"
+            " artists.id = tracks.artist WHERE track_2_track.track1"
+            " = ? ORDER BY track_2_track.match DESC",
+            (track_id,))]
+        self.close_database_connection(connection)
+        for score, artist, title in results:
+            yield {'score': score, 'artist': artist, 'title': title}
+
+    def get_similar_artists_from_db(self, artist_id):
+        connection = self.get_database_connection()
+        results = [row for row in connection.execute(
+            "SELECT match, name FROM artist_2_artist INNER JOIN"
+            " artists ON artist_2_artist.artist2 = artists.id WHERE"
+            " artist_2_artist.artist1 = ? ORDER BY match DESC;",
+            (artist_id,))]
+        self.close_database_connection(connection)
+        for score, artist in results:
+            yield {'score': score, 'artist': artist}
+
+    def _get_artist_match(self, artist1, artist2, with_connection=None):
+        """get artist match score from database"""
+        if with_connection:
+            connection = with_connection
+        else:
+            connection = self.get_database_connection()
+        rows = connection.execute(
+            "SELECT match FROM artist_2_artist WHERE artist1 = ?"
+            " AND artist2 = ?",
+            (artist1, artist2))
+        result = 0
+        for row in rows:
+            result = row[0]
+            break
+        if not with_connection:
+            self.close_database_connection(connection)
+        return result
+
+    def _get_track_match(self, track1, track2, with_connection=None):
+        """get track match score from database"""
+        if with_connection:
+            connection = with_connection
+        else:
+            connection = self.get_database_connection()
+        rows = connection.execute(
+            "SELECT match FROM track_2_track WHERE track1 = ? AND track2 = ?",
+            (track1, track2))
+        result = 0
+        for row in rows:
+            result = row[0]
+            break
+        if not with_connection:
+            self.close_database_connection(connection)
+        return result
+
+    def _update_artist_match(
+        self, artist1, artist2, match, with_connection=None):
+        """write match score to the database"""
+        if with_connection:
+            connection = with_connection
+        else:
+            connection = self.get_database_connection()
+        connection.execute(
+            "UPDATE artist_2_artist SET match = ? WHERE artist1 = ? AND"
+            " artist2 = ?",
+            (match, artist1, artist2))
+        if not with_connection:
+            connection.commit()
+            self.close_database_connection(connection)
+
+    def _update_track_match(self, track1, track2, match, with_connection=None):
+        """write match score to the database"""
+        if with_connection:
+            connection = with_connection
+        else:
+            connection = self.get_database_connection()
+        connection.execute(
+            "UPDATE track_2_track SET match = ? WHERE track1 = ? AND"
+            " track2 = ?",
+            (match, track1, track2))
+        if not with_connection:
+            connection.commit()
+            self.close_database_connection(connection)
+
+    def _insert_artist_match(
+        self, artist1, artist2, match, with_connection=None):
+        """write match score to the database"""
+        if with_connection:
+            connection = with_connection
+        else:
+            connection = self.get_database_connection()
+        connection.execute(
+            "INSERT INTO artist_2_artist (artist1, artist2, match) VALUES"
+            " (?, ?, ?)",
+            (artist1, artist2, match))
+        if not with_connection:
+            connection.commit()
+            self.close_database_connection(connection)
+
+    def _insert_track_match(self, track1, track2, match, with_connection=None):
+        """write match score to the database"""
+        if with_connection:
+            connection = with_connection
+        else:
+            connection = self.get_database_connection()
+        connection.execute(
+            "INSERT INTO track_2_track (track1, track2, match) VALUES"
+            " (?, ?, ?)",
+            (track1, track2, match))
+        if not with_connection:
+            connection.commit()
+            self.close_database_connection(connection)
+
+    def _update_artist(self, artist_id, with_connection=None):
+        """write artist information to the database"""
+        if with_connection:
+            connection = with_connection
+        else:
+            connection = self.get_database_connection()
+        connection.execute(
+            "UPDATE artists SET updated = DATETIME('now') WHERE id = ?",
+            (artist_id,))
+        if not with_connection:
+            connection.commit()
+            self.close_database_connection(connection)
+
+    def _update_track(self, track_id, with_connection=None):
+        """write track information to the database"""
+        if with_connection:
+            connection = with_connection
+        else:
+            connection = self.get_database_connection()
+        connection.execute(
+            "UPDATE tracks SET updated = DATETIME('now') WHERE id = ?",
+            (track_id,))
+        if not with_connection:
+            connection.commit()
+            self.close_database_connection(connection)
+
+    def _update_similar_artists(self, artist_id, similar_artists):
+        """write similar artist information to the database"""
+        connection = self.get_database_connection()
+        for artist in similar_artists:
+            id2 = self.get_artist(
+                artist['artist'], with_connection=connection)[0]
+            if self._get_artist_match(
+                artist_id, id2, with_connection=connection):
+                self._update_artist_match(
+                    artist_id, id2, artist['score'],
+                    with_connection=connection)
+                continue
+            self._insert_artist_match(
+                artist_id, id2, artist['score'],
+                with_connection=connection)
+        self._update_artist(artist_id, with_connection=connection)
+        connection.commit()
+        self.close_database_connection(connection)
+
+    def _update_similar_tracks(self, track_id, similar_tracks):
+        """write similar track information to the database"""
+        connection = self.get_database_connection()
+        for track in similar_tracks:
+            id2 = self.get_track(
+                track['artist'], track['title'], with_connection=connection)[0]
+            if self._get_track_match(track_id, id2, with_connection=connection):
+                self._update_track_match(
+                    track_id, id2, track['score'],
+                    with_connection=connection)
+                continue
+            self._insert_track_match(
+                track_id, id2, track['score'],
+                with_connection=connection)
+        self._update_track(track_id, with_connection=connection)
+        connection.commit()
+        self.close_database_connection(connection)
+
+    def create_db(self):
+        """ Set up a database for the artist and track similarity scores
+        """
+        connection = self.get_database_connection()
+        connection.execute(
+            'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name'
+            ' VARCHAR(100), updated DATE)')
+        connection.execute(
+            'CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER,'
+            ' artist2 INTEGER, match INTEGER)')
+        connection.execute(
+            'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, artist'
+            ' INTEGER, title VARCHAR(100), updated DATE)')
+        connection.execute(
+            'CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, track2'
+            ' INTEGER, match INTEGER)')
+        connection.execute(
+            'CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, '
+            'filename VARCHAR(300), scms BLOB)')
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
+            "INTEGER, distance INTEGER)")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS a2aa1x ON artist_2_artist (artist1)")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS a2aa2x ON artist_2_artist (artist2)")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS t2tt1x ON track_2_track (track1)")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS t2tt2x ON track_2_track (track2)")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS mfnx ON mirage (filename)")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS dtrack1x ON distance (track_1)")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS dtrack2x ON distance (track_2)")
+        connection.commit()
+        self.close_database_connection(connection)
+
+    def delete_orphan_artists(self, artists):
+        """Delete artists that have no tracks."""
+        connection = self.get_database_connection()
+        connection.execute(
+            'DELETE FROM artists WHERE artists.id in (%s) AND artists.id NOT '
+            'IN (SELECT tracks.artist from tracks);' %
+            ",".join([str(artist) for artist in artists]))
+        connection.execute(
+            'DELETE FROM artist_2_artist WHERE artist1 NOT IN (SELECT '
+            'artists.id FROM artists) OR artist2 NOT IN (SELECT artists.id '
+            'FROM artists);')
+        connection.commit()
+        connection.close()
+
+
+class AutoQueueBase(SimilarityData):
     """Generic base class for autoqueue plugins."""
-    use_db = False
-    store_blocked_artists = False
     in_memory = False
     def __init__(self):
+        super(AutoQueueBase, self).__init__()
         self.connection = None
         self.artist_block_time = 1
         self.track_block_time = 30
@@ -147,22 +508,25 @@ class AutoQueueBase(object):
         self._rows = []
         self._nrows = []
         self.player_set_variables_from_config()
-        if self.store_blocked_artists:
-            self.get_blocked_artists_pickle()
-        if self.use_db:
-            self.create_db()
+        self._cache_dir = None
+        self.get_blocked_artists_pickle()
         if MIRAGE:
             self.mir = Mir()
 
-    def close_database_connection(self, connection):
-        """Close the database connection."""
-        if self.in_memory:
-            return
-        connection.close()
+    def player_get_cache_dir(self):
+        """Get the directory to store temporary data.
 
-    def player_get_userdir(self):
-        """Get the application user directory to store files."""
-        return NotImplemented
+        Defaults to $XDG_CACHE_HOME/autoqueue on Gnome.
+        """
+        if self._cache_dir:
+            return self._cache_dir
+        if not XDG:
+            return NotImplemented
+        cache_dir = os.path.join(xdg.BaseDirectory.xdg_cache_home, 'autoqueue')
+        if not os.path.exists(cache_dir):
+            os.makedirs(cache_dir)
+        self._cache_dir = cache_dir
+        return cache_dir
 
     def player_construct_file_search(self, filename, restrictions=None):
         """Construct a search that looks for songs with this artist
@@ -221,7 +585,7 @@ class AutoQueueBase(object):
 
     def get_blocked_artists_pickle(self):
         dump = os.path.join(
-            self.player_get_userdir(), "autoqueue_block_cache")
+            self.player_get_cache_dir(), "autoqueue_block_cache")
         try:
             pickle = open(dump, 'r')
             try:
@@ -237,24 +601,6 @@ class AutoQueueBase(object):
                 pickle.close()
         except IOError:
             pass
-
-    def get_db_path(self):
-        if self.in_memory:
-            return ":memory:"
-        return os.path.join(self.player_get_userdir(), "similarity.db")
-
-    def get_database_connection(self):
-        """get database reference"""
-        if self.in_memory:
-            if self.connection:
-                return self.connection
-            self.connection = sqlite3.connect(":memory:")
-            self.connection.text_factory = str
-            return self.connection
-        connection = sqlite3.connect(
-            self.get_db_path(), timeout=5.0, isolation_level="immediate")
-        connection.text_factory = str
-        return connection
 
     def disallowed(self, song):
         for artist in song.get_artists():
@@ -438,17 +784,16 @@ class AutoQueueBase(object):
         while not exhausted and self.queue_needs_songs():
             for exhausted in self.queue_song():
                 yield
-        if self.use_db:
-            for artist_id in self._artists_to_update:
-                self._update_similar_artists(
-                    artist_id, self._artists_to_update[artist_id])
-                yield
-            for track_id in self._tracks_to_update:
-                self._update_similar_tracks(
-                    track_id, self._tracks_to_update[track_id])
-                yield
-            self._artists_to_update = {}
-            self._tracks_to_update = {}
+        for artist_id in self._artists_to_update:
+            self._update_similar_artists(
+                artist_id, self._artists_to_update[artist_id])
+            yield
+        for track_id in self._tracks_to_update:
+            self._update_similar_tracks(
+                track_id, self._tracks_to_update[track_id])
+            yield
+        self._artists_to_update = {}
+        self._tracks_to_update = {}
         self.running = False
 
     def block_artist(self, artist_name):
@@ -460,22 +805,20 @@ class AutoQueueBase(object):
         self.log("Blocked artist: %s (%s)" % (
             artist_name,
             len(self._blocked_artists)))
-        if self.store_blocked_artists:
-            dump = os.path.join(
-                self.player_get_userdir(), "autoqueue_block_cache")
-            try:
-                os.remove(dump)
-            except OSError:
-                pass
+        dump = os.path.join(
+            self.player_get_cache_dir(), "autoqueue_block_cache")
+        try:
+            os.remove(dump)
+        except OSError:
+            pass
         if len(self._blocked_artists) == 0:
             return
-        if self.store_blocked_artists:
-            pickle_file = open(dump, 'w')
-            pickler = Pickler(pickle_file, -1)
-            to_dump = (self._blocked_artists,
-                       self._blocked_artists_times)
-            pickler.dump(to_dump)
-            pickle_file.close()
+        pickle_file = open(dump, 'w')
+        pickler = Pickler(pickle_file, -1)
+        to_dump = (self._blocked_artists,
+                   self._blocked_artists_times)
+        pickler.dump(to_dump)
+        pickle_file.close()
 
     def unblock_artists(self):
         """release blocked artists when they've been in the penalty
@@ -538,8 +881,7 @@ class AutoQueueBase(object):
                 'score': match,
                 'artist': similar_artist,
                 'title': similar_title,}
-            if self.use_db:
-                self._tracks_to_update.setdefault(track_id, []).append(result)
+            self._tracks_to_update.setdefault(track_id, []).append(result)
             results.append(result)
         return results
 
@@ -564,8 +906,7 @@ class AutoQueueBase(object):
             result = {
                 'score': match,
                 'artist': name,}
-            if self.use_db:
-                self._artists_to_update.setdefault(artist_id, []).append(result)
+            self._artists_to_update.setdefault(artist_id, []).append(result)
             results.append(result)
         return results
 
@@ -586,60 +927,6 @@ class AutoQueueBase(object):
             self.lastfm = False
             return None
 
-    def get_artist(self, artist_name, with_connection=None):
-        """get artist information from the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        artist_name = artist_name.encode("UTF-8")
-        rows = connection.execute(
-            "SELECT * FROM artists WHERE name = ?", (artist_name,))
-        for row in rows:
-            if not with_connection:
-                self.close_database_connection(connection)
-            return row
-        connection.execute(
-            "INSERT INTO artists (name) VALUES (?)", (artist_name,))
-        connection.commit()
-        rows = connection.execute(
-            "SELECT * FROM artists WHERE name = ?", (artist_name,))
-        for row in rows:
-            if not with_connection:
-                self.close_database_connection(connection)
-            return row
-        if not with_connection:
-            self.close_database_connection(connection)
-
-    def get_track(self, artist_name, title, with_connection=None):
-        """get track information from the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        title = title.encode("UTF-8")
-        artist_id = self.get_artist(artist_name, with_connection=connection)[0]
-        rows = connection.execute(
-            "SELECT * FROM tracks WHERE artist = ? AND title = ?",
-            (artist_id, title))
-        for row in rows:
-            if not with_connection:
-                self.close_database_connection(connection)
-            return row
-        connection.execute(
-            "INSERT INTO tracks (artist, title) VALUES (?, ?)",
-            (artist_id, title))
-        connection.commit()
-        rows = connection.execute(
-            "SELECT * FROM tracks WHERE artist = ? AND title = ?",
-            (artist_id, title))
-        for row in rows:
-            if not with_connection:
-                self.close_database_connection(connection)
-            return row
-        if not with_connection:
-            self.close_database_connection(connection)
-
     def get_artists_mirage_ids(self, artist_names):
         """Get all known file ids for this artist."""
         filenames = []
@@ -647,24 +934,7 @@ class AutoQueueBase(object):
             search = self.player_construct_artist_search(artist_name)
             for song in self.player_search(search):
                 filenames.append(song.get_filename())
-        connection = self.get_database_connection()
-        rows = connection.execute(
-            'SELECT trackid FROM mirage WHERE filename IN (%s)' %
-            (','.join(['"%s"' % filename for filename in filenames]), ))
-        result = [row[0] for row in rows]
-        self.close_database_connection(connection)
-        return result
-
-    def get_artist_tracks(self, artist_id):
-        connection = self.get_database_connection()
-        result = []
-        rows = connection.execute(
-            "SELECT tracks.id FROM tracks INNER JOIN artists"
-            " ON tracks.artist = artists.id WHERE artists.id = ?",
-            (artist_id, ))
-        result = [row[0] for row in rows]
-        self.close_database_connection(connection)
-        return result
+        return self.get_ids_for_filenames(filenames)
 
     def analyze_track(self, song, add_neighbours=True):
         artist_names = song.get_artists()
@@ -703,28 +973,11 @@ class AutoQueueBase(object):
         filename = song.get_filename()
         self.log("Getting similar tracks from mirage for: %s - %s" % (
             artist_name, title))
-        if not self.use_db:
-            return
         db = Db(self.get_db_path())
         trackid = db.get_track_id(filename)
         for match, mfile_id in db.get_neighbours(trackid):
             filename = db.get_filename(mfile_id)
             yield {'score': match, 'filename': filename}
-
-    def get_similar_tracks_from_db(self, track_id):
-        """Get similar tracks from the database sorted by descending
-        match score."""
-        connection = self.get_database_connection()
-        results = [row for row in connection.execute(
-            "SELECT track_2_track.match, artists.name, tracks.title"
-            " FROM track_2_track INNER JOIN tracks ON"
-            " track_2_track.track2 = tracks.id INNER JOIN artists ON"
-            " artists.id = tracks.artist WHERE track_2_track.track1"
-            " = ? ORDER BY track_2_track.match DESC",
-            (track_id,))]
-        self.close_database_connection(connection)
-        for score, artist, title in results:
-            yield {'score': score, 'artist': artist, 'title': title}
 
     def get_ordered_similar_tracks(self, song):
         """get similar tracks from last.fm/the database sorted by
@@ -734,10 +987,6 @@ class AutoQueueBase(object):
         title = song.get_title()
         track = self.get_track(artist_name, title)
         track_id, updated = track[0], track[3]
-        if not self.use_db:
-            for result in self.get_similar_tracks_from_lastfm(artist_name,
-                                                              title, track_id):
-                yield result
         if updated:
             updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
             if updated + timedelta(self.cache_time) > self.now:
@@ -755,27 +1004,12 @@ class AutoQueueBase(object):
                     artist_name, title, track_id):
                 yield result
 
-    def get_similar_artists_from_db(self, artist_id):
-        connection = self.get_database_connection()
-        results = [row for row in connection.execute(
-            "SELECT match, name FROM artist_2_artist INNER JOIN"
-            " artists ON artist_2_artist.artist2 = artists.id WHERE"
-            " artist_2_artist.artist1 = ? ORDER BY match DESC;",
-            (artist_id,))]
-        self.close_database_connection(connection)
-        for score, artist in results:
-            yield {'score': score, 'artist': artist}
-
     def get_ordered_similar_artists(self, song):
         """get similar artists from the database sorted by descending
         match score"""
         for artist_name in song.get_artists():
             artist = self.get_artist(artist_name)
             artist_id, updated = artist[0], artist[2]
-            if not self.use_db:
-                for result in self.get_similar_artists_from_lastfm(
-                    artist_name, artist_id):
-                    yield result
             if updated:
                 updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
                 if updated + timedelta(self.cache_time) > self.now:
@@ -793,207 +1027,11 @@ class AutoQueueBase(object):
                         artist_name, artist_id):
                     yield result
 
-    def _get_artist_match(self, artist1, artist2, with_connection=None):
-        """get artist match score from database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        rows = connection.execute(
-            "SELECT match FROM artist_2_artist WHERE artist1 = ?"
-            " AND artist2 = ?",
-            (artist1, artist2))
-        result = 0
-        for row in rows:
-            result = row[0]
-            break
-        if not with_connection:
-            self.close_database_connection(connection)
-        return result
-
-    def _get_track_match(self, track1, track2, with_connection=None):
-        """get track match score from database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        rows = connection.execute(
-            "SELECT match FROM track_2_track WHERE track1 = ? AND track2 = ?",
-            (track1, track2))
-        result = 0
-        for row in rows:
-            result = row[0]
-            break
-        if not with_connection:
-            self.close_database_connection(connection)
-        return result
-
-    def _update_artist_match(
-        self, artist1, artist2, match, with_connection=None):
-        """write match score to the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        connection.execute(
-            "UPDATE artist_2_artist SET match = ? WHERE artist1 = ? AND"
-            " artist2 = ?",
-            (match, artist1, artist2))
-        if not with_connection:
-            connection.commit()
-            self.close_database_connection(connection)
-
-    def _update_track_match(self, track1, track2, match, with_connection=None):
-        """write match score to the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        connection.execute(
-            "UPDATE track_2_track SET match = ? WHERE track1 = ? AND"
-            " track2 = ?",
-            (match, track1, track2))
-        if not with_connection:
-            connection.commit()
-            self.close_database_connection(connection)
-
-    def _insert_artist_match(
-        self, artist1, artist2, match, with_connection=None):
-        """write match score to the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        connection.execute(
-            "INSERT INTO artist_2_artist (artist1, artist2, match) VALUES"
-            " (?, ?, ?)",
-            (artist1, artist2, match))
-        if not with_connection:
-            connection.commit()
-            self.close_database_connection(connection)
-
-    def _insert_track_match(self, track1, track2, match, with_connection=None):
-        """write match score to the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        connection.execute(
-            "INSERT INTO track_2_track (track1, track2, match) VALUES"
-            " (?, ?, ?)",
-            (track1, track2, match))
-        if not with_connection:
-            connection.commit()
-            self.close_database_connection(connection)
-
-    def _update_artist(self, artist_id, with_connection=None):
-        """write artist information to the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        connection.execute(
-            "UPDATE artists SET updated = DATETIME('now') WHERE id = ?",
-            (artist_id,))
-        if not with_connection:
-            connection.commit()
-            self.close_database_connection(connection)
-
-    def _update_track(self, track_id, with_connection=None):
-        """write track information to the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        connection.execute(
-            "UPDATE tracks SET updated = DATETIME('now') WHERE id = ?",
-            (track_id,))
-        if not with_connection:
-            connection.commit()
-            self.close_database_connection(connection)
-
-    def _update_similar_artists(self, artist_id, similar_artists):
-        """write similar artist information to the database"""
-        connection = self.get_database_connection()
-        for artist in similar_artists:
-            id2 = self.get_artist(
-                artist['artist'], with_connection=connection)[0]
-            if self._get_artist_match(
-                artist_id, id2, with_connection=connection):
-                self._update_artist_match(
-                    artist_id, id2, artist['score'],
-                    with_connection=connection)
-                continue
-            self._insert_artist_match(
-                artist_id, id2, artist['score'],
-                with_connection=connection)
-        self._update_artist(artist_id, with_connection=connection)
-        connection.commit()
-        self.close_database_connection(connection)
-
-    def _update_similar_tracks(self, track_id, similar_tracks):
-        """write similar track information to the database"""
-        connection = self.get_database_connection()
-        for track in similar_tracks:
-            id2 = self.get_track(
-                track['artist'], track['title'], with_connection=connection)[0]
-            if self._get_track_match(track_id, id2, with_connection=connection):
-                self._update_track_match(
-                    track_id, id2, track['score'],
-                    with_connection=connection)
-                continue
-            self._insert_track_match(
-                track_id, id2, track['score'],
-                with_connection=connection)
-        self._update_track(track_id, with_connection=connection)
-        connection.commit()
-        self.close_database_connection(connection)
-
     def log(self, msg):
         """print debug messages"""
         if not self.verbose:
             return
         print "[autoqueue]", msg.encode('utf-8')
-
-    def create_db(self):
-        """ Set up a database for the artist and track similarity scores
-        """
-        self.log("create_db")
-        connection = self.get_database_connection()
-        connection.execute(
-            'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name'
-            ' VARCHAR(100), updated DATE)')
-        connection.execute(
-            'CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER,'
-            ' artist2 INTEGER, match INTEGER)')
-        connection.execute(
-            'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, artist'
-            ' INTEGER, title VARCHAR(100), updated DATE)')
-        connection.execute(
-            'CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, track2'
-            ' INTEGER, match INTEGER)')
-        connection.execute(
-            'CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, '
-            'filename VARCHAR(300), scms BLOB)')
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
-            "INTEGER, distance INTEGER)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS a2aa1x ON artist_2_artist (artist1)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS a2aa2x ON artist_2_artist (artist2)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS t2tt1x ON track_2_track (track1)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS t2tt2x ON track_2_track (track2)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS mfnx ON mirage (filename)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS dtrack1x ON distance (track_1)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS dtrack2x ON distance (track_2)")
-        connection.commit()
-        self.close_database_connection(connection)
 
     def prune_db(self):
         """clean up the database: remove tracks and artists that are
@@ -1054,20 +1092,6 @@ class AutoQueueBase(object):
                 'mirage);')
             connection.commit()
             self.close_database_connection(connection)
-
-    def delete_orphan_artists(self, artists):
-        """Delete artists that have no tracks."""
-        connection = self.get_database_connection()
-        connection.execute(
-            'DELETE FROM artists WHERE artists.id in (%s) AND artists.id NOT '
-            'IN (SELECT tracks.artist from tracks);' %
-            ",".join([str(artist) for artist in artists]))
-        connection.execute(
-            'DELETE FROM artist_2_artist WHERE artist1 NOT IN (SELECT '
-            'artists.id FROM artists) OR artist2 NOT IN (SELECT artists.id '
-            'FROM artists);')
-        connection.commit()
-        connection.close()
 
     def prune_search(self):
         while self._rows:

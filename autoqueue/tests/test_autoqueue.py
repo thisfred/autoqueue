@@ -125,7 +125,6 @@ class MockSong(SongBase):
 class MockAutoQueue(AutoQueueBase):
     def __init__(self):
         self.player = MockPlayer(self.started)
-        self.use_db = True
         self.in_memory = True
         super(MockAutoQueue, self).__init__()
         self.by_tags = True
@@ -133,9 +132,6 @@ class MockAutoQueue(AutoQueueBase):
 
     def started(self, song):
         self.on_song_started(song)
-
-    def player_get_userdir(self):
-        """Get the application user directory to store files."""
 
     def player_construct_file_search(self, filename, restrictions=None):
         """Construct a search that looks for songs with this artist
