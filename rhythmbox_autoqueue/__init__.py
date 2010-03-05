@@ -98,7 +98,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
             return
         result = (
             rhythmdb.QUERY_PROP_EQUALS, rhythmdb.PROP_LOCATION,
-            filename.encode('utf-8'))
+            'file://' + filename.encode('utf-8'))
         if restrictions:
             result += restrictions
         return result
