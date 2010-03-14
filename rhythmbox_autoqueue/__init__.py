@@ -14,12 +14,12 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 
-import os
 import urllib
 from time import time
-import gconf
+import gconf, gobject
+from gtk import gdk
 import rb, rhythmdb
-
+from collections import deque
 from autoqueue import AutoQueueBase, SongBase
 
 GCONFPATH = '/apps/rhythmbox/plugins/autoqueue/'
@@ -68,6 +68,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         self.verbose = True
         self.by_mirage = True
         self.log("initialized")
+        self._generators = deque()
 
     def activate(self, shell):
         self.shell = shell
@@ -81,6 +82,30 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         self.shell = None
         sp = shell.get_player()
         sp.disconnect(self.pec_id)
+
+    def _idle_callback(self):
+        gdk.threads_enter()
+        while self._generators:
+            for dummy in self._generators[0]:
+                gdk.threads_leave()
+                return True
+            self._generators.popleft()
+        gdk.threads_leave()
+        return False
+
+    def player_execute_async(self, method, *args, **kwargs):
+        """Override this if the player has a way to execute methods
+        asynchronously, like the copooling in autoqueue.
+
+        """
+        if 'funcid' in kwargs:
+            del kwargs['funcid']
+        add_callback = False
+        if self._generators:
+           add_callback = True
+        self._generators.append(method(*args, **kwargs))
+        if add_callback:
+            gobject.idle_add(self._idle_callback)
 
     def log(self, msg):
         """print debug messages"""

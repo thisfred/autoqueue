@@ -569,7 +569,7 @@ class AutoQueueBase(SimilarityData):
         return []
 
     def player_execute_async(self, method, *args, **kwargs):
-        """Override this if the player has a way to exectute methods
+        """Override this if the player has a way to execute methods
         asynchronously, like the copooling in autoqueue.
 
         """
