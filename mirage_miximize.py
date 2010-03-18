@@ -37,7 +37,7 @@ class MirageMiximizePlugin(SongsMenuPlugin, SimilarityData):
         copool.add(self.do_stuff, songs)
 
     def do_stuff(self, songs):
-        db = Db(self.get_dbpath())
+        db = Db(self.get_db_path())
         l = len(songs)
         print "mirage analysis"
         for i, song in enumerate(songs):
