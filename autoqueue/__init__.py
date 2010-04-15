@@ -1026,7 +1026,10 @@ class AutoQueueBase(SimilarityData):
         """print debug messages"""
         if not self.verbose:
             return
-        print "[autoqueue]", msg.encode('utf-8')
+        try:
+            print "[autoqueue]", msg.encode('utf-8')
+        except UnicodeDecodeError:
+            print "[autoqueue]", msg
 
     def prune_db(self):
         """clean up the database: remove tracks and artists that are
