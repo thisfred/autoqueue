@@ -14,7 +14,7 @@ from library import library
 from quodlibet.util import copool
 import config
 
-from autoqueue import AutoQueueBase, SongBase, SQL
+from autoqueue import AutoQueueBase, SongBase
 
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) api key from last.fm here:
@@ -288,7 +288,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 '|(grouping = "%s",grouping = "artist:%s",'
                 'grouping = "album:%s")' % (stripped, stripped, stripped))
         if restrictions:
-            search = "&(&(%s),%s)" % (",".join(search_tags), restrictions)
+            search = "&(|(%s),%s)" % (",".join(search_tags), restrictions)
         else:
             search = "&(%s)" % (",".join(search_tags))
         return search
