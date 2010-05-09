@@ -23,7 +23,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 from collections import deque
 from datetime import datetime, timedelta
 from time import strptime, sleep, time
-import urllib, itertools
+import urllib
 import random, os
 from xml.dom import minidom
 from cPickle import Pickler, Unpickler
@@ -476,6 +476,20 @@ class SimilarityData(object):
         connection.close()
 
 
+def tag_score(song, tags):
+    song_tags = song.get_tags()
+    if not tags:
+        return 0
+    tagset = set([])
+    for tag in song_tags:
+        if tag.startswith("artist:") or tag.startswith("album:"):
+            stripped = ":".join(tag.split(":")[1:])
+        else:
+            stripped = tag
+        tagset.add(stripped)
+    return len(tagset & tags)
+
+
 class AutoQueueBase(SimilarityData):
     """Generic base class for autoqueue plugins."""
     def __init__(self):
@@ -665,20 +679,8 @@ class AutoQueueBase(SimilarityData):
             for result in self.get_ordered_similar_artists(last_song):
                 yield result
         if self.by_tags:
-            tags = last_song.get_tags()
-            if not tags:
-                return
-            tagset = set([])
-            for tag in tags:
-                if tag.startswith("artist:") or tag.startswith(
-                    "album:"):
-                    stripped = ":".join(tag.split(":")[1:])
-                else:
-                    stripped = tag
-                tagset.add(stripped)
-            for i in range(len(tagset), 0, -1):
-                for combination in itertools.combinations(tagset, i):
-                    yield {'score': i, 'tags': combination,}
+            for result in self.get_ordered_similar_by_tag(last_song):
+                yield result
 
     def construct_search(self, artist=None, title=None, tags=None,
                          filename=None, restrictions=None):
@@ -843,6 +845,24 @@ class AutoQueueBase(SimilarityData):
         song"""
         queue = self.player_get_songs_in_queue() or []
         return [self.song] + queue
+
+    def get_ordered_similar_by_tag(self, last_song):
+        tags = last_song.get_tags()
+        if not tags:
+            return
+        tagset = set([])
+        for tag in tags:
+            if tag.startswith("artist:") or tag.startswith("album:"):
+                stripped = ":".join(tag.split(":")[1:])
+            else:
+                stripped = tag
+            tagset.add(stripped)
+        search = self.construct_search(tags=list(tagset))
+        songs = sorted(
+            [(tag_score(song, tagset), song) for song in
+             self.player_search(search)])
+        for score, song in songs:
+            yield {'score': score, 'filename': song.get_filename(),}
 
     def get_similar_tracks_from_lastfm(self, artist_name, title, track_id):
         """get similar tracks to the last one in the queue"""
