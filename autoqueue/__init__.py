@@ -860,7 +860,7 @@ class AutoQueueBase(SimilarityData):
         search = self.construct_search(tags=list(tagset))
         songs = sorted(
             [(tag_score(song, tagset), song) for song in
-             self.player_search(search)])
+             self.player_search(search)], reverse=True)
         for score, song in songs:
             yield {'score': score, 'filename': song.get_filename(),}
 
