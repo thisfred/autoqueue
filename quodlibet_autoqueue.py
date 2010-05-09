@@ -290,7 +290,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         if restrictions:
             search = "&(|(%s),%s)" % (",".join(search_tags), restrictions)
         else:
-            search = "&(%s)" % (",".join(search_tags))
+            search = "|(%s)" % (",".join(search_tags))
         return search
 
     def player_construct_artist_search(self, artist, restrictions=None):

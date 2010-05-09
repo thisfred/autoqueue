@@ -857,7 +857,8 @@ class AutoQueueBase(SimilarityData):
             else:
                 stripped = tag
             tagset.add(stripped)
-        search = self.construct_search(tags=list(tagset))
+        search = self.construct_search(
+            tags=list(tagset), restrictions=self.restrictions)
         songs = sorted(
             [(tag_score(song, tagset), song) for song in
              self.player_search(search)], reverse=True)
