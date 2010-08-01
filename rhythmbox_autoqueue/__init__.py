@@ -101,7 +101,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         if 'funcid' in kwargs:
             del kwargs['funcid']
         add_callback = False
-        if self._generators:
+        if not self._generators:
            add_callback = True
         self._generators.append(method(*args, **kwargs))
         if add_callback:

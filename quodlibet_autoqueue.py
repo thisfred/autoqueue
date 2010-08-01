@@ -6,13 +6,14 @@ This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation"""
 
-import gtk
+import gtk, gobject
+from gtk import gdk
 from plugins.events import EventPlugin
 from widgets import main
 from parse import Query
 from library import library
-from quodlibet.util import copool
 import config
+from collections import deque
 
 from autoqueue import AutoQueueBase, SongBase
 
@@ -142,6 +143,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     def __init__(self):
         EventPlugin.__init__(self)
         AutoQueueBase.__init__(self)
+        self._generators = deque()
 
     def enabled(self):
         """user enabled the plugin"""
@@ -240,9 +242,33 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
         return table
 
-    # Implement the player specific methods needed by autoqueue
+    def _idle_callback(self):
+        gdk.threads_enter()
+        while self._generators:
+            for dummy in self._generators[0]:
+                gdk.threads_leave()
+                return True
+            self._generators.popleft()
+        gdk.threads_leave()
+        return False
+
     def player_execute_async(self, method, *args, **kwargs):
-        copool.add(method, *args, **kwargs)
+        """Override this if the player has a way to execute methods
+        asynchronously, like the copooling in autoqueue.
+
+        """
+        if 'funcid' in kwargs:
+            del kwargs['funcid']
+        add_callback = False
+        if not self._generators:
+           add_callback = True
+        self._generators.append(method(*args, **kwargs))
+        if add_callback:
+            gobject.idle_add(self._idle_callback)
+
+    ## # Implement the player specific methods needed by autoqueue
+    ## def player_execute_async(self, method, *args, **kwargs):
+    ##     copool.add(method, *args, **kwargs)
 
     def player_construct_file_search(self, filename, restrictions=None):
         """construct a search that looks for songs with this filename"""
