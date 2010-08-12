@@ -20,12 +20,14 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
 
-import os, math, sys
+import os, sys
 import cPickle as pickle
 from cStringIO import StringIO
 import sqlite3
 import xdg.BaseDirectory
-from mirage import *
+from mirage import (
+    Mir, MatrixDimensionMismatchException, MfccFailedException,
+    ScmsConfiguration, distance)
 
 DEBUG = True
 NEIGHBOURS = 10
@@ -339,11 +341,10 @@ class Db(object):
             exclude_ids = []
         c = ScmsConfiguration(20)
         best = []
-        for scms, otherid in self.get_files(exclude_ids=exclude_ids):
+        for other_scms, otherid in self.get_files(exclude_ids=exclude_ids):
             if trackid == otherid:
                 continue
-            other = scms
-            dist = int(distance(scms, other, c) * 1000)
+            dist = int(distance(scms, other_scms, c) * 1000)
             if len(best) >= neighbours:
                 if dist > best[-1][0]:
                     continue
@@ -392,52 +393,6 @@ class Db(object):
             (trackid,))]
         self.close_database_connection(connection)
         return neighbours
-
-
-class Mfcc(object):
-    def __init__(self, winsize, srate, filters, cc):
-        here = os.path.dirname( __file__)
-        self.dct = Matrix(1,1)
-        self.dct.load(os.path.join(here, 'res', 'dct.filter'))
-        self.filterweights = Matrix(1,1)
-        self.filterweights.load(os.path.join(
-            here, 'res', 'filterweights.filter'))
-
-        self.fwft = [[0, 0]] * self.filterweights.rows
-        for i in range(self.filterweights.rows):
-            last = 0.0
-            for j in range(self.filterweights.columns):
-                if self.filterweights.d[i, j] and last:
-                    self.fwft[i][0] = j
-                elif last and not self.filterweights.d[i, j]:
-                    self.fwft[i][1] = j
-                last = self.filterweights.d[i, j]
-                if last:
-                    self.fwft[i][1] = self.filterweights.columns
-
-    def apply(self, m):
-        def f(x):
-            if x < 1.0:
-                return 0.0
-            return 10.0 * math.log10(x)
-        vf = vectorize(f)
-
-        t = DbgTimer()
-        t.start()
-        mel = Matrix(self.filterweights.rows, m.columns)
-        try:
-            mel.d = mel.d + dot(self.filterweights.d, m.d)
-        except ValueError:
-            raise MfccFailedException
-        mel.d = vf(mel.d)
-
-        try:
-            mfcc = self.dct.multiply(mel)
-            t.stop()
-            write_line("Mirage: mfcc Execution Time: %s" % t.time)
-            return mfcc
-        except MatrixDimensionMismatchException:
-            raise MfccFailedException
 
 
 def instance_from_picklestring(picklestring):
