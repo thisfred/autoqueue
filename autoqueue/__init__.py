@@ -617,8 +617,6 @@ class AutoQueueBase(SimilarityData):
                         look_for += ' - ' + title
                 elif result.get('filename'):
                     look_for = result['filename']
-                elif result.get('tags'):
-                    look_for = result['tags']
                 else:
                     self.log(repr(result))
                     look_for = repr(result)
@@ -631,11 +629,8 @@ class AutoQueueBase(SimilarityData):
                     if artist in blocked:
                         continue
                 filename = result.get("filename")
-                tags = result.get("tags")
                 if filename:
                     found = self.search_and_filter(filename=filename)
-                elif tags:
-                    found = self.search_and_filter(tags=tags)
                 else:
                     found = self.search_and_filter(
                         artist=result.get("artist"),
