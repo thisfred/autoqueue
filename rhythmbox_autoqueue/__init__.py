@@ -86,6 +86,9 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
     def _idle_callback(self):
         gdk.threads_enter()
         while self._generators:
+            if self._generators[0] is None:
+                self._generators.popleft()
+                continue
             for dummy in self._generators[0]:
                 gdk.threads_leave()
                 return True
@@ -98,8 +101,6 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         asynchronously, like the copooling in autoqueue.
 
         """
-        if 'funcid' in kwargs:
-            del kwargs['funcid']
         add_callback = False
         if not self._generators:
            add_callback = True

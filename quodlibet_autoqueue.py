@@ -144,6 +144,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         EventPlugin.__init__(self)
         AutoQueueBase.__init__(self)
         self._generators = deque()
+        gtk.quit_add(0, self.quit)
 
     def enabled(self):
         """user enabled the plugin"""
@@ -245,7 +246,10 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     def _idle_callback(self):
         gdk.threads_enter()
         while self._generators:
-            for dummy in self._generators[0]:
+            if self._generators[0] is None:
+                self._generators.popleft()
+                continue
+            for _ in self._generators[0]:
                 gdk.threads_leave()
                 return True
             self._generators.popleft()
@@ -257,18 +261,12 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         asynchronously, like the copooling in autoqueue.
 
         """
-        if 'funcid' in kwargs:
-            del kwargs['funcid']
         add_callback = False
         if not self._generators:
            add_callback = True
         self._generators.append(method(*args, **kwargs))
         if add_callback:
             gobject.idle_add(self._idle_callback)
-
-    ## # Implement the player specific methods needed by autoqueue
-    ## def player_execute_async(self, method, *args, **kwargs):
-    ##     copool.add(method, *args, **kwargs)
 
     def player_construct_file_search(self, filename, restrictions=None):
         """construct a search that looks for songs with this filename"""

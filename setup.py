@@ -1,7 +1,3 @@
-from distribute_setup import use_setuptools
-
-use_setuptools()
-
 from setuptools import setup
 import os
 
@@ -41,4 +37,8 @@ setup(
     package_data={'mirage': ['res/*']},
     requires=['scipy', 'ctypes'],
     provides=['mirage', 'autoqueue'],
+    entry_points="""
+    [console_scripts]
+    similarity_daemon = mirage.daemon:main
+    """,
     **optional)

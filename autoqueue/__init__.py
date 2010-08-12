@@ -20,11 +20,14 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
 
+import os
+import random
+import subprocess
+import urllib
+
 from collections import deque
 from datetime import datetime, timedelta
-from time import strptime, sleep, time
-import urllib
-import random, os
+from time import strptime, sleep
 from xml.dom import minidom
 from cPickle import Pickler, Unpickler
 
@@ -41,8 +44,7 @@ except ImportError:
     SQL = False
 
 try:
-    from mirage import (
-        Mir, Db, MatrixDimensionMismatchException, MfccFailedException)
+    from mirage.daemon import Db
     MIRAGE = True
 except ImportError:
     MIRAGE = False
@@ -60,8 +62,12 @@ ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
 # be nice to last.fm
 WAIT_BETWEEN_REQUESTS = timedelta(0, 1)
 
-# XXX make configurable
-NEIGHBOURS = 20
+# The minimum number of computed mirage matches before we recompute
+# them (4 times as many get added.)
+NEIGHBOURS = 10
+
+daemon = subprocess.Popen(
+    ['similarity_daemon'], shell=False, stdin=subprocess.PIPE)
 
 
 class Throttle(object):
@@ -144,14 +150,17 @@ class SimilarityData(object):
         data_dir = os.path.join(xdg.BaseDirectory.xdg_data_home, 'autoqueue')
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
+            self.create_db()
         self._data_dir = data_dir
-        self.create_db()
         return data_dir
 
     def get_db_path(self):
         if self.in_memory:
             return ":memory:"
         return os.path.join(self.player_get_data_dir(), "similarity.db")
+
+    def create_db(self):
+        daemon.stdin.write('create_db\n')
 
     def get_database_connection(self):
         """get database reference"""
@@ -179,17 +188,7 @@ class SimilarityData(object):
             if not with_connection:
                 self.close_database_connection(connection)
             return row
-        connection.execute(
-            "INSERT INTO artists (name) VALUES (?)", (artist_name,))
-        connection.commit()
-        rows = connection.execute(
-            "SELECT * FROM artists WHERE name = ?", (artist_name,))
-        for row in rows:
-            if not with_connection:
-                self.close_database_connection(connection)
-            return row
-        if not with_connection:
-            self.close_database_connection(connection)
+        daemon.stdin.write('add_artist %s\n' % artist_name)
 
     def get_track(self, artist_name, title, with_connection=None):
         """get track information from the database"""
@@ -198,7 +197,12 @@ class SimilarityData(object):
         else:
             connection = self.get_database_connection()
         title = title.encode("UTF-8")
-        artist_id = self.get_artist(artist_name, with_connection=connection)[0]
+        row = self.get_artist(artist_name, with_connection=connection)
+        if not row:
+            if not with_connection:
+                self.close_database_connection()
+            return None
+        artist_id = row[0]
         rows = connection.execute(
             "SELECT * FROM tracks WHERE artist = ? AND title = ?",
             (artist_id, title))
@@ -206,19 +210,7 @@ class SimilarityData(object):
             if not with_connection:
                 self.close_database_connection(connection)
             return row
-        connection.execute(
-            "INSERT INTO tracks (artist, title) VALUES (?, ?)",
-            (artist_id, title))
-        connection.commit()
-        rows = connection.execute(
-            "SELECT * FROM tracks WHERE artist = ? AND title = ?",
-            (artist_id, title))
-        for row in rows:
-            if not with_connection:
-                self.close_database_connection(connection)
-            return row
-        if not with_connection:
-            self.close_database_connection(connection)
+        daemon.stdin.write('add_track %s %s\n' % (artist_id, title))
 
     def get_ids_for_filenames(self, filenames):
         connection = self.get_database_connection()
@@ -301,179 +293,69 @@ class SimilarityData(object):
             self.close_database_connection(connection)
         return result
 
-    def _update_artist_match(
-        self, artist1, artist2, match, with_connection=None):
+    def _update_artist_match(self, artist1, artist2, match):
         """write match score to the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        connection.execute(
-            "UPDATE artist_2_artist SET match = ? WHERE artist1 = ? AND"
-            " artist2 = ?",
-            (match, artist1, artist2))
-        if not with_connection:
-            connection.commit()
-            self.close_database_connection(connection)
+        daemon.stdin.write(
+            'update_artist_match %s %s %s\n' % (artist1, artist2, match))
 
-    def _update_track_match(self, track1, track2, match, with_connection=None):
+    def _update_track_match(self, track1, track2, match):
         """write match score to the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        connection.execute(
-            "UPDATE track_2_track SET match = ? WHERE track1 = ? AND"
-            " track2 = ?",
-            (match, track1, track2))
-        if not with_connection:
-            connection.commit()
-            self.close_database_connection(connection)
+        daemon.stdin.write(
+            'update_track_match %s %s %s\n' % (track1, track2, match))
 
-    def _insert_artist_match(
-        self, artist1, artist2, match, with_connection=None):
+    def _insert_artist_match(self, artist1, artist2, match):
         """write match score to the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        connection.execute(
-            "INSERT INTO artist_2_artist (artist1, artist2, match) VALUES"
-            " (?, ?, ?)",
-            (artist1, artist2, match))
-        if not with_connection:
-            connection.commit()
-            self.close_database_connection(connection)
+        daemon.stdin.write(
+            'insert_artist_match %s %s %s\n' % (artist1, artist2, match))
 
-    def _insert_track_match(self, track1, track2, match, with_connection=None):
+    def _insert_track_match(self, track1, track2, match):
         """write match score to the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        connection.execute(
-            "INSERT INTO track_2_track (track1, track2, match) VALUES"
-            " (?, ?, ?)",
-            (track1, track2, match))
-        if not with_connection:
-            connection.commit()
-            self.close_database_connection(connection)
+        daemon.stdin.write(
+            'insert_track_match %s %s %s\n' % (track1, track2, match))
 
-    def _update_artist(self, artist_id, with_connection=None):
+    def _update_artist(self, artist_id):
         """write artist information to the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        connection.execute(
-            "UPDATE artists SET updated = DATETIME('now') WHERE id = ?",
-            (artist_id,))
-        if not with_connection:
-            connection.commit()
-            self.close_database_connection(connection)
+        daemon.stdin.write('update_artist %s\n' % artist_id)
 
-    def _update_track(self, track_id, with_connection=None):
+    def _update_track(self, track_id):
         """write track information to the database"""
-        if with_connection:
-            connection = with_connection
-        else:
-            connection = self.get_database_connection()
-        connection.execute(
-            "UPDATE tracks SET updated = DATETIME('now') WHERE id = ?",
-            (track_id,))
-        if not with_connection:
-            connection.commit()
-            self.close_database_connection(connection)
+        daemon.stdin.write('update_track %s\n' % track_id)
 
     def _update_similar_artists(self, artist_id, similar_artists):
         """write similar artist information to the database"""
         connection = self.get_database_connection()
         for artist in similar_artists:
-            id2 = self.get_artist(
-                artist['artist'], with_connection=connection)[0]
-            if self._get_artist_match(
-                artist_id, id2, with_connection=connection):
-                self._update_artist_match(
-                    artist_id, id2, artist['score'],
-                    with_connection=connection)
-                continue
-            self._insert_artist_match(
-                artist_id, id2, artist['score'],
-                with_connection=connection)
-        self._update_artist(artist_id, with_connection=connection)
-        connection.commit()
+            row = self.get_artist(
+                artist['artist'], with_connection=connection)
+            if row:
+                id2 = row[0]
+                if self._get_artist_match(
+                    artist_id, id2, with_connection=connection):
+                    self._update_artist_match(
+                        artist_id, id2, artist['score'],)
+                    continue
+                self._insert_artist_match(
+                    artist_id, id2, artist['score'])
+        self._update_artist(artist_id)
         self.close_database_connection(connection)
 
     def _update_similar_tracks(self, track_id, similar_tracks):
         """write similar track information to the database"""
         connection = self.get_database_connection()
         for track in similar_tracks:
-            id2 = self.get_track(
-                track['artist'], track['title'], with_connection=connection)[0]
-            if self._get_track_match(track_id, id2, with_connection=connection):
-                self._update_track_match(
-                    track_id, id2, track['score'],
-                    with_connection=connection)
+            row = self.get_track(
+                track['artist'], track['title'], with_connection=connection)
+            if not row:
                 continue
-            self._insert_track_match(
-                track_id, id2, track['score'],
-                with_connection=connection)
-        self._update_track(track_id, with_connection=connection)
+            id2 = row[0]
+            if self._get_track_match(track_id, id2, with_connection=connection):
+                self._update_track_match(track_id, id2, track['score'])
+                continue
+            self._insert_track_match(track_id, id2, track['score'])
+        self._update_track(track_id)
         connection.commit()
         self.close_database_connection(connection)
 
-    def create_db(self):
-        """ Set up a database for the artist and track similarity scores
-        """
-        connection = self.get_database_connection()
-        connection.execute(
-            'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name'
-            ' VARCHAR(100), updated DATE)')
-        connection.execute(
-            'CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER,'
-            ' artist2 INTEGER, match INTEGER)')
-        connection.execute(
-            'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, artist'
-            ' INTEGER, title VARCHAR(100), updated DATE)')
-        connection.execute(
-            'CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, track2'
-            ' INTEGER, match INTEGER)')
-        connection.execute(
-            'CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, '
-            'filename VARCHAR(300), scms BLOB)')
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
-            "INTEGER, distance INTEGER)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS a2aa1x ON artist_2_artist (artist1)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS a2aa2x ON artist_2_artist (artist2)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS t2tt1x ON track_2_track (track1)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS t2tt2x ON track_2_track (track2)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS mfnx ON mirage (filename)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS dtrack1x ON distance (track_1)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS dtrack2x ON distance (track_2)")
-        connection.commit()
-        self.close_database_connection(connection)
-
-    def delete_orphan_artists(self, artists):
-        """Delete artists that have no tracks."""
-        connection = self.get_database_connection()
-        connection.execute(
-            'DELETE FROM artists WHERE artists.id in (%s) AND artists.id NOT '
-            'IN (SELECT tracks.artist from tracks);' %
-            ",".join([str(artist) for artist in artists]))
-        connection.execute(
-            'DELETE FROM artist_2_artist WHERE artist1 NOT IN (SELECT '
-            'artists.id FROM artists) OR artist2 NOT IN (SELECT artists.id '
-            'FROM artists);')
-        connection.commit()
-        connection.close()
 
 
 def tag_score(song, tags):
@@ -522,8 +404,10 @@ class AutoQueueBase(SimilarityData):
         self.player_set_variables_from_config()
         self._cache_dir = None
         self.get_blocked_artists_pickle()
-        if MIRAGE:
-            self.mir = Mir()
+        self.log("MIRAGE %s" % repr(MIRAGE))
+
+    def quit(self):
+        daemon.stdin.write('exit\n')
 
     def player_get_cache_dir(self):
         """Get the directory to store temporary data.
@@ -587,8 +471,6 @@ class AutoQueueBase(SimilarityData):
         asynchronously, like the copooling in autoqueue.
 
         """
-        if 'funcid' in kwargs:
-            del kwargs['funcid']
         for dummy in method(*args, **kwargs):
             pass
 
@@ -636,6 +518,7 @@ class AutoQueueBase(SimilarityData):
         queue."""
         if song is None:
             return
+        self.song = song
         self.now = datetime.now()
         artist_names = song.get_artists()
         title = song.get_title()
@@ -648,17 +531,14 @@ class AutoQueueBase(SimilarityData):
             self.prune_artists.append(artist_name)
         if self.running:
             return
-        self.song = song
         if MIRAGE:
-            fid = "analyze_track" + str(int(time()))
-            self.player_execute_async(
-                self.analyze_track, song, funcid=fid, add_neighbours=False)
+            self.analyze_track(song, add_neighbours=False)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             self.player_execute_async(self.fill_queue)
         if self.weed:
-            self.player_execute_async(self.prune_db)
-            self.player_execute_async(self.prune_search)
-            self.player_execute_async(self.prune_delete)
+            self.prune_db()
+            self.prune_search()
+            self.prune_delete()
 
     def queue_needs_songs(self):
         """determine whether the queue needs more songs added"""
@@ -668,8 +548,6 @@ class AutoQueueBase(SimilarityData):
     def song_generator(self, last_song):
         """yield songs that match the last song in the queue"""
         if MIRAGE and self.by_mirage:
-            for dummy in self.analyze_track(last_song):
-                yield
             for result in self.get_ordered_mirage_tracks(last_song):
                 yield result
         if self.by_tracks:
@@ -746,6 +624,8 @@ class AutoQueueBase(SimilarityData):
                     look_for = repr(result)
                 self.log('looking for: %06d %s' % (
                     result.get('score', 0), look_for))
+                if random.random() > .5:
+                    continue
                 artist = result.get('artist')
                 if artist:
                     if artist in blocked:
@@ -765,8 +645,7 @@ class AutoQueueBase(SimilarityData):
         if found:
             self.player_enqueue(found)
             if MIRAGE and self.by_mirage:
-                for dummy in self.analyze_track(self.get_last_songs()[-1]):
-                    yield
+                self.analyze_track(found)
         if not found:
             yield "exhausted"
 
@@ -952,35 +831,27 @@ class AutoQueueBase(SimilarityData):
                 filenames.append(song.get_filename())
         return self.get_ids_for_filenames(filenames)
 
+    def get_artists_mirage_filenames(self, artist_names):
+        filenames = []
+        for artist_name in artist_names:
+            search = self.player_construct_artist_search(artist_name)
+            for song in self.player_search(search):
+                filenames.append(song.get_filename())
+        return set(filenames)
+
     def analyze_track(self, song, add_neighbours=True):
         artist_names = song.get_artists()
         filename = song.get_filename()
-        yield
         if not filename:
             return
-        db = Db(self.get_db_path())
-        trackid_scms = db.get_track(filename)
-        if not trackid_scms:
-            self.log("no mirage data found for %s, analyzing track" % filename)
-            try:
-                scms = self.mir.analyze(filename)
-            except (MatrixDimensionMismatchException, MfccFailedException):
-                return
-            db.add_track(filename, scms)
-            trackid = db.get_track_id(filename)
-        else:
-            trackid, scms = trackid_scms
-        yield
-        if db.has_scores(trackid, no=NEIGHBOURS):
-            return
-        yield
         if add_neighbours:
-            exclude_ids = self.get_artists_mirage_ids(artist_names)
-            for dummy in db.add_neighbours(trackid, scms,
-                                           exclude_ids=exclude_ids,
-                                           neighbours=NEIGHBOURS):
-                yield
-        return
+            exclude_filenames = '\n'.join(
+                self.get_artists_mirage_filenames(artist_names))
+            daemon.stdin.write('add_neighbours %s\n' % filename)
+            daemon.stdin.write('%s\n' % exclude_filenames)
+            daemon.stdin.write('done\n')
+        else:
+            daemon.stdin.write('analyze %s\n' % filename)
 
     def get_ordered_mirage_tracks(self, song):
         """get similar tracks from mirage acoustic analysis"""
@@ -990,10 +861,11 @@ class AutoQueueBase(SimilarityData):
         self.log("Getting similar tracks from mirage for: %s - %s" % (
             artist_name, title))
         db = Db(self.get_db_path())
-        trackid = db.get_track_id(filename)
-        for match, mfile_id in db.get_neighbours(trackid):
-            filename = db.get_filename(mfile_id)
-            yield {'score': match, 'filename': filename}
+        trackid = db.get_file_id(filename)
+        if trackid:
+            for match, mfile_id in db.get_neighbours(trackid):
+                filename = db.get_filename(mfile_id)
+                yield {'score': match, 'filename': filename}
 
     def get_ordered_similar_tracks(self, song):
         """get similar tracks from last.fm/the database sorted by
@@ -1002,46 +874,50 @@ class AutoQueueBase(SimilarityData):
         artist_name = song.get_artist()
         title = song.get_title()
         track = self.get_track(artist_name, title)
-        track_id, updated = track[0], track[3]
-        if updated:
-            updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
-            if updated + timedelta(self.cache_time) > self.now:
-                self.log("Getting similar tracks from db for: %s - %s" % (
-                    artist_name, title))
-                for result in self.get_similar_tracks_from_db(
-                        track_id):
-                    yield result
+        if track:
+            track_id, updated = track[0], track[3]
+            if updated:
+                updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
+                if updated + timedelta(self.cache_time) > self.now:
+                    self.log("Getting similar tracks from db for: %s - %s" % (
+                        artist_name, title))
+                    for result in self.get_similar_tracks_from_db(
+                            track_id):
+                        yield result
+                else:
+                    for result in self.get_similar_tracks_from_lastfm(
+                            artist_name, title, track_id):
+                        yield result
             else:
                 for result in self.get_similar_tracks_from_lastfm(
                         artist_name, title, track_id):
                     yield result
-        else:
-            for result in self.get_similar_tracks_from_lastfm(
-                    artist_name, title, track_id):
-                yield result
 
     def get_ordered_similar_artists(self, song):
         """get similar artists from the database sorted by descending
         match score"""
         for artist_name in song.get_artists():
             artist = self.get_artist(artist_name)
-            artist_id, updated = artist[0], artist[2]
-            if updated:
-                updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
-                if updated + timedelta(self.cache_time) > self.now:
-                    self.log(
-                        "Getting similar artists from db for: %s " %
-                        artist_name)
-                    for result in self.get_similar_artists_from_db(artist_id):
-                        yield result
+            if artist:
+                artist_id, updated = artist[0], artist[2]
+                if updated:
+                    updated = datetime(
+                        *strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
+                    if updated + timedelta(self.cache_time) > self.now:
+                        self.log(
+                            "Getting similar artists from db for: %s " %
+                            artist_name)
+                        for result in self.get_similar_artists_from_db(
+                            artist_id):
+                            yield result
+                    else:
+                        for result in self.get_similar_artists_from_lastfm(
+                                artist_name, artist_id):
+                            yield result
                 else:
                     for result in self.get_similar_artists_from_lastfm(
                             artist_name, artist_id):
                         yield result
-            else:
-                for result in self.get_similar_artists_from_lastfm(
-                        artist_name, artist_id):
-                    yield result
 
     def log(self, msg):
         """print debug messages"""
@@ -1095,22 +971,10 @@ class AutoQueueBase(SimilarityData):
                     self.close_database_connection(connection)
                     yield
         if self.prune_filenames:
+            daemon.stdin.write('prune_filenames\n')
             while self.prune_filenames:
-                filename = self.prune_filenames.pop(0)
-                connection = self.get_database_connection()
-                self.log("deleting: %s" % filename)
-                connection.execute(
-                    'DELETE FROM mirage WHERE filename = ?;', (filename,))
-                connection.commit()
-                self.close_database_connection(connection)
-                yield
-            connection = self.get_database_connection()
-            connection.execute(
-                'DELETE FROM distance WHERE track_1 NOT IN (SELECT trackid '
-                'FROM mirage) OR track_2 NOT IN (SELECT trackid FROM '
-                'mirage);')
-            connection.commit()
-            self.close_database_connection(connection)
+                daemon.stdin.write('%s\n' % self.prune_filenames.pop(0))
+            daemon.stdin.write('done\n')
 
     def prune_search(self):
         while self._rows:
@@ -1123,37 +987,14 @@ class AutoQueueBase(SimilarityData):
 
     def prune_delete(self):
         artist_ids = []
-        while self._nrows:
-            item = self._nrows.pop(0)
-            artist_ids.append(item[1])
-            connection = self.get_database_connection()
-            self.log("deleting %s - %s" % (item[0], item[2]))
-            track_id = item[3]
-            connection.execute(
-                'DELETE FROM track_2_track WHERE track1 = ? OR track2 ='
-                ' ?;',
-                (track_id, track_id))
-            connection.execute(
-                'DELETE FROM tracks WHERE id = ?;', (track_id,))
-            connection.commit()
-            self.close_database_connection(connection)
-            yield
-        self.delete_orphan_artists(artist_ids)
-        connection = self.get_database_connection()
-        cursor = connection.cursor()
-        after = {
-            'artists':
-            cursor.execute('SELECT count(*) from artists;').fetchone()[0],
-            'artist_2_artist':
-            cursor.execute(
-                'SELECT count(*) from artist_2_artist;').fetchone()[0],
-            'tracks':
-            cursor.execute('SELECT count(*) from tracks;').fetchone()[0],
-            'track_2_track':
-            cursor.execute('SELECT count(*) from track_2_track;').fetchone()[0],
-            'mirage':
-            cursor.execute('SELECT count(*) from mirage;').fetchone()[0],
-            'distance':
-            cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
-        self.close_database_connection(connection)
-        self.log('db: %s' % repr(after))
+        if self._nrows:
+            daemon.stdin.write('prune_delete\n')
+            while self._nrows:
+                item = self._nrows.pop(0)
+                artist_ids.append(item[1])
+                self.log("deleting %s - %s" % (item[0], item[2]))
+                track_id = item[3]
+                daemon.stdin.write('%s\n' % track_id)
+            daemon.stdin.write('done\n')
+            daemon.stdin.write('delete_orphans %s\n' % ' '.join(artist_ids))
+
