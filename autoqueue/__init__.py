@@ -200,7 +200,7 @@ class SimilarityData(object):
         row = self.get_artist(artist_name, with_connection=connection)
         if not row:
             if not with_connection:
-                self.close_database_connection()
+                self.close_database_connection(connection)
             return None
         artist_id = row[0]
         rows = connection.execute(
