@@ -23,12 +23,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 import os, struct, math
 from decimal import Decimal
 from datetime import datetime
+import cPickle as pickle
+from cStringIO import StringIO
 from ctypes import *
+import sqlite3
 from scipy import *
-import pygst
-pygst.require("0.10")
-
-import gst
 
 DEBUG = True
 
@@ -212,6 +211,10 @@ class AudioDecoder(object):
         self.ma = mirageaudio_initialize(
             c_int(rate), c_int(seconds), c_int(winsize))
 
+    def __del__(self):
+        mirageaudio_destroy(self.ma)
+        self.ma = None
+
     def decode(self, filename):
         frames = c_int(0)
         size = c_int(0)
@@ -343,6 +346,180 @@ class Vector(Matrix):
         super(Vector, self).__init__(rows, 1)
 
 
+class Db(object):
+    def __init__(self, path, connection=None):
+        self.dbpath = path
+        self.connection = connection
+
+    def close_database_connection(self, connection):
+        if self.dbpath == ':memory:':
+            return
+        connection.close()
+
+    def get_database_connection(self):
+        if self.dbpath == ':memory:':
+            if not self.connection:
+                self.connection = sqlite3.connect(':memory:')
+                self.connection.text_factory = str
+            return self.connection
+        connection = sqlite3.connect(
+            self.dbpath, timeout=5.0, isolation_level="immediate")
+        connection.text_factory = str
+        return connection
+
+    def add_track(self, filename, scms):
+        connection = self.get_database_connection()
+        connection.execute("INSERT INTO mirage (filename, scms) VALUES (?, ?)",
+                       (filename,
+                        sqlite3.Binary(instance_to_picklestring(scms))))
+        connection.commit()
+        self.close_database_connection(connection)
+
+    def remove_track(self, trackid):
+        connection = self.get_database_connection()
+        connection.execute("DELETE FROM mirage WHERE trackid = ?", (trackid,))
+        connection.commit()
+        self.close_database_connection(connection)
+
+    def remove_tracks(self, trackids):
+        connection = self.get_database_connection()
+        connection.execute("DELETE FROM mirage WHERE trackid IN (%s);" % (
+            ','.join(trackids),))
+        connection.commit()
+        self.close_database_connection(connection)
+
+    def get_track(self, filename):
+        connection = self.get_database_connection()
+        rows = connection.execute(
+            "SELECT trackid, scms FROM mirage WHERE filename = ?", (filename,))
+        for row in rows:
+            self.close_database_connection(connection)
+            return (row[0], instance_from_picklestring(row[1]))
+        self.close_database_connection(connection)
+        return None
+
+    def get_track_id(self, filename):
+        connection = self.get_database_connection()
+        rows = connection.execute(
+            "SELECT trackid FROM mirage WHERE filename = ?", (filename,))
+        for row in rows:
+            self.close_database_connection(connection)
+            return row[0]
+        self.close_database_connection(connection)
+        return None
+
+    def has_scores(self, trackid, no=10):
+        connection = self.get_database_connection()
+        cursor = connection.execute(
+            'SELECT COUNT(*) FROM distance WHERE track_1 = ?',
+            (trackid,))
+        l1 = cursor.fetchone()[0]
+        self.close_database_connection(connection)
+        if l1 < no:
+            return False
+        connection = self.get_database_connection()
+        cursor = connection.execute(
+            "SELECT COUNT(track_1) FROM distance WHERE track_2 = ? AND "
+            "distance < (SELECT MAX(distance) FROM distance WHERE track_1 = ?);"
+            , (trackid, trackid))
+        l2 = cursor.fetchone()[0]
+        self.close_database_connection(connection)
+        if l2 > l1:
+            return False
+        return True
+
+    def get_tracks(self, exclude_ids=None):
+        if not exclude_ids:
+            exclude_ids = []
+        connection = self.get_database_connection()
+        rows = connection.execute(
+            "SELECT scms, trackid FROM mirage WHERE trackid NOT IN (%s);" %
+            ','.join([str(ex) for ex in exclude_ids]))
+        result = [row for row in rows]
+        self.close_database_connection(connection)
+        return result
+
+    def get_all_track_ids(self):
+        connection = self.get_database_connection()
+        rows = connection.execute("SELECT trackid FROM mirage")
+        result = [row[0] for row in rows]
+        self.close_database_connection(connection)
+        return result
+
+    def reset(self):
+        connection = self.get_database_connection()
+        connection.execute("DELETE FROM mirage")
+        connection.commit()
+        self.close_database_connection(connection)
+
+    def add_neighbours(self, trackid, scms, exclude_ids=None, neighbours=10):
+        to_add = neighbours * 4
+        connection = self.get_database_connection()
+        connection.execute("DELETE FROM distance WHERE track_1 = ?", (trackid,))
+        connection.commit()
+        self.close_database_connection(connection)
+        yield
+        if not exclude_ids:
+            exclude_ids = []
+        c = ScmsConfiguration(20)
+        best = []
+        for buf, otherid in self.get_tracks(
+            exclude_ids=exclude_ids):
+            if trackid == otherid:
+                yield
+                continue
+            other = instance_from_picklestring(buf)
+            dist = int(distance(scms, other, c) * 1000)
+            if len(best) > to_add - 1:
+                if dist > best[-1][0]:
+                    yield
+                    continue
+            best.append((dist, trackid, otherid))
+            best.sort()
+            while len(best) > to_add:
+                best.pop()
+            yield
+        added = 0
+        if best:
+            connection = self.get_database_connection()
+            while best:
+                added += 1
+                connection.execute(
+                    "INSERT INTO distance (distance, track_1, track_2) "
+                    "VALUES (?, ?, ?)", best.pop())
+            connection.commit()
+            self.close_database_connection(connection)
+        print "added %d connections" % added
+
+    def compare(self, id1, id2):
+        c = ScmsConfiguration(20)
+        t1 = self.get_track(id1)[1]
+        t2 = self.get_track(id2)[1]
+        return int(distance(t1, t2, c) * 1000)
+
+    def get_filename(self, trackid):
+        connection = self.get_database_connection()
+        rows = connection.execute(
+            'SELECT filename FROM mirage WHERE trackid = ?', (trackid, ))
+        filename = None
+        for row in rows:
+            try:
+                filename = unicode(row[0], 'utf-8')
+            except UnicodeDecodeError:
+                break
+            break
+        connection.close()
+        return filename
+
+    def get_neighbours(self, trackid):
+        connection = self.get_database_connection()
+        neighbours = [row for row in connection.execute(
+            "SELECT distance, track_2 FROM distance WHERE track_1 = ? "
+            "ORDER BY distance ASC",
+            (trackid,))]
+        self.close_database_connection(connection)
+        return neighbours
+
 class Mfcc(object):
     def __init__(self, winsize, srate, filters, cc):
         here = os.path.dirname( __file__)
@@ -388,6 +565,15 @@ class Mfcc(object):
         except MatrixDimensionMismatchException:
             raise MfccFailedException
 
+
+def instance_from_picklestring(picklestring):
+    f = StringIO(picklestring)
+    return pickle.load(f)
+
+def instance_to_picklestring(instance):
+    f = StringIO()
+    pickle.dump(instance, f)
+    return f.getvalue()
 
 class ScmsConfiguration(object):
     def __init__(self, dimension):
@@ -457,10 +643,6 @@ class Mir(object):
         self.ad = AudioDecoder(
             self.samplingrate, self.secondstoanalyze, self.windowsize)
 
-    def cleanup(self):
-        mirageaudio_destroy(self.ad.ma)
-        self.ad.ma = None
-
     def cancel_analyze(self):
         self.ad.cancel_decode()
 
@@ -474,3 +656,4 @@ class Mir(object):
 
         t.stop()
         return scms
+
