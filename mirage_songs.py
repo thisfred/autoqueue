@@ -5,8 +5,9 @@ from autoqueue import SimilarityData
 
 from quodlibet.util import copool
 
+
 def get_title(song):
-    """return lowercase UNICODE title of song"""
+    """Return lowercase UNICODE title of song."""
     version = song.comma("version").lower()
     title = song.comma("title").lower()
     if version:
@@ -23,9 +24,10 @@ class MirageSongsPlugin(SongsMenuPlugin, SimilarityData):
 
     def __init__(self, *args):
         super(MirageSongsPlugin, self).__init__(*args)
-        self.mir = Mir()
 
     def do_stuff(self, songs):
+        """Do the actual work."""
+        mir = Mir()
         db = Db(self.get_db_path())
         l = len(songs)
         for i, song in enumerate(songs):
@@ -36,7 +38,7 @@ class MirageSongsPlugin(SongsMenuPlugin, SimilarityData):
             trackid_scms = db.get_track(filename)
             if not trackid_scms:
                 try:
-                    scms = self.mir.analyze(filename)
+                    scms = mir.analyze(filename)
                 except:
                     return
                 db.add_track(filename, scms)
@@ -44,5 +46,6 @@ class MirageSongsPlugin(SongsMenuPlugin, SimilarityData):
         print "done"
 
     def plugin_songs(self, songs):
+        """Add the work to the coroutine pool."""
         fid = "mirage_songs" + str(datetime.now())
         copool.add(self.do_stuff, songs, funcid=fid)

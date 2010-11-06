@@ -3,8 +3,9 @@ from mirage import Mir, Db
 from autoqueue import SimilarityData
 from quodlibet.util import copool
 
+
 def get_title(song):
-    """return lowercase UNICODE title of song"""
+    """Return lowercase UNICODE title of song."""
     version = song.comma("version").lower()
     title = song.comma("title").lower()
     if version:
@@ -22,10 +23,9 @@ class MirageMiximizePlugin(SongsMenuPlugin, SimilarityData):
 
     def __init__(self, *args):
         super(MirageMiximizePlugin, self).__init__(*args)
-        self.mir = Mir()
 
     def player_enqueue(self, songs):
-        """Put the song at the end of the queue"""
+        """Put the song at the end of the queue."""
         # XXX: main is None here sometimes, for some reason I haven't
         # yet figured out. This stops execution completely, so I put
         # in this ugly hack.
@@ -37,6 +37,7 @@ class MirageMiximizePlugin(SongsMenuPlugin, SimilarityData):
         copool.add(self.do_stuff, songs)
 
     def do_stuff(self, songs):
+        mir = Mir()
         db = Db(self.get_db_path())
         l = len(songs)
         print "mirage analysis"
@@ -48,7 +49,7 @@ class MirageMiximizePlugin(SongsMenuPlugin, SimilarityData):
             trackid_scms = db.get_track(filename)
             if not trackid_scms:
                 try:
-                    scms = self.mir.analyze(filename)
+                    scms = mir.analyze(filename)
                 except:
                     return
                 db.add_track(filename, scms)
@@ -68,10 +69,12 @@ class MirageMiximizePlugin(SongsMenuPlugin, SimilarityData):
             yield
         self.player_enqueue(qsongs)
 
+
 def match(cluster1, cluster2):
     return (
         cluster1[0] == cluster2[0] or cluster1[-1] == cluster2[0] or
         cluster1[0] == cluster2[-1] or cluster1[-1] == cluster2[-1])
+
 
 def in_the_middle(song1, song2, cluster):
     if song1 in cluster:
@@ -83,6 +86,7 @@ def in_the_middle(song1, song2, cluster):
         if index > 0 and index < len(cluster) - 1:
             return True
     return False
+
 
 def at_the_ends(song1, song2, cluster):
     return (cluster[0] == song1 and cluster[-1] == song2) or (
@@ -128,7 +132,7 @@ class Clusterer(object):
     def join(self, cluster1, cluster2):
         if cluster1[0] == cluster2[0]:
             cluster2.reverse()
-            result = cluster2  + cluster1[1:]
+            result = cluster2 + cluster1[1:]
         elif cluster1[-1] == cluster2[0]:
             result = cluster1 + cluster2[1:]
         elif cluster1[0] == cluster2[-1]:
