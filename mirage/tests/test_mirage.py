@@ -92,18 +92,18 @@ class TestMir(unittest.TestCase):
         c = ScmsConfiguration(20)
 
         self.assertEqual(0, int(distance(scms, scms, c)))
-        self.assertEqual(70, int(distance(scms, scms2, c)))
-        self.assertEqual(49, int(distance(scms, scms3, c)))
+        self.assertEqual(75, int(distance(scms, scms2, c)))
+        self.assertEqual(52, int(distance(scms, scms3, c)))
         self.assertEqual(69, int(distance(scms, scms4, c)))
-        self.assertEqual(235, int(distance(scms, scms5, c)))
+        self.assertEqual(240, int(distance(scms, scms5, c)))
 
-        self.assertEqual(70, int(distance(scms2, scms, c)))
+        self.assertEqual(75, int(distance(scms2, scms, c)))
         self.assertEqual(0, int(distance(scms2, scms2, c)))
         self.assertEqual(16, int(distance(scms2, scms3, c)))
         self.assertEqual(59, int(distance(scms2, scms4, c)))
         self.assertEqual(124, int(distance(scms2, scms5, c)))
 
-        self.assertEqual(49, int(distance(scms3, scms, c)))
+        self.assertEqual(52, int(distance(scms3, scms, c)))
         self.assertEqual(16, int(distance(scms3, scms2, c)))
         self.assertEqual(0, int(distance(scms3, scms3, c)))
         self.assertEqual(49, int(distance(scms3, scms4, c)))
@@ -115,7 +115,7 @@ class TestMir(unittest.TestCase):
         self.assertEqual(0, int(distance(scms4, scms4, c)))
         self.assertEqual(124, int(distance(scms4, scms5, c)))
 
-        self.assertEqual(235, int(distance(scms5, scms, c)))
+        self.assertEqual(240, int(distance(scms5, scms, c)))
         self.assertEqual(124, int(distance(scms5, scms2, c)))
         self.assertEqual(84, int(distance(scms5, scms3, c)))
         self.assertEqual(124, int(distance(scms5, scms4, c)))
@@ -152,9 +152,9 @@ class TestMir(unittest.TestCase):
         distances = [
             row for row in connection.execute("SELECT * FROM distance")]
         self.assertEqual(
-            [(2, 1, 70338), (3, 1, 49060), (3, 2, 16563), (4, 1, 69551),
-             (4, 2, 59503), (4, 3, 49652), (5, 1, 235246), (5, 4, 124450),
-             (5, 2, 124312), (5, 3, 84223)],
+            [(2, 1, 75208), (3, 1, 52895), (3, 2, 16559), (4, 1, 69194),
+             (4, 2, 59488), (4, 3, 49652), (5, 1, 240408), (5, 4, 124490),
+             (5, 2, 124272), (5, 3, 84228)],
             distances)
 
     def test_get_neighbours(self):
@@ -165,6 +165,5 @@ class TestMir(unittest.TestCase):
             for dummy in self.db.add_neighbours(track_id, testscms):
                 pass
         self.assertEqual(
-            [(84223, 3), (124312, 2), (124450, 4), (235246, 1)],
+            [(84228, 3), (124272, 2), (124490, 4), (240408, 1)],
             [a for a in self.db.get_neighbours(5)])
-

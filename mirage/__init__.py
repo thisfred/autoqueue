@@ -231,6 +231,7 @@ class AudioDecoder(object):
 
         write_line("Mirage: decoded frames=%s,size=%s" % (frames, size))
 
+
         # build a list of tuples with (value, position), then sort
         # it according to value.
         frameselection = [0.0] * frames.value
@@ -470,6 +471,9 @@ class Db(object):
                 continue
             other = instance_from_picklestring(buf)
             dist = int(distance(scms, other, c) * 1000)
+            if dist < 0:
+                yield
+                continue
             if len(best) > to_add - 1:
                 if dist > best[-1][0]:
                     yield
@@ -484,9 +488,13 @@ class Db(object):
             connection = self.get_database_connection()
             while best:
                 added += 1
-                connection.execute(
-                    "INSERT INTO distance (distance, track_1, track_2) "
-                    "VALUES (?, ?, ?)", best.pop())
+                best_tup = best.pop()
+                try:
+                    connection.execute(
+                        "INSERT INTO distance (distance, track_1, track_2) "
+                        "VALUES (?, ?, ?)", best_tup)
+                except OverFlowError:
+                    print "SNAFU:", repr(best_tup)
             connection.commit()
             self.close_database_connection(connection)
         print "added %d connections" % added

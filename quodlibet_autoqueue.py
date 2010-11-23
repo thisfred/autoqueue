@@ -30,7 +30,7 @@ INT_SETTINGS = {
     'artist_block_time': {
         'value': 1,
         'label': 'block artist (days)'},
-    'track_block_time':  {
+    'track_block_time': {
         'value': 90,
         'label': 'block track (days)'},
     'desired_queue_length': {
@@ -61,14 +61,16 @@ BOOL_SETTINGS = {
         'label': 'keep db clean'},
     }
 STR_SETTINGS = {
-    'restrictions' : {
+    'restrictions': {
         'value': '',
-        'label': 'restrict',},
+        'label': 'restrict'},
     }
+
 
 def escape(the_string):
     """double escape quotes"""
     return the_string.replace('"', '\\"')
+
 
 def remove_role(artist):
     if not artist.endswith(')'):
@@ -91,12 +93,12 @@ class Song(SongBase):
             for tag in self.song._song:
                 if tag.startswith('performer:'):
                     performers.extend(
-                        [artist for artist in self.song.list(tag)])
+                        [artist.lower() for artist in self.song.list(tag)])
         else:
             for tag in self.song:
                 if tag.startswith('performer:'):
                     performers.extend(
-                        [artist for artist in self.song.list(tag)])
+                        [artist.lower() for artist in self.song.list(tag)])
         artists.extend(performers)
         return set(artists)
 
@@ -210,7 +212,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 config.get(
                 "plugins", "autoqueue_%s" % setting).lower() == 'true')
             button.connect('toggled', bool_changed)
-            table.attach(button, i, i+1, j, j+1)
+            table.attach(button, i, i + 1, j, j + 1)
             if i == 1:
                 i = 0
                 j += 1
@@ -220,8 +222,8 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             j += 1
             label = gtk.Label('%s:' % INT_SETTINGS[setting]['label'])
             entry = gtk.Entry()
-            table.attach(label, 0, 1, j, j+1, xoptions=gtk.FILL | gtk.SHRINK)
-            table.attach(entry, 1, 2, j, j+1, xoptions=gtk.FILL | gtk.SHRINK)
+            table.attach(label, 0, 1, j, j + 1, xoptions=gtk.FILL | gtk.SHRINK)
+            table.attach(entry, 1, 2, j, j + 1, xoptions=gtk.FILL | gtk.SHRINK)
             entry.connect('changed', int_changed, setting)
             try:
                 entry.set_text(
@@ -232,8 +234,8 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             j += 1
             label = gtk.Label('%s:' % STR_SETTINGS[setting]['label'])
             entry = gtk.Entry()
-            table.attach(label, 0, 1, j, j+1, xoptions=gtk.FILL | gtk.SHRINK)
-            table.attach(entry, 1, 2, j, j+1, xoptions=gtk.FILL | gtk.SHRINK)
+            table.attach(label, 0, 1, j, j + 1, xoptions=gtk.FILL | gtk.SHRINK)
+            table.attach(entry, 1, 2, j, j + 1, xoptions=gtk.FILL | gtk.SHRINK)
             entry.connect('changed', str_changed, setting)
             try:
                 entry.set_text(config.get('plugins', 'autoqueue_%s' % setting))
@@ -261,7 +263,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             del kwargs['funcid']
         add_callback = False
         if not self._generators:
-           add_callback = True
+            add_callback = True
         self._generators.append(method(*args, **kwargs))
         if add_callback:
             gobject.idle_add(self._idle_callback)
@@ -293,7 +295,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 split = nsplit
             # title (version [(something)])
             vtitle = split[0].strip()
-            version =  "(".join(split[1:]).strip()[:-1]
+            version = "(".join(split[1:]).strip()[:-1]
             versioned = '&(artist = "%s", title = "%s", version="%s")' % (
                 escape(artist),
                 escape(vtitle),

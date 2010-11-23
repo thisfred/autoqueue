@@ -863,7 +863,7 @@ class AutoQueueBase(SimilarityData):
             [(tag_score(song, tagset), song) for song in
              self.player_search(search)], reverse=True)
         for score, song in songs:
-            yield {'score': score, 'filename': song.get_filename(),}
+            yield {'score': score, 'filename': song.get_filename()}
 
     def get_similar_tracks_from_lastfm(self, artist_name, title, track_id):
         """get similar tracks to the last one in the queue"""
@@ -896,7 +896,7 @@ class AutoQueueBase(SimilarityData):
             result = {
                 'score': match,
                 'artist': similar_artist,
-                'title': similar_title,}
+                'title': similar_title}
             self._tracks_to_update.setdefault(track_id, []).append(result)
             results.append(result)
         return results
@@ -921,7 +921,7 @@ class AutoQueueBase(SimilarityData):
                 match = int(float(matchnode[0].firstChild.nodeValue) * 100)
             result = {
                 'score': match,
-                'artist': name,}
+                'artist': name}
             self._artists_to_update.setdefault(artist_id, []).append(result)
             results.append(result)
         return results
@@ -1154,6 +1154,6 @@ class AutoQueueBase(SimilarityData):
             'mirage':
             cursor.execute('SELECT count(*) from mirage;').fetchone()[0],
             'distance':
-            cursor.execute('SELECT count(*) from distance;').fetchone()[0],}
+            cursor.execute('SELECT count(*) from distance;').fetchone()[0]}
         self.close_database_connection(connection)
         self.log('db: %s' % repr(after))
