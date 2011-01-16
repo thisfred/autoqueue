@@ -61,7 +61,9 @@ ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
 WAIT_BETWEEN_REQUESTS = timedelta(0, 1)
 
 # XXX make configurable
-NEIGHBOURS = 10
+NEIGHBOURS = 20
+
+THRESHOLD = .5
 
 
 class Throttle(object):
@@ -410,7 +412,8 @@ class SimilarityData(object):
         for track in similar_tracks:
             id2 = self.get_track(
                 track['artist'], track['title'], with_connection=connection)[0]
-            if self._get_track_match(track_id, id2, with_connection=connection):
+            if self._get_track_match(
+                track_id, id2, with_connection=connection):
                 self._update_track_match(
                     track_id, id2, track['score'],
                     with_connection=connection)
@@ -701,10 +704,13 @@ class AutoQueueBase(SimilarityData):
                           tags=None):
         if (artist, title, filename, tags) in self.cached_misses:
             return None
+        if random.random() < THRESHOLD:
+            return
         search = self.construct_search(
             artist=artist, title=title, filename=filename, tags=tags,
             restrictions=self.restrictions)
         if not search:
+            self.cached_misses.append((artist, title, filename, tags))
             return
         songs = self.player_search(search)
         if songs:

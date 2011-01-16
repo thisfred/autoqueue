@@ -409,7 +409,7 @@ class Db(object):
         self.close_database_connection(connection)
         return None
 
-    def has_scores(self, trackid, no=10):
+    def has_scores(self, trackid, no=20):
         connection = self.get_database_connection()
         cursor = connection.execute(
             'SELECT COUNT(*) FROM distance WHERE track_1 = ?',
@@ -417,15 +417,18 @@ class Db(object):
         l1 = cursor.fetchone()[0]
         self.close_database_connection(connection)
         if l1 < no:
+            print "Only %d connections found, minimum %d." % (l1, no)
             return False
         connection = self.get_database_connection()
         cursor = connection.execute(
             "SELECT COUNT(track_1) FROM distance WHERE track_2 = ? AND "
-            "distance < (SELECT MAX(distance) FROM distance WHERE track_1 = ?);"
-            , (trackid, trackid))
+            "distance < (SELECT MAX(distance) FROM distance WHERE track_1 = "
+            "?);", (trackid, trackid))
         l2 = cursor.fetchone()[0]
         self.close_database_connection(connection)
         if l2 > l1:
+            print "Found %d incoming connections and only %d outgoing." % (
+                l2, l1)
             return False
         return True
 
@@ -453,10 +456,11 @@ class Db(object):
         connection.commit()
         self.close_database_connection(connection)
 
-    def add_neighbours(self, trackid, scms, exclude_ids=None, neighbours=10):
-        to_add = neighbours * 4
+    def add_neighbours(self, trackid, scms, exclude_ids=None, neighbours=20):
+        to_add = neighbours * 2
         connection = self.get_database_connection()
-        connection.execute("DELETE FROM distance WHERE track_1 = ?", (trackid,))
+        connection.execute(
+            "DELETE FROM distance WHERE track_1 = ?", (trackid,))
         connection.commit()
         self.close_database_connection(connection)
         yield

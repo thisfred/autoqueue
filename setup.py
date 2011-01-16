@@ -1,15 +1,18 @@
+"""Autoqueue setup."""
+
 from setuptools import setup
 import os
 
-optional = {}
-data_files = []
+optional = {}                           # pylint: disable=C0103
+data_files = []                         # pylint: disable=C0103
+
 if os.path.exists('/usr/share/pyshared/quodlibet/plugins/'):
     data_files.extend(
         [('/usr/share/pyshared/quodlibet/plugins/events/',
          ['quodlibet_autoqueue.py']),
         ('/usr/share/pyshared/quodlibet/plugins/songsmenu/',
          ['mirage_songs.py',
-          'mirage_miximize.py']),])
+          'mirage_miximize.py'])])
 if os.path.exists('/usr/lib/rhythmbox/plugins'):
     data_files.append(
         ('/usr/lib/rhythmbox/plugins/rhythmbox_autoqueue',
@@ -17,14 +20,14 @@ if os.path.exists('/usr/lib/rhythmbox/plugins'):
           'rhythmbox_autoqueue/__init__.py']),)
 
 if data_files:
-    optional = {
+    optional = {                        # pylint: disable=C0103
         'data_files': data_files}
 
 print optional
 
 setup(
     name='autoqueue',
-    version='0.2beta2',
+    version='0.2beta3',
     packages=['autoqueue', 'mirage'],
     package_dir={
         'autoqueue': 'autoqueue',
@@ -37,8 +40,4 @@ setup(
     package_data={'mirage': ['res/*']},
     requires=['scipy', 'ctypes'],
     provides=['mirage', 'autoqueue'],
-    entry_points="""
-    [console_scripts]
-    similarity_daemon = mirage.daemon:main
-    """,
     **optional)
