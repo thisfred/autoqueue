@@ -525,8 +525,16 @@ class AutoQueueBase(SimilarityData):
         self.player_set_variables_from_config()
         self._cache_dir = None
         self.get_blocked_artists_pickle()
-        if MIRAGE:
-            self.mir = Mir()
+
+    @property
+    def mir(self):
+        if not MIRAGE:
+            return
+        if hasattr(main, 'mir'):
+            print "mir found"
+            return main.mir
+        self._mir = Mir()
+        return self._mir
 
     def player_get_cache_dir(self):
         """Get the directory to store temporary data.
@@ -629,8 +637,8 @@ class AutoQueueBase(SimilarityData):
             return self.track_block_time > days_ago
         bdays = max(1, self.track_block_time)
         suggested = 2 * bdays * (1 - rating)
-        self.log("rating: %s last played %s days ago, suggested play: after %s "
-                 "days" % (repr(rating), repr(days_ago), suggested))
+        self.log("rating: %s last played %s days ago, suggested play: after "
+                 "%s days" % (repr(rating), repr(days_ago), suggested))
         return suggested > days_ago
 
     def on_song_started(self, song):
@@ -970,7 +978,9 @@ class AutoQueueBase(SimilarityData):
             self.log("no mirage data found for %s, analyzing track" % filename)
             try:
                 scms = self.mir.analyze(filename)
-            except (MatrixDimensionMismatchException, MfccFailedException):
+            except (MatrixDimensionMismatchException, MfccFailedException,
+                    IndexError), e:
+                self.log(repr(e))
                 return
             db.add_track(filename, scms)
             trackid = db.get_track_id(filename)
@@ -1033,7 +1043,8 @@ class AutoQueueBase(SimilarityData):
             artist = self.get_artist(artist_name)
             artist_id, updated = artist[0], artist[2]
             if updated:
-                updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
+                updated = datetime(
+                    *strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
                 if updated + timedelta(self.cache_time) > self.now:
                     self.log(
                         "Getting similar artists from db for: %s " %
@@ -1096,8 +1107,8 @@ class AutoQueueBase(SimilarityData):
                          connection.execute(
                             'SELECT artists.name, artists.id, tracks.title, '
                             'tracks.id FROM tracks INNER JOIN artists ON '
-                            'tracks.artist = artists.id WHERE tracks.title = ? '
-                            'OR tracks.title = ?;', (vtitle, title))])
+                            'tracks.artist = artists.id WHERE tracks.title = '
+                            '? OR tracks.title = ?;', (vtitle, title))])
                     self.close_database_connection(connection)
                     yield
         if self.prune_filenames:
@@ -1156,7 +1167,8 @@ class AutoQueueBase(SimilarityData):
             'tracks':
             cursor.execute('SELECT count(*) from tracks;').fetchone()[0],
             'track_2_track':
-            cursor.execute('SELECT count(*) from track_2_track;').fetchone()[0],
+            cursor.execute(
+                'SELECT count(*) from track_2_track;').fetchone()[0],
             'mirage':
             cursor.execute('SELECT count(*) from mirage;').fetchone()[0],
             'distance':

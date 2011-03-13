@@ -1,3 +1,4 @@
+import widgets
 from plugins.songsmenu import SongsMenuPlugin
 from mirage import Mir, Db
 from autoqueue import SimilarityData
@@ -24,20 +25,29 @@ class MirageMiximizePlugin(SongsMenuPlugin, SimilarityData):
     def __init__(self, *args):
         super(MirageMiximizePlugin, self).__init__(*args)
 
+    @property
+    def mir(self):
+        if widgets.main is None:
+            reload(widgets)
+
+        if hasattr(widgets.main, 'mir'):
+            return widgets.main.mir
+        widgets.main.mir = Mir()
+        return widgets.main.mir
+
     def player_enqueue(self, songs):
         """Put the song at the end of the queue."""
         # XXX: main is None here sometimes, for some reason I haven't
         # yet figured out. This stops execution completely, so I put
         # in this ugly hack.
-        from widgets import main
-        if main:
-            main.playlist.enqueue(songs)
+        if widgets.main is None:
+            reload(widgets)
+        main.playlist.enqueue(songs)
 
     def plugin_songs(self, songs):
         copool.add(self.do_stuff, songs)
 
     def do_stuff(self, songs):
-        mir = Mir()
         db = Db(self.get_db_path())
         l = len(songs)
         print "mirage analysis"
@@ -49,7 +59,7 @@ class MirageMiximizePlugin(SongsMenuPlugin, SimilarityData):
             trackid_scms = db.get_track(filename)
             if not trackid_scms:
                 try:
-                    scms = mir.analyze(filename)
+                    scms = self.mir.analyze(filename)
                 except:
                     return
                 db.add_track(filename, scms)

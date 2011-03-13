@@ -211,10 +211,6 @@ class AudioDecoder(object):
         self.ma = mirageaudio_initialize(
             c_int(rate), c_int(seconds), c_int(winsize))
 
-    def __del__(self):
-        mirageaudio_destroy(self.ma)
-        self.ma = None
-
     def decode(self, filename):
         frames = c_int(0)
         size = c_int(0)
@@ -668,4 +664,3 @@ class Mir(object):
 
         t.stop()
         return scms
-

@@ -1,9 +1,15 @@
+
 from datetime import datetime
 from plugins.songsmenu import SongsMenuPlugin
 from mirage import Mir, Db
 from autoqueue import SimilarityData
 
 from quodlibet.util import copool
+
+import faulthandler
+import widgets
+
+faulthandler.enable()
 
 
 def get_title(song):
@@ -25,9 +31,17 @@ class MirageSongsPlugin(SongsMenuPlugin, SimilarityData):
     def __init__(self, *args):
         super(MirageSongsPlugin, self).__init__(*args)
 
+    @property
+    def mir(self):
+        if widgets.main is None:
+            reload(widgets)
+        if hasattr(widgets.main, 'mir'):
+            return widgets.main.mir
+        widgets.main.mir = Mir()
+        return widgets.main.mir
+
     def do_stuff(self, songs):
         """Do the actual work."""
-        mir = Mir()
         db = Db(self.get_db_path())
         l = len(songs)
         for i, song in enumerate(songs):
@@ -37,10 +51,7 @@ class MirageSongsPlugin(SongsMenuPlugin, SimilarityData):
             filename = song("~filename")
             trackid_scms = db.get_track(filename)
             if not trackid_scms:
-                try:
-                    scms = mir.analyze(filename)
-                except:
-                    return
+                scms = self.mir.analyze(filename)
                 db.add_track(filename, scms)
             yield
         print "done"
@@ -49,3 +60,4 @@ class MirageSongsPlugin(SongsMenuPlugin, SimilarityData):
         """Add the work to the coroutine pool."""
         fid = "mirage_songs" + str(datetime.now())
         copool.add(self.do_stuff, songs, funcid=fid)
+

@@ -17,6 +17,12 @@ from collections import deque
 
 from autoqueue import AutoQueueBase, SongBase
 
+try:
+    from mirage import Mir
+    MIRAGE = True
+except ImportError:
+    MIRAGE = False
+
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) api key from last.fm here:
 # http://www.last.fm/api/account
@@ -76,6 +82,8 @@ def remove_role(artist):
     if not artist.endswith(')'):
         return artist
     return artist.split('(')[0]
+
+
 
 
 class Song(SongBase):
@@ -146,6 +154,15 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         EventPlugin.__init__(self)
         AutoQueueBase.__init__(self)
         self._generators = deque()
+
+    @property
+    def mir(self):
+        if not MIRAGE:
+            return
+        if hasattr(main, 'mir'):
+            return main.mir
+        main.mir = Mir()
+        return main.mir
 
     def enabled(self):
         """user enabled the plugin"""
