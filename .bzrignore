@@ -1,1 +1,4 @@
 .coverage
+build
+dist
+autoqueue.egg-info

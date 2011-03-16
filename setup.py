@@ -23,8 +23,6 @@ if data_files:
     optional = {                        # pylint: disable=C0103
         'data_files': data_files}
 
-print optional
-
 setup(
     name='autoqueue',
     version='0.2beta3',
