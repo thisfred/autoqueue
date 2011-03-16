@@ -46,6 +46,7 @@ INT_SETTINGS = {
         'value': 90,
         'label': 'cache information from lastfm (days)'},
     }
+
 BOOL_SETTINGS = {
     'by_mirage': {
         'value': False,
@@ -82,8 +83,6 @@ def remove_role(artist):
     if not artist.endswith(')'):
         return artist
     return artist.split('(')[0]
-
-
 
 
 class Song(SongBase):
@@ -284,10 +283,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         self._generators.append(method(*args, **kwargs))
         if add_callback:
             gobject.idle_add(self._idle_callback)
-
-    ## # Implement the player specific methods needed by autoqueue
-    ## def player_execute_async(self, method, *args, **kwargs):
-    ##     copool.add(method, *args, **kwargs)
 
     def player_construct_file_search(self, filename, restrictions=None):
         """construct a search that looks for songs with this filename"""
