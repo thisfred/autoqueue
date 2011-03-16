@@ -580,7 +580,7 @@ def instance_from_picklestring(picklestring):
 
 def instance_to_picklestring(instance):
     f = StringIO()
-    pickle.dump(instance, f)
+    pickle.dump(instance, f, protocol=2)
     return f.getvalue()
 
 class ScmsConfiguration(object):
