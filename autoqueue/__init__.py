@@ -20,11 +20,13 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
 
+import os
+import random
+import urllib
+
 from collections import deque
 from datetime import datetime, timedelta
 from time import strptime, sleep, time
-import urllib
-import random, os
 from xml.dom import minidom
 from cPickle import Pickler, Unpickler
 
@@ -60,19 +62,22 @@ ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
 # be nice to last.fm
 WAIT_BETWEEN_REQUESTS = timedelta(0, 1)
 
-# XXX make configurable
+# TODO make configurable
 NEIGHBOURS = 20
 
 THRESHOLD = .5
 
 
 class Throttle(object):
+    """Decorator that throttles calls to a function or method."""
     def __init__(self, wait):
         self.wait = wait
         self.last_called = datetime.now()
 
     def __call__(self, func):
+        """Return the decorator."""
         def wrapper(*args, **kwargs):
+            """The implementation of the decorator."""
             while self.last_called + self.wait > datetime.now():
                 sleep(0.1)
             result = func(*args, **kwargs)
@@ -114,12 +119,32 @@ class SongBase(object):
         return NotImplemented
 
     def get_last_started(self):
-        """Return the date the song was last played."""
+        """Return the datetime the song was last played."""
         return NotImplemented
 
     def get_rating(self):
         """Return the rating of the song."""
         return NotImplemented
+
+    def get_playcount(self):
+        """Return the playcount of the song."""
+        return NotImplemented
+
+    def get_added(self):
+        """Return the datetime the song was added to the library."""
+        return NotImplemented
+
+    def get_play_frequency(self):
+        """Return the play frequency of the song (plays / day)."""
+        count = self.get_playcount()
+        if count is NotImplemented:
+            return 0
+        added = self.get_added()
+        if added is NotImplemented:
+            return 0
+        now = datetime.now()
+        days = float(max((now - datetime.fromtimestamp(added)).days, 1))
+        return count / days
 
 
 class SimilarityData(object):
@@ -158,7 +183,7 @@ class SimilarityData(object):
     def get_database_connection(self):
         """get database reference"""
         if self.in_memory:
-            if self.connection:
+            if hasattr(self, 'connection'):
                 return self.connection
             self.connection = sqlite3.connect(":memory:")
             self.connection.text_factory = str
@@ -626,20 +651,7 @@ class AutoQueueBase(SimilarityData):
         for artist in song.get_artists():
             if artist in self.get_blocked_artists():
                 return True
-        lastplayed = song.get_last_started()
-        if lastplayed is NotImplemented:
-            return False
-        now = datetime.now()
-        delta = now - datetime.fromtimestamp(lastplayed)
-        days_ago = delta.days
-        rating = song.get_rating()
-        if rating is NotImplemented:
-            return self.track_block_time > days_ago
-        bdays = max(1, self.track_block_time)
-        suggested = 2 * bdays * (1 - rating)
-        self.log("rating: %s last played %s days ago, suggested play: after "
-                 "%s days" % (repr(rating), repr(days_ago), suggested))
-        return suggested > days_ago
+        return False
 
     def on_song_started(self, song):
         """Should be called by the plugin when a new song starts. If
@@ -712,8 +724,6 @@ class AutoQueueBase(SimilarityData):
                           tags=None):
         if (artist, title, filename, tags) in self.cached_misses:
             return None
-        if random.random() < THRESHOLD:
-            return
         search = self.construct_search(
             artist=artist, title=title, filename=filename, tags=tags,
             restrictions=self.restrictions)
@@ -726,6 +736,16 @@ class AutoQueueBase(SimilarityData):
                 song = random.choice(songs)
                 songs.remove(song)
                 if not self.disallowed(song):
+                    rating = song.get_rating()
+                    if rating is NotImplemented:
+                        rating = THRESHOLD
+                    frequency = song.get_play_frequency()
+                    if frequency is NotImplemented:
+                        frequency = 0
+                    self.log("rating: %.5f, play frequency %.5f" % (
+                        rating, frequency))
+                    if frequency > 0 and random.random() > rating - frequency:
+                        continue
                     return song
         elif self.weed:
             if filename and not self.restrictions:
