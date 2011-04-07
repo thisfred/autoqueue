@@ -6,10 +6,7 @@ from autoqueue import SimilarityData
 
 from quodlibet.util import copool
 
-import faulthandler
 import widgets
-
-faulthandler.enable()
 
 
 def get_title(song):
