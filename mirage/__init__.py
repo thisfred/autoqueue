@@ -36,7 +36,7 @@ class MirageAudio(Structure):
     pass
 
 
-cdll.LoadLibrary("/usr/lib/banshee-1/Extensions/libmirageaudio.so")
+cdll.LoadLibrary("/usr/lib/banshee/Extensions/libmirageaudio.so")
 libmirageaudio = CDLL("libmirageaudio.so")
 
 
