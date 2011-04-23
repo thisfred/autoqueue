@@ -12,10 +12,14 @@ import gst
 mir = Mir()
 
 filenames = [
-    'testfiles/test.mp3', 'testfiles/test2.mp3', 'testfiles/test3.ogg',
-    'testfiles/test4.ogg', 'testfiles/test5.ogg']
+    'mirage/tests/testfiles/test.mp3',
+    'mirage/tests/testfiles/test2.mp3',
+    'mirage/tests/testfiles/test3.ogg',
+    'mirage/tests/testfiles/test4.ogg',
+    'mirage/tests/testfiles/test5.ogg']
 
 scmses = {}
+
 for filename in filenames:
     scmses[filename] = mir.analyze(filename)
 
