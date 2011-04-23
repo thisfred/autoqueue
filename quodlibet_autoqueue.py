@@ -129,7 +129,7 @@ class Song(SongBase):
         return self.song("~#length")
 
     def get_playcount(self):
-        return self.song("~#playcount")
+        return self.song("~#playcount") + self.song('~#skipcount')
 
     def get_added(self):
         return self.song("~#added")
