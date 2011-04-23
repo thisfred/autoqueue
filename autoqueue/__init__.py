@@ -70,12 +70,14 @@ THRESHOLD = .5
 
 class Throttle(object):
     """Decorator that throttles calls to a function or method."""
+
     def __init__(self, wait):
         self.wait = wait
         self.last_called = datetime.now()
 
     def __call__(self, func):
         """Return the decorator."""
+
         def wrapper(*args, **kwargs):
             """The implementation of the decorator."""
             while self.last_called + self.wait > datetime.now():
@@ -83,11 +85,13 @@ class Throttle(object):
             result = func(*args, **kwargs)
             self.last_called = datetime.now()
             return result
+
         return wrapper
 
 
 class SongBase(object):
     """A wrapper object around player specific song objects."""
+
     def __init__(self, song):
         self.song = song
 
@@ -95,27 +99,27 @@ class SongBase(object):
         return "<Song: %s - %s>" % (self.get_artist(), self.get_title())
 
     def get_artist(self):
-        """return lowercase UNICODE name of artist"""
+        """Return lowercase UNICODE name of artist."""
         return NotImplemented
 
     def get_artists(self):
-        """return lowercase UNICODE name of artists and performers."""
+        """Return lowercase UNICODE name of artists and performers."""
         return NotImplemented
 
     def get_title(self):
-        """return lowercase UNICODE title of song"""
+        """Return lowercase UNICODE title of song."""
         return NotImplemented
 
     def get_tags(self):
-        """return a list of tags for the song"""
+        """Return a list of tags for the song."""
         return []
 
     def get_filename(self):
-        """return filename for the song"""
+        """Return filename for the song."""
         return NotImplemented
 
     def get_length(self):
-        """return length in seconds"""
+        """Return length in seconds."""
         return NotImplemented
 
     def get_last_started(self):
@@ -163,6 +167,7 @@ class SimilarityData(object):
         """Get the directory to store user data.
 
         Defaults to $XDG_DATA_HOME/autoqueue on Gnome.
+
         """
         if self._data_dir:
             return self._data_dir
@@ -175,17 +180,18 @@ class SimilarityData(object):
         return data_dir
 
     def get_db_path(self):
+        """Get the directory where the database lives."""
         return os.path.join(self.player_get_data_dir(), "similarity.db")
 
     def get_database_connection(self):
-        """get database reference"""
+        """Get a database connection."""
         connection = sqlite3.connect(
             self.get_db_path(), timeout=5.0, isolation_level="immediate")
         connection.text_factory = str
         return connection
 
     def get_artist(self, artist_name, with_connection=None):
-        """get artist information from the database"""
+        """Get artist information from the database."""
         if with_connection:
             connection = with_connection
         else:
@@ -210,7 +216,7 @@ class SimilarityData(object):
             self.close_database_connection(connection)
 
     def get_track(self, artist_name, title, with_connection=None):
-        """get track information from the database"""
+        """Get track information from the database."""
         if with_connection:
             connection = with_connection
         else:
@@ -239,6 +245,7 @@ class SimilarityData(object):
             self.close_database_connection(connection)
 
     def get_ids_for_filenames(self, filenames):
+        """Get database ids for a list of filenames."""
         connection = self.get_database_connection()
         rows = connection.execute(
             'SELECT trackid FROM mirage WHERE filename IN (%s)' %
@@ -248,6 +255,7 @@ class SimilarityData(object):
         return result
 
     def get_artist_tracks(self, artist_id):
+        """Get all track ids for a given artist id."""
         connection = self.get_database_connection()
         result = []
         rows = connection.execute(
@@ -259,8 +267,11 @@ class SimilarityData(object):
         return result
 
     def get_similar_tracks_from_db(self, track_id):
-        """Get similar tracks from the database sorted by descending
-        match score."""
+        """Get similar tracks from the database.
+
+        Sorted by descending match score.
+
+        """
         connection = self.get_database_connection()
         results = [row for row in connection.execute(
             "SELECT track_2_track.match, artists.name, tracks.title"
@@ -274,6 +285,11 @@ class SimilarityData(object):
             yield {'score': score, 'artist': artist, 'title': title}
 
     def get_similar_artists_from_db(self, artist_id):
+        """Get similar artists from the database.
+
+        Sorted by descending match score.
+
+        """
         connection = self.get_database_connection()
         results = [row for row in connection.execute(
             "SELECT match, name FROM artist_2_artist INNER JOIN"
@@ -285,7 +301,7 @@ class SimilarityData(object):
             yield {'score': score, 'artist': artist}
 
     def _get_artist_match(self, artist1, artist2, with_connection=None):
-        """get artist match score from database"""
+        """Get artist match score from database."""
         if with_connection:
             connection = with_connection
         else:
@@ -303,7 +319,7 @@ class SimilarityData(object):
         return result
 
     def _get_track_match(self, track1, track2, with_connection=None):
-        """get track match score from database"""
+        """Get track match score from database."""
         if with_connection:
             connection = with_connection
         else:
@@ -321,7 +337,7 @@ class SimilarityData(object):
 
     def _update_artist_match(
         self, artist1, artist2, match, with_connection=None):
-        """write match score to the database"""
+        """Write match score to the database."""
         if with_connection:
             connection = with_connection
         else:
@@ -335,7 +351,7 @@ class SimilarityData(object):
             self.close_database_connection(connection)
 
     def _update_track_match(self, track1, track2, match, with_connection=None):
-        """write match score to the database"""
+        """Write match score to the database."""
         if with_connection:
             connection = with_connection
         else:
@@ -348,9 +364,9 @@ class SimilarityData(object):
             connection.commit()
             self.close_database_connection(connection)
 
-    def _insert_artist_match(
-        self, artist1, artist2, match, with_connection=None):
-        """write match score to the database"""
+    def _insert_artist_match(self, artist1, artist2, match,
+                             with_connection=None):
+        """Write match score to the database."""
         if with_connection:
             connection = with_connection
         else:
@@ -364,7 +380,7 @@ class SimilarityData(object):
             self.close_database_connection(connection)
 
     def _insert_track_match(self, track1, track2, match, with_connection=None):
-        """write match score to the database"""
+        """Write match score to the database."""
         if with_connection:
             connection = with_connection
         else:
@@ -378,7 +394,7 @@ class SimilarityData(object):
             self.close_database_connection(connection)
 
     def _update_artist(self, artist_id, with_connection=None):
-        """write artist information to the database"""
+        """Write artist information to the database."""
         if with_connection:
             connection = with_connection
         else:
@@ -391,7 +407,7 @@ class SimilarityData(object):
             self.close_database_connection(connection)
 
     def _update_track(self, track_id, with_connection=None):
-        """write track information to the database"""
+        """Write track information to the database."""
         if with_connection:
             connection = with_connection
         else:
@@ -404,7 +420,7 @@ class SimilarityData(object):
             self.close_database_connection(connection)
 
     def _update_similar_artists(self, artist_id, similar_artists):
-        """write similar artist information to the database"""
+        """Write similar artist information to the database."""
         connection = self.get_database_connection()
         for artist in similar_artists:
             id2 = self.get_artist(
@@ -423,7 +439,7 @@ class SimilarityData(object):
         self.close_database_connection(connection)
 
     def _update_similar_tracks(self, track_id, similar_tracks):
-        """write similar track information to the database"""
+        """Write similar track information to the database."""
         connection = self.get_database_connection()
         for track in similar_tracks:
             id2 = self.get_track(
@@ -442,8 +458,7 @@ class SimilarityData(object):
         self.close_database_connection(connection)
 
     def create_db(self):
-        """ Set up a database for the artist and track similarity scores
-        """
+        """Set up a database for the artist and track similarity scores."""
         connection = self.get_database_connection()
         connection.execute(
             'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name'
@@ -496,6 +511,7 @@ class SimilarityData(object):
 
 
 def tag_score(song, tags):
+    """Calculate similarity score by tags."""
     song_tags = song.get_tags()
     if not tags:
         return 0
@@ -544,6 +560,7 @@ class AutoQueueBase(SimilarityData):
 
     @property
     def mir(self):
+        """Mirage class."""
         if not MIRAGE:
             return
         if hasattr(main, 'mir'):
@@ -568,8 +585,8 @@ class AutoQueueBase(SimilarityData):
         return cache_dir
 
     def player_construct_file_search(self, filename, restrictions=None):
-        """Construct a search that looks for songs with this artist
-        and title.
+        """Construct a search that looks for songs with this artist and title.
+
         """
         return NotImplemented
 
@@ -584,9 +601,7 @@ class AutoQueueBase(SimilarityData):
         return NotImplemented
 
     def player_construct_tag_search(self, tags, restrictions=None):
-        """Construct a search that looks for songs with these
-        tags.
-        """
+        """Construct a search that looks for songs with these tags."""
         return NotImplemented
 
     def player_set_variables_from_config(self):
@@ -620,6 +635,7 @@ class AutoQueueBase(SimilarityData):
             pass
 
     def get_blocked_artists_pickle(self):
+        """Read the list of blocked artists from disk."""
         dump = os.path.join(
             self.player_get_cache_dir(), "autoqueue_block_cache")
         try:
@@ -639,15 +655,19 @@ class AutoQueueBase(SimilarityData):
             pass
 
     def disallowed(self, song):
+        """Check whether a song is not allowed to be queued."""
         for artist in song.get_artists():
             if artist in self.get_blocked_artists():
                 return True
         return False
 
     def on_song_started(self, song):
-        """Should be called by the plugin when a new song starts. If
-        the right conditions apply, we start looking for new songs to
-        queue."""
+        """Should be called by the plugin when a new song starts.
+
+        If the right conditions apply, we start looking for new songs
+        to queue.
+
+        """
         if song is None:
             return
         self.now = datetime.now()
@@ -675,12 +695,12 @@ class AutoQueueBase(SimilarityData):
             self.player_execute_async(self.prune_delete)
 
     def queue_needs_songs(self):
-        """determine whether the queue needs more songs added"""
+        """Determine whether the queue needs more songs added."""
         queue_length = self.player_get_queue_length()
         return queue_length < self.desired_queue_length
 
     def song_generator(self, last_song):
-        """yield songs that match the last song in the queue"""
+        """Yield songs that match the last song in the queue."""
         if MIRAGE and self.by_mirage:
             for dummy in self.analyze_track(last_song):
                 yield
@@ -698,6 +718,7 @@ class AutoQueueBase(SimilarityData):
 
     def construct_search(self, artist=None, title=None, tags=None,
                          filename=None, restrictions=None):
+        """Construct a search based on several criteria."""
         if filename:
             return self.player_construct_file_search(
                 filename, restrictions)
@@ -713,6 +734,7 @@ class AutoQueueBase(SimilarityData):
 
     def search_and_filter(self, artist=None, title=None, filename=None,
                           tags=None):
+        """Perform a search and filter the results."""
         if (artist, title, filename, tags) in self.cached_misses:
             return None
         search = self.construct_search(
@@ -745,7 +767,7 @@ class AutoQueueBase(SimilarityData):
         self.cached_misses.append((artist, title, filename, tags))
 
     def queue_song(self):
-        """Queue a single track"""
+        """Queue a single track."""
         self.unblock_artists()
         found = None
         last_songs = self.get_last_songs()
@@ -797,7 +819,7 @@ class AutoQueueBase(SimilarityData):
             yield "exhausted"
 
     def fill_queue(self):
-        """search for appropriate songs and put them in the queue"""
+        """Search for appropriate songs and put them in the queue."""
         self.running = True
         if self.desired_queue_length == 0:
             for dummy in self.queue_song():
@@ -819,9 +841,7 @@ class AutoQueueBase(SimilarityData):
         self.running = False
 
     def block_artist(self, artist_name):
-        """store artist name and current daytime so songs by that
-        artist can be blocked
-        """
+        """Block songs by artist from being played for a while."""
         self._blocked_artists.append(artist_name)
         self._blocked_artists_times.append(self.now)
         self.log("Blocked artist: %s (%s)" % (
@@ -843,9 +863,7 @@ class AutoQueueBase(SimilarityData):
         pickle_file.close()
 
     def unblock_artists(self):
-        """release blocked artists when they've been in the penalty
-        box for long enough
-        """
+        """Unblock expired blocked artists."""
         while self._blocked_artists_times:
             if self._blocked_artists_times[
                 0] + timedelta(self.artist_block_time) > self.now:
@@ -855,23 +873,23 @@ class AutoQueueBase(SimilarityData):
                 self._blocked_artists_times.popleft()))
 
     def is_blocked(self, artist_name):
-        """check if the artist was played too recently"""
+        """Check if the artist was played too recently."""
         return artist_name in self.get_blocked_artists()
 
     def get_blocked_artists(self):
-        """prevent artists already in the queue from being queued"""
+        """Get a list of blocked artists."""
         blocked = []
         for song in self.player_get_songs_in_queue():
             blocked.extend(song.get_artists())
         return list(self._blocked_artists) + blocked
 
     def get_last_songs(self):
-        """return the last song in the queue or the currently playing
-        song"""
+        """Return the currently playing song plus the songs in the queue."""
         queue = self.player_get_songs_in_queue() or []
         return [self.song] + queue
 
     def get_ordered_similar_by_tag(self, last_song):
+        """Get similar tracks by tag."""
         tags = last_song.get_tags()
         if not tags:
             return
@@ -891,7 +909,7 @@ class AutoQueueBase(SimilarityData):
             yield {'score': score, 'filename': song.get_filename()}
 
     def get_similar_tracks_from_lastfm(self, artist_name, title, track_id):
-        """get similar tracks to the last one in the queue"""
+        """Get similar tracks to the last one in the queue."""
         self.log("Getting similar tracks from last.fm for: %s - %s" % (
             artist_name, title))
         enc_artist_name = artist_name.encode("utf-8")
@@ -927,7 +945,7 @@ class AutoQueueBase(SimilarityData):
         return results
 
     def get_similar_artists_from_lastfm(self, artist_name, artist_id):
-        """get similar artists"""
+        """Get similar artists from lastfm."""
         self.log("Getting similar artists from last.fm for: %s " % artist_name)
         enc_artist_name = artist_name.encode("utf-8")
         url = ARTIST_URL % (
@@ -953,17 +971,18 @@ class AutoQueueBase(SimilarityData):
 
     @Throttle(WAIT_BETWEEN_REQUESTS)
     def last_fm_request(self, url):
+        """Make an http request to last.fm."""
         if not self.lastfm:
             return None
         try:
             stream = urllib.urlopen(url)
-        except Exception, e:
+        except Exception, e:            # pylint: disable=W0703
             self.log("Error: %s" % e)
             return None
         try:
             xmldoc = minidom.parse(stream).documentElement
             return xmldoc
-        except Exception, e:
+        except Exception, e:            # pylint: disable=W0703
             self.log("Error: %s" % e)
             self.lastfm = False
             return None
@@ -978,6 +997,7 @@ class AutoQueueBase(SimilarityData):
         return self.get_ids_for_filenames(filenames)
 
     def analyze_track(self, song, add_neighbours=True):
+        """Perform mirage analysis of a track."""
         artist_names = song.get_artists()
         filename = song.get_filename()
         yield
@@ -1010,7 +1030,7 @@ class AutoQueueBase(SimilarityData):
         return
 
     def get_ordered_mirage_tracks(self, song):
-        """get similar tracks from mirage acoustic analysis"""
+        """Get similar tracks by mirage acoustic analysis."""
         artist_name = song.get_artist()
         title = song.get_title()
         filename = song.get_filename()
@@ -1023,8 +1043,11 @@ class AutoQueueBase(SimilarityData):
             yield {'score': match, 'filename': filename}
 
     def get_ordered_similar_tracks(self, song):
-        """get similar tracks from last.fm/the database sorted by
-        descending match score"""
+        """Get similar tracks from last.fm/the database.
+
+        Sorted by descending match score.
+
+        """
 
         artist_name = song.get_artist()
         title = song.get_title()
@@ -1048,8 +1071,11 @@ class AutoQueueBase(SimilarityData):
                 yield result
 
     def get_ordered_similar_artists(self, song):
-        """get similar artists from the database sorted by descending
-        match score"""
+        """Get similar artists from the database.
+
+        Sorted by descending match score.
+
+        """
         for artist_name in song.get_artists():
             artist = self.get_artist(artist_name)
             artist_id, updated = artist[0], artist[2]
@@ -1072,7 +1098,8 @@ class AutoQueueBase(SimilarityData):
                     yield result
 
     def log(self, msg):
-        """print debug messages"""
+        """Print debug messages."""
+        # TODO replace with real logging.
         if not self.verbose:
             return
         try:
@@ -1081,8 +1108,11 @@ class AutoQueueBase(SimilarityData):
             print "[autoqueue]", msg
 
     def prune_db(self):
-        """clean up the database: remove tracks and artists that are
-        not in the library."""
+        """Clean up the database.
+
+        Remove tracks and artists that are not in the library.
+
+        """
         if not any(
             [self.prune_titles, self.prune_artists, self.prune_filenames]):
             return
@@ -1141,6 +1171,7 @@ class AutoQueueBase(SimilarityData):
             self.close_database_connection(connection)
 
     def prune_search(self):
+        """Search for track to be pruned."""
         while self._rows:
             item = self._rows.pop(0)
             search = self.construct_search(artist=item[0], title=item[2])
@@ -1150,6 +1181,7 @@ class AutoQueueBase(SimilarityData):
             yield
 
     def prune_delete(self):
+        """Delete tracks that are no longer present."""
         artist_ids = []
         while self._nrows:
             item = self._nrows.pop(0)
