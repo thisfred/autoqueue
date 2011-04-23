@@ -35,8 +35,11 @@ DEBUG = True
 class MirageAudio(Structure):
     pass
 
+try:
+    cdll.LoadLibrary("/usr/lib/banshee/Extensions/libmirageaudio.so")
+except:
+    cdll.LoadLibrary("/usr/lib/banshee-1/Extensions/libmirageaudio.so")
 
-cdll.LoadLibrary("/usr/lib/banshee/Extensions/libmirageaudio.so")
 libmirageaudio = CDLL("libmirageaudio.so")
 
 

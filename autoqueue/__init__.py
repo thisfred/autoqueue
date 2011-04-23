@@ -150,13 +150,13 @@ class SongBase(object):
 class SimilarityData(object):
     """Mixin for database access."""
 
-    in_memory = False
     _data_dir = None
+
+    def __init__(self):
+        self.create_db()
 
     def close_database_connection(self, connection):
         """Close the database connection."""
-        if self.in_memory:
-            return
         connection.close()
 
     def player_get_data_dir(self):
@@ -172,22 +172,13 @@ class SimilarityData(object):
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
         self._data_dir = data_dir
-        self.create_db()
         return data_dir
 
     def get_db_path(self):
-        if self.in_memory:
-            return ":memory:"
         return os.path.join(self.player_get_data_dir(), "similarity.db")
 
     def get_database_connection(self):
         """get database reference"""
-        if self.in_memory:
-            if hasattr(self, 'connection'):
-                return self.connection
-            self.connection = sqlite3.connect(":memory:")
-            self.connection.text_factory = str
-            return self.connection
         connection = sqlite3.connect(
             self.get_db_path(), timeout=5.0, isolation_level="immediate")
         connection.text_factory = str
@@ -521,7 +512,6 @@ def tag_score(song, tags):
 class AutoQueueBase(SimilarityData):
     """Generic base class for autoqueue plugins."""
     def __init__(self):
-        self.connection = None
         self.artist_block_time = 7
         self.track_block_time = 30
         self.desired_queue_length = 0
@@ -550,6 +540,7 @@ class AutoQueueBase(SimilarityData):
         self.player_set_variables_from_config()
         self._cache_dir = None
         self.get_blocked_artists_pickle()
+        super(AutoQueueBase, self).__init__()
 
     @property
     def mir(self):

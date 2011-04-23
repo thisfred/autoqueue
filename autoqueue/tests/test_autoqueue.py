@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-import unittest, gobject
+import gobject
+import sqlite3
+import unittest
 from datetime import datetime, timedelta
 from xml.dom import minidom
 from autoqueue import SongBase, AutoQueueBase, Throttle
@@ -9,25 +11,26 @@ gobject.threads_init()
 
 WAIT_BETWEEN_REQUESTS = timedelta(0,0,10)
 
-fake_responses = {
+FAKE_RESPONSES = {
     'http://ws.audioscrobbler.com/2.0/?method=track.getsimilar&artist='
     'joni+mitchell&track=carey&api_key=09d0975a99a4cab235b731d31abf0057':
-    'testfiles/test1.xml',
+    '../autoqueue/tests/testfiles/test1.xml',
     'http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist='
     'nina+simone&api_key=09d0975a99a4cab235b731d31abf0057':
-    'testfiles/test2.xml',
+    '../autoqueue/tests/testfiles/test2.xml',
     'http://ws.audioscrobbler.com/2.0/?method=track.getsimilar&artist='
     'nina+simone&track=i+think+it%27s+going+to+rain+today'
-    '&api_key=09d0975a99a4cab235b731d31abf0057': 'testfiles/test3.xml',
+    '&api_key=09d0975a99a4cab235b731d31abf0057':
+    '../autoqueue/tests/testfiles/test3.xml',
     'http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist='
     'joni+mitchell&api_key=09d0975a99a4cab235b731d31abf0057':
-    'testfiles/test4.xml',
+    '../autoqueue/tests/testfiles/test4.xml',
     'http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist='
     'habib+koit%C3%A9+%26+bamada&api_key=09d0975a99a4cab235b731d31abf0057':
-    'testfiles/test5.xml'
-    }
+    '../autoqueue/tests/testfiles/test5.xml'}
 
-class MockPlayer(object):
+
+class FakePlayer(object):
     def __init__(self, plugin_on_song_started):
         self.queue = []
         self.library = [
@@ -85,8 +88,9 @@ class MockPlayer(object):
         func(queue_song)
 
 
-class MockSong(SongBase):
-    def __init__(self, filename, artist, title, tags=None, performers=None):
+class FakeSong(SongBase):
+    def __init__(self, artist, title, tags=None, performers=None,
+                 filename=None):
         self.filename = filename
         self.artist = artist
         self.title = title
@@ -122,16 +126,32 @@ class MockSong(SongBase):
     def get_rating(self):
         return .5
 
-class MockAutoQueue(AutoQueueBase):
+
+class FakeAutoQueue(AutoQueueBase):
     def __init__(self):
-        self.player = MockPlayer(self.started)
-        self.in_memory = True
-        super(MockAutoQueue, self).__init__()
+        self.connection = None
+        self.player = FakePlayer(self.start)
+        super(FakeAutoQueue, self).__init__()
         self.by_tags = True
         self.verbose = True
 
-    def started(self, song):
+    def start(self, song):
+        """Simulate song start."""
         self.on_song_started(song)
+
+    def get_db_path(self):
+        return ":memory:"
+
+    def get_database_connection(self):
+        if self.connection:
+            return self.connection
+        self.connection = sqlite3.connect(":memory:")
+        self.connection.text_factory = str
+        return self.connection
+
+    def close_database_connection(self, connection):
+        """Close the database connection."""
+        pass
 
     def player_construct_file_search(self, filename, restrictions=None):
         """Construct a search that looks for songs with this artist
@@ -179,7 +199,7 @@ class MockAutoQueue(AutoQueueBase):
     def player_search(self, search):
         """Perform a player search."""
         return [
-            MockSong(*song) for song in self.player.library if
+            FakeSong(*song) for song in self.player.library if
             self.player.satisfies_criteria(song, search)]
 
     def player_get_songs_in_queue(self):
@@ -187,7 +207,7 @@ class MockAutoQueue(AutoQueueBase):
         return self.player.queue
 
     def last_fm_request(self, url):
-        urlfile = fake_responses.get(url)
+        urlfile = FAKE_RESPONSES.get(url)
         if not urlfile:
             return None
         stream = open(urlfile, 'r')
@@ -200,18 +220,20 @@ class MockAutoQueue(AutoQueueBase):
     def analyze_track(self, song, add_neighbours=False):
         yield
 
+
 @Throttle(WAIT_BETWEEN_REQUESTS)
 def throttled_method():
     return
+
 
 @Throttle(timedelta(0))
 def unthrottled_method():
     return
 
+
 class TestAutoQueue(unittest.TestCase):
     def setUp(self):
-        self.autoqueue = MockAutoQueue()
-        self.assertEqual(True, self.autoqueue.in_memory)
+        self.autoqueue = FakeAutoQueue()
 
     def test_get_database_connection(self):
         connection = self.autoqueue.get_database_connection()
@@ -335,7 +357,7 @@ class TestAutoQueue(unittest.TestCase):
         self.assertEqual(td, sim)
 
     def test_get_ordered_similar_artists(self):
-        song = MockSong('nina simone', 'ne me quitte pas')
+        song = FakeSong('nina simone', 'ne me quitte pas')
         artist = song.get_artist()
         similar_artists = self.autoqueue.get_ordered_similar_artists(song)
         td = [
@@ -359,7 +381,7 @@ class TestAutoQueue(unittest.TestCase):
         self.assertEqual((artist, None), row[1:])
 
     def test_get_ordered_similar_tracks(self):
-        song = MockSong('joni mitchell', 'carey')
+        song = FakeSong('joni mitchell', 'carey')
         artist = song.get_artist()
         title = song.get_title()
         similar_tracks = self.autoqueue.get_ordered_similar_tracks(song)
@@ -405,33 +427,29 @@ class TestAutoQueue(unittest.TestCase):
     def test_queue_needs_songs(self):
         self.autoqueue.desired_queue_length = 4
         self.assertEqual(True, self.autoqueue.queue_needs_songs())
-        test_song = MockSong('Joni Mitchell', 'Carey')
+        test_song = FakeSong('Joni Mitchell', 'Carey')
         for i in range(4):
             self.autoqueue.player_enqueue(test_song)
         self.assertEqual(False, self.autoqueue.queue_needs_songs())
 
     def test_on_song_started(self):
-        test_song = MockSong('Joni Mitchell', 'Carey')
-        self.autoqueue.started(test_song)
+        test_song = FakeSong('Joni Mitchell', 'Carey')
+        self.autoqueue.start(test_song)
         songs_in_queue = self.autoqueue.player_get_songs_in_queue()
         self.assertEqual('joanna newsom', songs_in_queue[0].get_artist())
         self.assertEqual('peach, plum, pear', songs_in_queue[0].get_title())
 
-    def test_block_artist(self):
-        artist_name = 'joni mitchell'
-        self.autoqueue.block_artist(artist_name)
-        self.assertEqual(True, self.autoqueue.is_blocked(artist_name))
-        self.assertEqual([artist_name], self.autoqueue.get_blocked_artists())
-
 
 class TestThrottle(unittest.TestCase):
+    """Test the throttle decorator."""
+
     def test_throttle(self):
+        """Test throttling."""
         now = datetime.now()
         times = 0
         while True:
             throttled_method()
             times += 1
-            if datetime.now() > (now + timedelta(0,0,1000)):
+            if datetime.now() > (now + timedelta(0, 0, 1000)):
                 break
         self.assertEqual(True, times < 100)
-
