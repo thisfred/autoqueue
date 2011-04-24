@@ -1,12 +1,12 @@
+"""Mirage songs plugin."""
 
-from datetime import datetime
+import dbus
 from plugins.songsmenu import SongsMenuPlugin
-from mirage import Mir, Db
-from autoqueue import SimilarityData
 
-from quodlibet.util import copool
+from dbus.mainloop.glib import DBusGMainLoop
+DBusGMainLoop(set_as_default=True)
 
-import widgets
+NO_OP = lambda *a, **kw: None
 
 
 def get_title(song):
@@ -18,43 +18,31 @@ def get_title(song):
     return title
 
 
-class MirageSongsPlugin(SongsMenuPlugin, SimilarityData):
+class MirageSongsPlugin(SongsMenuPlugin):
+    """Mirage songs analysis."""
+
     PLUGIN_ID = "Mirage Analysis"
     PLUGIN_NAME = _("Mirage Analysis")
     PLUGIN_DESC = _("Perform Mirage Analysis of the selected songs.")
     PLUGIN_ICON = "gtk-find-and-replace"
     PLUGIN_VERSION = "0.1"
 
+
     def __init__(self, *args):
-        super(MirageSongsPlugin, self).__init__(*args)
+        SongsMenuPlugin.__init__(self, *args)
+        bus = dbus.SessionBus()
+        sim = bus.get_object(
+            'org.autoqueue.Similarity', '/org/autoqueue/Similarity')
+        self.similarity = dbus.Interface(
+            sim, dbus_interface='org.autoqueue.SimilarityInterface')
 
-    @property
-    def mir(self):
-        if widgets.main is None:
-            reload(widgets)
-        if hasattr(widgets.main, 'mir'):
-            return widgets.main.mir
-        widgets.main.mir = Mir()
-        return widgets.main.mir
-
-    def do_stuff(self, songs):
-        """Do the actual work."""
-        db = Db(self.get_db_path())
-        l = len(songs)
-        for i, song in enumerate(songs):
-            artist_name = song.comma("artist").lower()
-            title = get_title(song)
-            print "%03d/%03d %s - %s" % (i + 1, l, artist_name, title)
-            filename = song("~filename")
-            trackid_scms = db.get_track(filename)
-            if not trackid_scms:
-                scms = self.mir.analyze(filename)
-                db.add_track(filename, scms)
-            yield
-        print "done"
+    def error_handler(self, *args, **kwargs):
+        """Log errors when calling D-Bus methods in a async way."""
+        print 'Error handler received: %r, %r' % (args, kwargs)
 
     def plugin_songs(self, songs):
         """Add the work to the coroutine pool."""
-        fid = "mirage_songs" + str(datetime.now())
-        copool.add(self.do_stuff, songs, funcid=fid)
-
+        for song in songs:
+            self.similarity.analyze_track(
+                song('~filename'), False, [], reply_handler=NO_OP,
+                error_handler=self.error_handler)

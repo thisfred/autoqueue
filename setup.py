@@ -1,7 +1,13 @@
 """Autoqueue setup."""
-
-from setuptools import setup
 import os
+import sys
+
+try:
+    import DistUtilsExtra.auto
+except ImportError:
+    print >> sys.stderr, 'To build this program you need '\
+                         'https://launchpad.net/python-distutils-extra'
+    sys.exit(1)
 
 optional = {}                           # pylint: disable=C0103
 data_files = []                         # pylint: disable=C0103
@@ -23,7 +29,7 @@ if data_files:
     optional = {                        # pylint: disable=C0103
         'data_files': data_files}
 
-setup(
+DistUtilsExtra.auto.setup(
     name='autoqueue',
     version='0.2beta3',
     packages=['autoqueue', 'mirage'],
@@ -38,4 +44,5 @@ setup(
     package_data={'mirage': ['res/*']},
     requires=['scipy', 'ctypes'],
     provides=['mirage', 'autoqueue'],
+    scripts=['bin/autoqueue-similarity-service'],
     **optional)
