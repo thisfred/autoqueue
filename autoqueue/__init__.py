@@ -350,26 +350,30 @@ class AutoQueueBase(object):
         search = self.construct_search(
             artist=artist, title=title, filename=filename, tags=tags,
             restrictions=self.restrictions)
-        if not search:
-            self.cached_misses.append((artist, title, filename, tags))
-            return
         songs = self.player_search(search)
-        if songs:
-            while songs:
-                song = random.choice(songs)
-                songs.remove(song)
-                if not self.disallowed(song):
-                    rating = song.get_rating()
-                    if rating is NotImplemented:
-                        rating = THRESHOLD
-                    frequency = song.get_play_frequency()
-                    if frequency is NotImplemented:
-                        frequency = 0
-                    self.log("rating: %.5f, play frequency %.5f" % (
-                        rating, frequency))
-                    if frequency > 0 and random.random() > rating - frequency:
-                        continue
-                    return song
+        if not songs:
+            self.cached_misses.append((artist, title, filename, tags))
+            if filename and not self.restrictions:
+                print filename
+                self.similarity.remove_tracks(
+                    [filename], reply_handler=NO_OP,
+                    error_handler=self.error_handler)
+            return
+        while songs:
+            song = random.choice(songs)
+            songs.remove(song)
+            if not self.disallowed(song):
+                rating = song.get_rating()
+                if rating is NotImplemented:
+                    rating = THRESHOLD
+                frequency = song.get_play_frequency()
+                if frequency is NotImplemented:
+                    frequency = 0
+                self.log("rating: %.5f, play frequency %.5f" % (
+                    rating, frequency))
+                if frequency > 0 and random.random() > rating - frequency:
+                    continue
+                return song
         self.cached_misses.append((artist, title, filename, tags))
 
     def fill_queue(self):

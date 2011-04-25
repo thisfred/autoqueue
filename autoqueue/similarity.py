@@ -520,10 +520,15 @@ class SimilarityService(dbus.service.Object):
             self.lastfm = False
             return None
 
+    @method(dbus_interface=DBUS_IFACE, in_signature='as')
+    def remove_tracks(self, filenames):
+        """Remove tracks from database."""
+        db = Db(self.get_db_path())
+        db.remove_tracks(filenames)
+
     @method(dbus_interface=DBUS_IFACE, in_signature='sbas')
     def analyze_track(self, filename, add_neighbours, exclude_filenames):
         """Perform mirage analysis of a track."""
-        self.log(filename)
         if not filename:
             return
         db = Db(self.get_db_path())

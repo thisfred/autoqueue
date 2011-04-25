@@ -371,18 +371,17 @@ class Db(object):
         connection.commit()
         self.close_database_connection(connection)
 
-    def remove_track(self, trackid):
-        """Remove track from database."""
-        connection = self.get_database_connection()
-        connection.execute("DELETE FROM mirage WHERE trackid = ?", (trackid,))
-        connection.commit()
-        self.close_database_connection(connection)
-
-    def remove_tracks(self, trackids):
+    def remove_tracks(self, filenames):
         """Remove tracks from database."""
+        trackids = ','.join([
+            self.get_track_id(filename) for filename in filenames])
         connection = self.get_database_connection()
-        connection.execute("DELETE FROM mirage WHERE trackid IN (%s);" % (
-            ','.join(trackids),))
+        connection.execute(
+            "DELETE FROM distance WHERE track_1 IN (%s) or track_2 IN (%s);" %
+            (trackids, trackids))
+        connection.execute(
+            "DELETE FROM mirage WHERE trackid IN (%s);" %
+            (trackids,))
         connection.commit()
         self.close_database_connection(connection)
 
