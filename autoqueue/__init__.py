@@ -286,6 +286,16 @@ class AutoQueueBase(object):
         """Return (wrapped) song objects for the songs in the queue."""
         return []
 
+    def player_execute_async(self, method, *args, **kwargs):
+        """Override this if the player has a way to execute methods
+        asynchronously, like the copooling in autoqueue.
+
+        """
+        if 'funcid' in kwargs:
+            del kwargs['funcid']
+        for dummy in method(*args, **kwargs):
+            pass
+
     def disallowed(self, song):
         """Check whether a song is not allowed to be queued."""
         for artist in song.get_artists():
@@ -395,20 +405,29 @@ class AutoQueueBase(object):
             error_handler=self.error_handler, timeout=300)
 
     def analyzed(self):
+        """Handler for analyzed track."""
         self.similarity.get_ordered_mirage_tracks(
             self.last_song.get_filename(),
             reply_handler=self.mirage_reply_handler,
             error_handler=self.error_handler, timeout=300)
 
     def mirage_reply_handler(self, results):
-        self.process_results([
-            {'score': match, 'filename': filename} for match, filename in
-            results])
+        """Handler for similar artists returned from dbus."""
+        self.player_execute_async(
+            self._mirage_reply_handler, results=results)
+
+    def _mirage_reply_handler(self, results=None):
+        """Handler for (mirage) similar tracks returned from dbus."""
+        if results:
+            for _ in self.process_results([
+                    {'score': match, 'filename': filename} for match, filename
+                    in results]):
+                yield
         if self.found:
-            if self.queue_needs_songs():
-                self.queue_song()
-            else:
+            if not self.queue_needs_songs():
                 self.running = False
+                return
+            self.queue_song()
             return
         artist_name = self.last_song.get_artist()
         title = self.last_song.get_title()
@@ -418,14 +437,20 @@ class AutoQueueBase(object):
             error_handler=self.error_handler, timeout=300)
 
     def similar_tracks_handler(self, results):
-        self.process_results([
-            {'score': match, 'artist': artist, 'title': title} for
-            match, artist, title in results])
+        self.player_execute_async(
+            self._similar_tracks_handler, results=results)
+
+    def _similar_tracks_handler(self, results=None):
+        """Handler for similar tracks returned from dbus."""
+        for _ in self.process_results([
+                {'score': match, 'artist': artist, 'title': title} for
+                match, artist, title in results]):
+            yield
         if self.found:
-            if self.queue_needs_songs():
-                self.queue_song()
-            else:
+            if not self.queue_needs_songs():
                 self.running = False
+                return
+            self.queue_song()
             return
         self.similarity.get_ordered_similar_artists(
             self.last_song.get_artists(),
@@ -433,20 +458,31 @@ class AutoQueueBase(object):
             error_handler=self.error_handler, timeout=300)
 
     def similar_artists_handler(self, results):
-        self.process_results([
-            {'score': match, 'artist': artist} for match, artist in results])
+        """Handler for similar artists returned from dbus."""
+        self.player_execute_async(
+            self._similar_artists_handler, results=results)
+
+    def _similar_artists_handler(self, results=None):
+        """Exexute processing asynchronous."""
+        if results:
+            for _ in self.process_results([
+                    {'score': match, 'artist': artist} for
+                    match, artist in results]):
+                yield
         if self.found:
-            if self.queue_needs_songs():
-                self.queue_song()
-            else:
+            if not self.queue_needs_songs():
                 self.running = False
+                return
+            self.queue_song()
             return
-        self.process_results(self.get_ordered_similar_by_tag(self.last_song))
+        for _ in self.process_results(
+                self.get_ordered_similar_by_tag(self.last_song)):
+            yield
         if self.found:
-            if self.queue_needs_songs():
-                self.queue_song()
-            else:
+            if not self.queue_needs_songs():
                 self.running = False
+                return
+            self.queue_song()
             return
         if not self.last_songs:
             self.running = False
@@ -460,10 +496,12 @@ class AutoQueueBase(object):
             error_handler=self.error_handler, timeout=300)
 
     def process_results(self, results):
+        """Process similarity results from dbus."""
         blocked = self.get_blocked_artists()
         for result in results:
             if not result:
                 continue
+            yield
             look_for = result.get('artist')
             if look_for:
                 title = result.get('title')
@@ -526,4 +564,6 @@ class AutoQueueBase(object):
         songs = sorted(
             [(tag_score(song, tagset), song) for song in
              self.player_search(search)], reverse=True)
-        return [{'score': score, 'filename': song.get_filename()} for score, song in songs]
+        return [
+            {'score': score, 'filename': song.get_filename()} for
+            score, song in songs]
