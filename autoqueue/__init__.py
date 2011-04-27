@@ -333,6 +333,7 @@ class AutoQueueBase(object):
         filename = song.get_filename()
         try:
             filename = unicode(filename, 'utf-8')
+            excluded_filenames = excluded_filenames or [filename]
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 5, reply_handler=NO_OP,
                 error_handler=NO_OP, timeout=300)
@@ -427,6 +428,7 @@ class AutoQueueBase(object):
         filename = song.get_filename()
         try:
             filename = unicode(filename, 'utf-8')
+            excluded_filenames = excluded_filenames or [filename]
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 0,
                 reply_handler=self.analyzed,
@@ -446,6 +448,27 @@ class AutoQueueBase(object):
         except:
             self.log('Could not decode filename: %r' % filename)
 
+    def done(self):
+        """Analyze the last song and stop."""
+        song = self.last_song
+        excluded_filenames = []
+        for filename in self.get_artists_track_filenames(song.get_artists()):
+            try:
+                excluded_filenames.append(unicode(filename, 'utf-8'))
+            except:
+                self.log('Could not decode filename: %r' % filename)
+        filename = song.get_filename()
+        try:
+            filename = unicode(filename, 'utf-8')
+            excluded_filenames = excluded_filenames or [filename]
+            self.similarity.analyze_track(
+                filename, True, excluded_filenames, 0,
+                reply_handler=NO_OP,
+                error_handler=NO_OP, timeout=300)
+        except:
+            self.log('Could not decode filename: %r' % filename)
+        self.running = False
+
     def mirage_reply_handler(self, results):
         """Handler for (mirage) similar tracks returned from dbus."""
         self.player_execute_async(
@@ -460,7 +483,7 @@ class AutoQueueBase(object):
                 yield
         if self.found:
             if not self.queue_needs_songs():
-                self.running = False
+                self.done()
                 return
             self.queue_song()
             return
@@ -484,7 +507,7 @@ class AutoQueueBase(object):
             yield
         if self.found:
             if not self.queue_needs_songs():
-                self.running = False
+                self.done()
                 return
             self.queue_song()
             return
@@ -507,7 +530,7 @@ class AutoQueueBase(object):
                 yield
         if self.found:
             if not self.queue_needs_songs():
-                self.running = False
+                self.done()
                 return
             self.queue_song()
             return
@@ -516,7 +539,7 @@ class AutoQueueBase(object):
             yield
         if self.found:
             if not self.queue_needs_songs():
-                self.running = False
+                self.done()
                 return
             self.queue_song()
             return
@@ -533,6 +556,7 @@ class AutoQueueBase(object):
         filename = song.get_filename()
         try:
             filename = unicode(filename, 'utf-8')
+            excluded_filenames = excluded_filenames or [filename]
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 0,
                 reply_handler=self.analyzed,

@@ -36,13 +36,13 @@ class MirageSongsPlugin(SongsMenuPlugin):
         self.similarity = dbus.Interface(
             sim, dbus_interface='org.autoqueue.SimilarityInterface')
 
-    def error_handler(self, *args, **kwargs):
-        """Log errors when calling D-Bus methods in a async way."""
-        print 'Error handler received: %r, %r' % (args, kwargs)
-
     def plugin_songs(self, songs):
         """Add the work to the coroutine pool."""
         for song in songs:
-            self.similarity.analyze_track(
-                song('~filename'), False, [], 5, reply_handler=NO_OP,
-                error_handler=NO_OP)
+            try:
+                filename = unicode(song('~filename'), 'utf-8')
+                self.similarity.analyze_track(
+                    filename, False, [filename], 5, reply_handler=NO_OP,
+                    error_handler=NO_OP)
+            except:
+                print "Could not decode filename: %r" % song('~filename')
