@@ -450,7 +450,7 @@ class AutoQueueBase(object):
 
     def done(self):
         """Analyze the last song and stop."""
-        song = self.last_song
+        song = self.found
         excluded_filenames = []
         for filename in self.get_artists_track_filenames(song.get_artists()):
             try:
