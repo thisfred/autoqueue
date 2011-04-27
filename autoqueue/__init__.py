@@ -364,9 +364,16 @@ class AutoQueueBase(object):
         if not songs:
             self.cached_misses.append((artist, title, filename, tags))
             if filename and not self.restrictions:
-                print filename
-                self.similarity.remove_tracks(
-                    [filename], reply_handler=NO_OP,
+                self.similarity.remove_track_by_filename(
+                    filename, reply_handler=NO_OP,
+                    error_handler=self.error_handler)
+            elif (artist and title) and not self.restrictions:
+                self.similarity.remove_track(
+                    artist, title, reply_handler=NO_OP,
+                    error_handler=self.error_handler)
+            elif artist and not self.restrictions:
+                self.similarity.remove_artist(
+                    artist, reply_handler=NO_OP,
                     error_handler=self.error_handler)
             return
         while songs:
@@ -412,12 +419,12 @@ class AutoQueueBase(object):
             error_handler=self.error_handler, timeout=300)
 
     def mirage_reply_handler(self, results):
-        """Handler for similar artists returned from dbus."""
+        """Handler for (mirage) similar tracks returned from dbus."""
         self.player_execute_async(
             self._mirage_reply_handler, results=results)
 
     def _mirage_reply_handler(self, results=None):
-        """Handler for (mirage) similar tracks returned from dbus."""
+        """Exexute processing asynchronous."""
         if results:
             for _ in self.process_results([
                     {'score': match, 'filename': filename} for match, filename
@@ -437,11 +444,12 @@ class AutoQueueBase(object):
             error_handler=self.error_handler, timeout=300)
 
     def similar_tracks_handler(self, results):
+        """Handler for similar tracks returned from dbus."""
         self.player_execute_async(
             self._similar_tracks_handler, results=results)
 
     def _similar_tracks_handler(self, results=None):
-        """Handler for similar tracks returned from dbus."""
+        """Exexute processing asynchronous."""
         for _ in self.process_results([
                 {'score': match, 'artist': artist, 'title': title} for
                 match, artist, title in results]):

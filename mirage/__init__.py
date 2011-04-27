@@ -22,15 +22,13 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 
 import math
 import os
-import sqlite3
 import struct
 
 import cPickle as pickle
 
 from decimal import Decimal
-from datetime import datetime
 from cStringIO import StringIO
-from ctypes import cdll, CDLL, Structure, POINTER, c_float, c_int, byref
+from ctypes import cdll, Structure, POINTER, c_float, c_int, byref
 from scipy import array, fromfile, zeros, dot, single, vectorize
 
 DEBUG = True
@@ -43,11 +41,11 @@ class MirageAudio(Structure):
 # pylint: disable=C0103
 
 try:
-    cdll.LoadLibrary("/usr/lib/banshee/Extensions/libmirageaudio.so")
+    libmirageaudio = cdll.LoadLibrary(
+        "/usr/lib/banshee/Extensions/libmirageaudio.so")
 except:  # pylint: disable=W0702
-    cdll.LoadLibrary("/usr/lib/banshee-1/Extensions/libmirageaudio.so")
-
-libmirageaudio = CDLL("libmirageaudio.so")
+    libmirageaudio = cdll.LoadLibrary(
+        "/usr/lib/banshee-1/Extensions/libmirageaudio.so")
 
 
 class MatrixDimensionMismatchException(Exception):
@@ -222,7 +220,6 @@ class AudioDecoder(object):
         frames = c_int(0)
         size = c_int(0)
         ret = c_int(0)
-
         data = mirageaudio_decode(
             self.ma, filename, byref(frames), byref(size), byref(ret))
         if ret == -1:
@@ -335,202 +332,6 @@ class Vector(Matrix):
 
     def __init__(self, rows):
         super(Vector, self).__init__(rows, 1)
-
-
-class Db(object):
-    """Database access class."""
-
-    def __init__(self, path, connection=None):
-        self.dbpath = path
-        self.connection = connection
-
-    def close_database_connection(self, connection):
-        """Close connection."""
-        if self.dbpath == ':memory:':
-            return
-        connection.close()
-
-    def get_database_connection(self):
-        """Get database connection."""
-        if self.dbpath == ':memory:':
-            if not self.connection:
-                self.connection = sqlite3.connect(':memory:')
-                self.connection.text_factory = str
-            return self.connection
-        connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate")
-        connection.text_factory = str
-        return connection
-
-    def add_track(self, filename, scms):
-        """Add track to database."""
-        connection = self.get_database_connection()
-        connection.execute("INSERT INTO mirage (filename, scms) VALUES (?, ?)",
-                       (filename,
-                        sqlite3.Binary(instance_to_picklestring(scms))))
-        connection.commit()
-        self.close_database_connection(connection)
-
-    def remove_tracks(self, filenames):
-        """Remove tracks from database."""
-        trackids = ','.join([
-            self.get_track_id(filename) for filename in filenames])
-        connection = self.get_database_connection()
-        connection.execute(
-            "DELETE FROM distance WHERE track_1 IN (%s) or track_2 IN (%s);" %
-            (trackids, trackids))
-        connection.execute(
-            "DELETE FROM mirage WHERE trackid IN (%s);" %
-            (trackids,))
-        connection.commit()
-        self.close_database_connection(connection)
-
-    def get_track(self, filename):
-        """Get track from database."""
-        connection = self.get_database_connection()
-        rows = connection.execute(
-            "SELECT trackid, scms FROM mirage WHERE filename = ?", (filename,))
-        for row in rows:
-            self.close_database_connection(connection)
-            return (row[0], instance_from_picklestring(row[1]))
-        self.close_database_connection(connection)
-        return None
-
-    def get_track_id(self, filename):
-        """Get track id from database."""
-        connection = self.get_database_connection()
-        rows = connection.execute(
-            "SELECT trackid FROM mirage WHERE filename = ?", (filename,))
-        for row in rows:
-            self.close_database_connection(connection)
-            return row[0]
-        self.close_database_connection(connection)
-        return None
-
-    def has_scores(self, trackid, no=20):
-        """Check if the track has sufficient neighbours."""
-        connection = self.get_database_connection()
-        cursor = connection.execute(
-            'SELECT COUNT(*) FROM distance WHERE track_1 = ?',
-            (trackid,))
-        l1 = cursor.fetchone()[0]
-        self.close_database_connection(connection)
-        if l1 < no:
-            print "Only %d connections found, minimum %d." % (l1, no)
-            return False
-        connection = self.get_database_connection()
-        cursor = connection.execute(
-            "SELECT COUNT(track_1) FROM distance WHERE track_2 = ? AND "
-            "distance < (SELECT MAX(distance) FROM distance WHERE track_1 = "
-            "?);", (trackid, trackid))
-        l2 = cursor.fetchone()[0]
-        self.close_database_connection(connection)
-        if l2 > l1:
-            print "Found %d incoming connections and only %d outgoing." % (
-                l2, l1)
-            return False
-        return True
-
-    def get_tracks(self, exclude_filenames=None):
-        """Get tracks from database."""
-        if not exclude_filenames:
-            exclude_filenames = []
-        connection = self.get_database_connection()
-        rows = connection.execute(
-            "SELECT scms, trackid, filename FROM mirage;")
-        result = [(row[0], row[1]) for row in rows if row[2]
-                  not in exclude_filenames]
-        self.close_database_connection(connection)
-        return result
-
-    def get_all_track_ids(self):
-        """Get all track ids."""
-        connection = self.get_database_connection()
-        rows = connection.execute("SELECT trackid FROM mirage")
-        result = [row[0] for row in rows]
-        self.close_database_connection(connection)
-        return result
-
-    def reset(self):
-        """Reinitialize the database."""
-        connection = self.get_database_connection()
-        connection.execute("DELETE FROM mirage")
-        connection.commit()
-        self.close_database_connection(connection)
-
-    def add_neighbours(self, trackid, scms, exclude_filenames=None,
-                       neighbours=20):
-        """Add best similarity scores to db."""
-        if not exclude_filenames:
-            exclude_filenames = []
-        to_add = neighbours * 2
-        connection = self.get_database_connection()
-        connection.execute(
-            "DELETE FROM distance WHERE track_1 = ?", (trackid,))
-        connection.commit()
-        self.close_database_connection(connection)
-        conf = ScmsConfiguration(20)
-        best = []
-        for buf, otherid in self.get_tracks(
-                exclude_filenames=exclude_filenames):
-            if trackid == otherid:
-                continue
-            other = instance_from_picklestring(buf)
-            dist = int(distance(scms, other, conf) * 1000)
-            if dist < 0:
-                continue
-            if len(best) > to_add - 1:
-                if dist > best[-1][0]:
-                    continue
-            best.append((dist, trackid, otherid))
-            best.sort()
-            while len(best) > to_add:
-                best.pop()
-        added = 0
-        if best:
-            connection = self.get_database_connection()
-            while best:
-                added += 1
-                best_tup = best.pop()
-                connection.execute(
-                    "INSERT INTO distance (distance, track_1, track_2) "
-                    "VALUES (?, ?, ?)", best_tup)
-            connection.commit()
-            self.close_database_connection(connection)
-        print "added %d connections" % added
-
-    def compare(self, id1, id2):
-        """Get the distance between two tracks."""
-        conf = ScmsConfiguration(20)
-        t1 = self.get_track(id1)[1]
-        t2 = self.get_track(id2)[1]
-        return int(distance(t1, t2, conf) * 1000)
-
-    def get_filename(self, trackid):
-        """Get filename for track."""
-        connection = self.get_database_connection()
-        rows = connection.execute(
-            'SELECT filename FROM mirage WHERE trackid = ?', (trackid, ))
-        filename = None
-        for row in rows:
-            try:
-                filename = unicode(row[0], 'utf-8')
-            except UnicodeDecodeError:
-                break
-            break
-        connection.close()
-        return filename
-
-    def get_neighbours(self, trackid):
-        """Get neighbours for track."""
-        connection = self.get_database_connection()
-        neighbours = [row for row in connection.execute(
-            "SELECT distance, filename FROM distance INNER JOIN MIRAGE ON "
-            "distance.track_2 = mirage.trackid WHERE track_1 = ? ORDER BY "
-            "distance ASC",
-            (trackid,))]
-        self.close_database_connection(connection)
-        return neighbours
 
 
 class Mfcc(object):
