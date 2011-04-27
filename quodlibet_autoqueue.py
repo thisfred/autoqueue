@@ -157,9 +157,10 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         self.on_song_started(ssong)
 
     def plugin_on_removed(self, songs):
-        self.similarity.remove_tracks(
-            [song('~filename') for song in songs], reply_handler=NO_OP,
-            error_handler=self.error_handler)
+        for song in songs:
+            self.similarity.remove_track_by_filename(
+                song('~filename'), reply_handler=NO_OP,
+                error_handler=self.error_handler)
 
     def PluginPreferences(self, parent):
         def bool_changed(widget):

@@ -166,6 +166,7 @@ class AutoQueueBase(object):
 
     def error_handler(self, *args, **kwargs):
         """Log errors when calling D-Bus methods in a async way."""
+        self.running = False
         self.log('Error handler received: %r, %r' % (args, kwargs))
 
     def player_get_cache_dir(self):
@@ -323,11 +324,20 @@ class AutoQueueBase(object):
         if self.running:
             return
         self.song = song
-        excluded_filenames = self.get_artists_track_filenames(
-            song.get_artists())
-        self.similarity.analyze_track(
-            song.get_filename(), True, excluded_filenames, reply_handler=NO_OP,
-            error_handler=self.error_handler, timeout=300)
+        excluded_filenames = []
+        for filename in self.get_artists_track_filenames(song.get_artists()):
+            try:
+                excluded_filenames.append(unicode(filename, 'utf-8'))
+            except:
+                self.log('Could not decode filename: %r' % filename)
+        filename = song.get_filename()
+        try:
+            filename = unicode(filename, 'utf-8')
+            self.similarity.analyze_track(
+                filename, True, excluded_filenames, 5, reply_handler=NO_OP,
+                error_handler=NO_OP, timeout=300)
+        except:
+            self.log('Could not decode filename: %r' % filename)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             self.fill_queue()
 
@@ -364,17 +374,21 @@ class AutoQueueBase(object):
         if not songs:
             self.cached_misses.append((artist, title, filename, tags))
             if filename and not self.restrictions:
-                self.similarity.remove_track_by_filename(
-                    filename, reply_handler=NO_OP,
-                    error_handler=self.error_handler)
+                try:
+                    filename = unicode(filename, 'utf-8')
+                    self.similarity.remove_track_by_filename(
+                        filename, reply_handler=NO_OP,
+                        error_handler=NO_OP)
+                except:
+                    self.log('Could not decode filename: %r' % filename)
             elif (artist and title) and not self.restrictions:
                 self.similarity.remove_track(
                     artist, title, reply_handler=NO_OP,
-                    error_handler=self.error_handler)
+                    error_handler=NO_OP)
             elif artist and not self.restrictions:
                 self.similarity.remove_artist(
                     artist, reply_handler=NO_OP,
-                    error_handler=self.error_handler)
+                    error_handler=NO_OP)
             return
         while songs:
             song = random.choice(songs)
@@ -404,19 +418,33 @@ class AutoQueueBase(object):
         self.found = None
         self.last_songs = self.get_last_songs()
         song = self.last_song = self.last_songs.pop()
-        excluded_filenames = self.get_artists_track_filenames(
-            song.get_artists())
-        self.similarity.analyze_track(
-            song.get_filename(), True, excluded_filenames,
-            reply_handler=self.analyzed,
-            error_handler=self.error_handler, timeout=300)
+        excluded_filenames = []
+        for filename in self.get_artists_track_filenames(song.get_artists()):
+            try:
+                excluded_filenames.append(unicode(filename, 'utf-8'))
+            except:
+                self.log('Could not decode filename: %r' % filename)
+        filename = song.get_filename()
+        try:
+            filename = unicode(filename, 'utf-8')
+            self.similarity.analyze_track(
+                filename, True, excluded_filenames, 0,
+                reply_handler=self.analyzed,
+                error_handler=self.error_handler, timeout=300)
+        except:
+            self.log('Could not decode filename: %r' % filename)
 
     def analyzed(self):
         """Handler for analyzed track."""
-        self.similarity.get_ordered_mirage_tracks(
-            self.last_song.get_filename(),
-            reply_handler=self.mirage_reply_handler,
-            error_handler=self.error_handler, timeout=300)
+        filename = self.last_song.get_filename()
+        try:
+            filename = unicode(filename, 'utf-8')
+            self.similarity.get_ordered_mirage_tracks(
+                filename,
+                reply_handler=self.mirage_reply_handler,
+                error_handler=self.error_handler, timeout=300)
+        except:
+            self.log('Could not decode filename: %r' % filename)
 
     def mirage_reply_handler(self, results):
         """Handler for (mirage) similar tracks returned from dbus."""
@@ -496,12 +524,21 @@ class AutoQueueBase(object):
             self.running = False
             return
         song = self.last_song = self.last_songs.pop()
-        excluded_filenames = self.get_artists_track_filenames(
-            song.get_artists())
-        self.similarity.analyze_track(
-            song.get_filename(), True, excluded_filenames,
-            reply_handler=self.analyzed,
-            error_handler=self.error_handler, timeout=300)
+        excluded_filenames = []
+        for filename in self.get_artists_track_filenames(song.get_artists()):
+            try:
+                excluded_filenames.append(unicode(filename, 'utf-8'))
+            except:
+                self.log('Could not decode filename: %r' % filename)
+        filename = song.get_filename()
+        try:
+            filename = unicode(filename, 'utf-8')
+            self.similarity.analyze_track(
+                filename, True, excluded_filenames, 0,
+                reply_handler=self.analyzed,
+                error_handler=self.error_handler, timeout=300)
+        except:
+            self.log('Could not decode filename: %r' % filename)
 
     def process_results(self, results):
         """Process similarity results from dbus."""

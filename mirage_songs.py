@@ -44,5 +44,5 @@ class MirageSongsPlugin(SongsMenuPlugin):
         """Add the work to the coroutine pool."""
         for song in songs:
             self.similarity.analyze_track(
-                song('~filename'), False, [], reply_handler=NO_OP,
-                error_handler=self.error_handler)
+                song('~filename'), False, [], 5, reply_handler=NO_OP,
+                error_handler=NO_OP)

@@ -51,8 +51,6 @@ WAIT_BETWEEN_REQUESTS = timedelta(0, 1)
 # TODO make configurable
 NEIGHBOURS = 20
 
-MIR = Mir()
-
 
 class Throttle(object):
     """Decorator that throttles calls to a function or method."""
@@ -100,7 +98,6 @@ class DatabaseWrapper(Thread):
         cursor = connection.cursor()
         while True:
             priority, cmd = self.queue.get()
-            print priority, repr(cmd.sql)
             sql = cmd.sql
             if sql == ['STOP']:
                 cmd.result_queue.put(None)
@@ -156,76 +153,76 @@ class Db(object):
         self._data_dir = data_dir
         return data_dir
 
-    def add_track(self, filename, scms):
+    def add_track(self, filename, scms, priority):
         """Add track to database."""
-        self.execute_sql((
-            "INSERT INTO mirage (filename, scms) VALUES (?, ?);",
-            (filename, sqlite3.Binary(instance_to_picklestring(scms)))))
+        self.execute_sql(
+            ("INSERT INTO mirage (filename, scms) VALUES (?, ?);",
+            (filename, sqlite3.Binary(instance_to_picklestring(scms)))),
+            priority=priority)
 
     def remove_track_by_filename(self, filename):
         """Remove tracks from database."""
         for row in self.execute_sql(
             ('SELECT trackid FROM mirage WHERE filename = ?', (filename,)),
-            priority=4):
+            priority=10):
             track_id = row[0]
             self.execute_sql((
-                'DELETE FROM distance WHERE track_1 = ? OR track_2 = ? FROM '
-                'mirage WHERE filename = ?);',
-            (track_id, track_id)), priority=4)
-        self.execute_sql((
-            "DELETE FROM mirage WHERE trackid = ?;",
-            (track_id,)), priority=4)
+                'DELETE FROM distance WHERE track_1 = ? OR track_2 = ?;',
+            (track_id, track_id)), priority=10)
+            self.execute_sql((
+                "DELETE FROM mirage WHERE trackid = ?;",
+                (track_id,)), priority=10)
 
     def remove_track(self, artist, title):
         """Delete missing track."""
         for row in self.execute_sql((
             'SELECT tracks.id FROM tracks WHERE tracks.title = ? AND WHERE '
             'tracks.artist IN (SELECT artists.id FROM artists WHERE '
-            'artists.name = ?);', (artist, title)), priority=4):
+            'artists.name = ?);', (artist, title)), priority=10):
             track_id = row[0]
             self.execute_sql(
                 ('DELETE FROM track_2_track WHERE track1 = ? or track2 = ?;',
-                 (track_id, track_id)), priority=4)
+                 (track_id, track_id)), priority=10)
             self.execute_sql(
-                ('DELETE FROM tracks WHERE id = ?;', (track_id,)), priority=4)
+                ('DELETE FROM tracks WHERE id = ?;', (track_id,)), priority=10)
         self.delete_orphan_artist(artist)
 
     def remove_artist(self, artist):
         """Delete missing artist."""
         for row in self.execute_sql(
             ('SELECT id from artists WHERE artists.name = ?;', (artist,)),
-            priority=4):
+            priority=10):
             artist_id = row[0]
             self.execute_sql(
                 ('DELETE FROM artists WHERE artists.id = ?;', (artist_id)),
-                priority=4)
+                priority=10)
             self.execute_sql(
                 ('DELETE FROM tracks WHERE tracks.artist = ?;', (artist_id)),
-                priority=4)
+                priority=10)
 
-    def get_track_from_filename(self, filename):
+    def get_track_from_filename(self, filename, priority):
         """Get track from database."""
         rows = self.execute_sql((
             "SELECT trackid, scms FROM mirage WHERE filename = ?;",
-            (filename,)), priority=0)
+            (filename,)), priority=priority)
         for row in rows:
             return (row[0], instance_from_picklestring(row[1]))
         return None
 
-    def get_track_id(self, filename):
+    def get_track_id(self, filename, priority):
         """Get track id from database."""
         rows = self.execute_sql(
             ("SELECT trackid FROM mirage WHERE filename = ?;", (filename,)),
-            priority=0)
+            priority=priority)
         for row in rows:
             return row[0]
         return None
 
-    def has_scores(self, trackid, no=20):
+    def has_scores(self, trackid, no=20, priority=0):
         """Check if the track has sufficient neighbours."""
         rows = self.execute_sql((
             'SELECT COUNT(*) FROM distance WHERE track_1 = ?;',
-            (trackid,)), priority=2)
+            (trackid,)), priority=priority)
         l1 = rows[0][0]
         if l1 < no:
             print "Only %d connections found, minimum %d." % (l1, no)
@@ -233,7 +230,7 @@ class Db(object):
         rows = self.execute_sql((
             "SELECT COUNT(track_1) FROM distance WHERE track_2 = ? AND "
             "distance < (SELECT MAX(distance) FROM distance WHERE track_1 = "
-            "?);", (trackid, trackid)), priority=2)
+            "?);", (trackid, trackid)), priority=priority)
         l2 = rows[0][0]
         if l2 > l1:
             print "Found %d incoming connections and only %d outgoing." % (
@@ -241,27 +238,28 @@ class Db(object):
             return False
         return True
 
-    def get_tracks(self, exclude_filenames=None):
+    def get_tracks(self, exclude_filenames=None, priority=0):
         """Get tracks from database."""
         if not exclude_filenames:
             exclude_filenames = []
         rows = self.execute_sql((
-            "SELECT scms, trackid, filename FROM mirage;",), priority=2)
+            "SELECT scms, trackid, filename FROM mirage;",), priority=priority)
         return [(row[0], row[1]) for row in rows if row[2]
                   not in exclude_filenames]
 
     def add_neighbours(self, trackid, scms, exclude_filenames=None,
-                       neighbours=20):
+                       neighbours=20, priority=0):
         """Add best similarity scores to db."""
         if not exclude_filenames:
             exclude_filenames = []
         to_add = neighbours * 2
-        _ = self.execute_sql((
-            "DELETE FROM distance WHERE track_1 = ?;", (trackid,)), priority=2)
+        _ = self.execute_sql(
+            ("DELETE FROM distance WHERE track_1 = ?;", (trackid,)),
+            priority=priority)
         conf = ScmsConfiguration(20)
         best = []
         for buf, otherid in self.get_tracks(
-                exclude_filenames=exclude_filenames):
+                exclude_filenames=exclude_filenames, priority=priority):
             if trackid == otherid:
                 continue
             other = instance_from_picklestring(buf)
@@ -282,7 +280,7 @@ class Db(object):
                 best_tup = best.pop()
                 self.execute_sql((
                     "INSERT INTO distance (distance, track_1, track_2) "
-                    "VALUES (?, ?, ?);", best_tup), priority=2)
+                    "VALUES (?, ?, ?);", best_tup), priority=priority)
         print "added %d connections" % added
 
     def get_neighbours(self, trackid):
@@ -375,40 +373,40 @@ class Db(object):
         self.execute_sql((
             "UPDATE artist_2_artist SET match = ? WHERE artist1 = ? AND"
             " artist2 = ?;",
-            (match, artist1, artist2)), priority=3)
+            (match, artist1, artist2)), priority=10)
 
     def update_track_match(self, track1, track2, match):
         """Write match score to the database."""
         self.execute_sql((
             "UPDATE track_2_track SET match = ? WHERE track1 = ? AND"
             " track2 = ?;",
-            (match, track1, track2)), priority=3)
+            (match, track1, track2)), priority=10)
 
     def insert_artist_match(self, artist1, artist2, match):
         """Write match score to the database."""
         self.execute_sql((
             "INSERT INTO artist_2_artist (artist1, artist2, match) VALUES"
             " (?, ?, ?);",
-            (artist1, artist2, match)), priority=3)
+            (artist1, artist2, match)), priority=10)
 
     def insert_track_match(self, track1, track2, match):
         """Write match score to the database."""
         self.execute_sql((
             "INSERT INTO track_2_track (track1, track2, match) VALUES"
             " (?, ?, ?);",
-            (track1, track2, match)), priority=3)
+            (track1, track2, match)), priority=10)
 
     def update_artist(self, artist_id):
         """Write artist information to the database."""
         self.execute_sql((
             "UPDATE artists SET updated = DATETIME('now') WHERE id = ?;",
-            (artist_id,)), priority=3)
+            (artist_id,)), priority=10)
 
     def update_track(self, track_id):
         """Write track information to the database."""
         self.execute_sql((
             "UPDATE tracks SET updated = DATETIME('now') WHERE id = ?",
-            (track_id,)), priority=3)
+            (track_id,)), priority=10)
 
     def update_similar_artists(self, artists_to_update):
         """Write similar artist information to the database."""
@@ -480,24 +478,26 @@ class Db(object):
         for row in self.execute_sql((
                 'SELECT artists.id FROM artists WHERE artists.name = ? AND '
                 'artists.id NOT IN (SELECT tracks.artist from tracks);',
-                (artist,)), priority=4):
+                (artist,)), priority=10):
             artist_id = row[0]
             self.execute_sql((
                 'DELETE FROM artist_2_artist WHERE artist1 = ? OR artist2 = '
-                '?;', (artist_id, artist_id)), priority=4)
+                '?;', (artist_id, artist_id)), priority=10)
             self.execute_sql(
-                ('DELETE FROM artists WHERE id = ?', (artist_id,)), priority=4)
+                ('DELETE FROM artists WHERE id = ?', (artist_id,)), priority=10)
 
 
 class SimilarityService(dbus.service.Object):
     """Service that can be queried for similar songs."""
 
     def __init__(self, bus_name, object_path):
+        import gst
         self.db = Db()
         self.lastfm = True
         self.cache_time = 90
         super(SimilarityService, self).__init__(
             bus_name=bus_name, object_path=object_path)
+        self.mir = Mir()
         self.loop = gobject.MainLoop()
 
     def log(self, message):
@@ -602,36 +602,38 @@ class SimilarityService(dbus.service.Object):
         """Remove tracks from database."""
         self.db.remove_artist(artist)
 
-    @method(dbus_interface=DBUS_IFACE, in_signature='sbas')
-    def analyze_track(self, filename, add_neighbours, exclude_filenames):
+    @method(dbus_interface=DBUS_IFACE, in_signature='sbasi')
+    def analyze_track(self, filename, add_neighbours, exclude_filenames,
+                      priority):
         """Perform mirage analysis of a track."""
         if not filename:
             return
-        trackid_scms = self.db.get_track_from_filename(filename)
+        trackid_scms = self.db.get_track_from_filename(
+            filename, priority=priority)
         if not trackid_scms:
             self.log("no mirage data found for %s, analyzing track" % filename)
             try:
-                scms = MIR.analyze(filename)
+                scms = self.mir.analyze(filename.encode('utf-8'))
             except (MatrixDimensionMismatchException, MfccFailedException,
                     IndexError), e:
                 self.log(repr(e))
                 return
-            self.db.add_track(filename, scms)
-            trackid = self.db.get_track_id(filename)
+            self.db.add_track(filename, scms, priority=priority)
+            trackid = self.db.get_track_id(filename, priority=priority)
         else:
             trackid, scms = trackid_scms
         if not add_neighbours:
             return
-        if self.db.has_scores(trackid, no=NEIGHBOURS):
+        if self.db.has_scores(trackid, no=NEIGHBOURS, priority=priority):
             return
         self.db.add_neighbours(
             trackid, scms, exclude_filenames=exclude_filenames,
-            neighbours=NEIGHBOURS)
+            neighbours=NEIGHBOURS, priority=priority)
 
     @method(dbus_interface=DBUS_IFACE, in_signature='s', out_signature='a(is)')
     def get_ordered_mirage_tracks(self, filename):
         """Get similar tracks by mirage acoustic analysis."""
-        trackid = self.db.get_track_id(filename)
+        trackid = self.db.get_track_id(filename, priority=0)
         return self.db.get_neighbours(trackid)
 
     @method(dbus_interface=DBUS_IFACE, in_signature='ss',
@@ -693,7 +695,6 @@ def register_service(bus):
     Return True if succesfully registered, False if already running.
     """
     name = bus.request_name(DBUS_BUSNAME, dbus.bus.NAME_FLAG_DO_NOT_QUEUE)
-    print name != dbus.bus.REQUEST_NAME_REPLY_EXISTS
     return name != dbus.bus.REQUEST_NAME_REPLY_EXISTS
 
 

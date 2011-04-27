@@ -146,7 +146,6 @@ class FakeAutoQueue(AutoQueueBase):
         if self.connection:
             return self.connection
         self.connection = sqlite3.connect(":memory:")
-        self.connection.text_factory = str
         return self.connection
 
     def close_database_connection(self, connection):
