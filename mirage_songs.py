@@ -39,8 +39,10 @@ class MirageSongsPlugin(SongsMenuPlugin):
     def plugin_songs(self, songs):
         """Add the work to the coroutine pool."""
         for song in songs:
+            filename = song('~filename')
             try:
-                filename = unicode(song('~filename'), 'utf-8')
+                if not isinstance(filename, unicode):
+                    filename = unicode(filename, 'utf-8')
                 self.similarity.analyze_track(
                     filename, False, [filename], 5, reply_handler=NO_OP,
                     error_handler=NO_OP)

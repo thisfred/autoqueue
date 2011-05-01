@@ -99,13 +99,17 @@ class DatabaseWrapper(Thread):
         while True:
             priority, cmd = self.queue.get()
             sql = cmd.sql
-            if sql == ['STOP']:
+            if sql == ('STOP',):
                 cmd.result_queue.put(None)
                 connection.close()
                 break
             commit_needed = False
             result = []
-            cursor.execute(*sql)
+            try:
+                cursor.execute(*sql)
+            except:
+                for s in sql:
+                    print repr(s)
             if not sql[0].upper().startswith('SELECT'):
                 commit_needed = True
             for row in cursor.fetchall():
@@ -525,9 +529,10 @@ class SimilarityService(dbus.service.Object):
             for child in node.childNodes:
                 if child.nodeName == 'artist':
                     similar_artist = child.getElementsByTagName(
-                        "name")[0].firstChild.nodeValue.lower()
+                        "name")[0].firstChild.nodeValue.lower().decode('utf-8')
                 elif child.nodeName == 'name':
-                    similar_title = child.firstChild.nodeValue.lower()
+                    similar_title = child.firstChild.nodeValue.lower().decode(
+                        'utf-8')
                 elif child.nodeName == 'match':
                     match = int(float(child.firstChild.nodeValue) * 100)
                 if (similar_artist != '' and similar_title != ''
@@ -556,7 +561,7 @@ class SimilarityService(dbus.service.Object):
         artists_to_update = {}
         for node in nodes:
             name = node.getElementsByTagName(
-                "name")[0].firstChild.nodeValue.lower()
+                "name")[0].firstChild.nodeValue.lower().decode('utf-8')
             match = 0
             matchnode = node.getElementsByTagName("match")
             if matchnode:
@@ -644,6 +649,8 @@ class SimilarityService(dbus.service.Object):
         Sorted by descending match score.
 
         """
+        artist_name = artist_name
+        title = title
         now = datetime.now()
         track = self.db.get_track_from_artist_and_title(artist_name, title)
         track_id, updated = track[0], track[3]
@@ -666,7 +673,8 @@ class SimilarityService(dbus.service.Object):
         """
         results = []
         now = datetime.now()
-        for artist_name in artists:
+        for name in artists:
+            artist_name = name
             result = None
             artist = self.db.get_artist(artist_name)
             artist_id, updated = artist[0], artist[2]

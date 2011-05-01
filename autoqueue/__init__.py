@@ -96,12 +96,14 @@ class SongBase(object):
         count = self.get_playcount()
         if count is NotImplemented:
             return 0
-        added = self.get_added()
-        if added is NotImplemented:
+        if count == 0:
+            return 0
+        last_started = self.get_last_started()
+        if last_started is NotImplemented:
             return 0
         now = datetime.now()
-        days = float(max((now - datetime.fromtimestamp(added)).days, 1))
-        return count / days
+        days = float(max((now - datetime.fromtimestamp(last_started)).days, 1))
+        return 1.0 / days
 
 
 def tag_score(song, tags):
@@ -128,7 +130,7 @@ class AutoQueueBase(object):
         self._blocked_artists_times = deque([])
         self._cache_dir = None
         self.desired_queue_length = 0
-        self.cached_misses = []
+        self.cached_misses = deque([])
         self.by_mirage = False
         self.by_tracks = True
         self.by_artists = True
@@ -326,13 +328,17 @@ class AutoQueueBase(object):
         self.song = song
         excluded_filenames = []
         for filename in self.get_artists_track_filenames(song.get_artists()):
-            try:
-                excluded_filenames.append(unicode(filename, 'utf-8'))
-            except:
-                self.log('Could not decode filename: %r' % filename)
+            if isinstance(filename, unicode):
+                excluded_filenames.append(filename)
+            else:
+                try:
+                    excluded_filenames.append(unicode(filename, 'utf-8'))
+                except:
+                    self.log('Could not decode filename: %r' % filename)
         filename = song.get_filename()
         try:
-            filename = unicode(filename, 'utf-8')
+            if not isinstance(filename, unicode):
+                filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 5, reply_handler=NO_OP,
@@ -341,6 +347,7 @@ class AutoQueueBase(object):
             self.log('Could not decode filename: %r' % filename)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             self.fill_queue()
+        self.unblock_artists()
 
     def queue_needs_songs(self):
         """Determine whether the queue needs more songs added."""
@@ -367,6 +374,8 @@ class AutoQueueBase(object):
                           tags=None):
         """Perform a search and filter the results."""
         if (artist, title, filename, tags) in self.cached_misses:
+            self.cached_misses.remove((artist, title, filename, tags))
+            self.cached_misses.append((artist, title, filename, tags))
             return None
         search = self.construct_search(
             artist=artist, title=title, filename=filename, tags=tags,
@@ -375,13 +384,14 @@ class AutoQueueBase(object):
         if not songs:
             self.cached_misses.append((artist, title, filename, tags))
             if filename and not self.restrictions:
-                try:
-                    filename = unicode(filename, 'utf-8')
-                    self.similarity.remove_track_by_filename(
-                        filename, reply_handler=NO_OP,
-                        error_handler=NO_OP)
-                except:
-                    self.log('Could not decode filename: %r' % filename)
+                if not isinstance(filename, unicode):
+                    try:
+                        filename = filename.decode('utf-8')
+                    except:
+                        self.log('failed to decode filename %r' % filename)
+                self.similarity.remove_track_by_filename(
+                    filename, reply_handler=NO_OP,
+                    error_handler=NO_OP)
             elif (artist and title) and not self.restrictions:
                 self.similarity.remove_track(
                     artist, title, reply_handler=NO_OP,
@@ -407,6 +417,8 @@ class AutoQueueBase(object):
                     continue
                 return song
         self.cached_misses.append((artist, title, filename, tags))
+        while len(self.cached_misses) > 1000:
+            print self.cached_misses.popleft()
 
     def fill_queue(self):
         """Search for appropriate songs and put them in the queue."""
@@ -421,13 +433,17 @@ class AutoQueueBase(object):
         song = self.last_song = self.last_songs.pop()
         excluded_filenames = []
         for filename in self.get_artists_track_filenames(song.get_artists()):
-            try:
-                excluded_filenames.append(unicode(filename, 'utf-8'))
-            except:
-                self.log('Could not decode filename: %r' % filename)
+            if isinstance(filename, unicode):
+                excluded_filenames.append(filename)
+            else:
+                try:
+                    excluded_filenames.append(unicode(filename, 'utf-8'))
+                except:
+                    self.log('Could not decode filename: %r' % filename)
         filename = song.get_filename()
         try:
-            filename = unicode(filename, 'utf-8')
+            if not isinstance(filename, unicode):
+                filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 0,
@@ -440,7 +456,8 @@ class AutoQueueBase(object):
         """Handler for analyzed track."""
         filename = self.last_song.get_filename()
         try:
-            filename = unicode(filename, 'utf-8')
+            if not isinstance(filename, unicode):
+                filename = unicode(filename, 'utf-8')
             self.similarity.get_ordered_mirage_tracks(
                 filename,
                 reply_handler=self.mirage_reply_handler,
@@ -453,13 +470,17 @@ class AutoQueueBase(object):
         song = self.found
         excluded_filenames = []
         for filename in self.get_artists_track_filenames(song.get_artists()):
-            try:
-                excluded_filenames.append(unicode(filename, 'utf-8'))
-            except:
-                self.log('Could not decode filename: %r' % filename)
+            if isinstance(filename, unicode):
+                excluded_filenames.append(filename)
+            else:
+                try:
+                    excluded_filenames.append(unicode(filename, 'utf-8'))
+                except:
+                    self.log('Could not decode filename: %r' % filename)
         filename = song.get_filename()
         try:
-            filename = unicode(filename, 'utf-8')
+            if not isinstance(filename, unicode):
+                filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 0,
@@ -549,13 +570,17 @@ class AutoQueueBase(object):
         song = self.last_song = self.last_songs.pop()
         excluded_filenames = []
         for filename in self.get_artists_track_filenames(song.get_artists()):
-            try:
-                excluded_filenames.append(unicode(filename, 'utf-8'))
-            except:
-                self.log('Could not decode filename: %r' % filename)
+            if isinstance(filename, unicode):
+                excluded_filenames.append(filename)
+            else:
+                try:
+                    excluded_filenames.append(unicode(filename, 'utf-8'))
+                except:
+                    self.log('Could not decode filename: %r' % filename)
         filename = song.get_filename()
         try:
-            filename = unicode(filename, 'utf-8')
+            if not isinstance(filename, unicode):
+                filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 0,
