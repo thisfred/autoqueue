@@ -74,7 +74,7 @@ if DATA_FILES:
 DistUtilsExtra.auto.setup(
     name='autoqueue',
     description='A cross music player plugin that queues similar tracks',
-    version='1.0.0alpha5',
+    version='1.0.0alpha6',
     packages=['autoqueue', 'mirage'],
     license='GNU GPL v2',
     author='Eric Casteleijn',
