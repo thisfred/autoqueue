@@ -6,6 +6,7 @@ from autoqueue import SimilarityData
 
 from quodlibet.util import copool
 
+import gobject
 import widgets
 
 
@@ -26,6 +27,7 @@ class MirageSongsPlugin(SongsMenuPlugin, SimilarityData):
     PLUGIN_VERSION = "0.1"
 
     def __init__(self, *args):
+        gobject.threads_init()
         super(MirageSongsPlugin, self).__init__(*args)
 
     @property

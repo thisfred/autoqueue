@@ -20,6 +20,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
 
+import gobject
 import os
 import random
 import urllib
@@ -42,12 +43,8 @@ try:
 except ImportError:
     SQL = False
 
-try:
-    from mirage import (
-        Mir, Db, MatrixDimensionMismatchException, MfccFailedException)
-    MIRAGE = True
-except ImportError:
-    MIRAGE = False
+from mirage import (
+    Db, MatrixDimensionMismatchException, MfccFailedException)
 
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) last.fm api key from here:
@@ -181,7 +178,6 @@ class SimilarityData(object):
         """get database reference"""
         connection = sqlite3.connect(
             self.get_db_path(), timeout=5.0, isolation_level="immediate")
-        connection.text_factory = str
         return connection
 
     def get_artist(self, artist_name, with_connection=None):
@@ -512,15 +508,16 @@ def tag_score(song, tags):
 class AutoQueueBase(SimilarityData):
     """Generic base class for autoqueue plugins."""
     def __init__(self):
+        gobject.threads_init()
         self.artist_block_time = 7
         self.track_block_time = 30
         self.desired_queue_length = 0
         self.cache_time = 90
         self.cached_misses = []
-        self.by_mirage = False
+        self.by_mirage = True
         self.by_tracks = True
         self.by_artists = True
-        self.by_tags = False
+        self.by_tags = True
         self.running = False
         self.verbose = False
         self.weed = False
@@ -541,16 +538,6 @@ class AutoQueueBase(SimilarityData):
         self._cache_dir = None
         self.get_blocked_artists_pickle()
         super(AutoQueueBase, self).__init__()
-
-    @property
-    def mir(self):
-        if not MIRAGE:
-            return
-        if hasattr(main, 'mir'):
-            print "mir found"
-            return main.mir
-        self._mir = Mir()
-        return self._mir
 
     def player_get_cache_dir(self):
         """Get the directory to store temporary data.
@@ -663,10 +650,6 @@ class AutoQueueBase(SimilarityData):
         if self.running:
             return
         self.song = song
-        if MIRAGE:
-            fid = "analyze_track" + str(int(time()))
-            self.player_execute_async(
-                self.analyze_track, song, funcid=fid, add_neighbours=False)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             self.player_execute_async(self.fill_queue)
         if self.weed:
@@ -681,7 +664,7 @@ class AutoQueueBase(SimilarityData):
 
     def song_generator(self, last_song):
         """yield songs that match the last song in the queue"""
-        if MIRAGE and self.by_mirage:
+        if self.by_mirage:
             for dummy in self.analyze_track(last_song):
                 yield
             for result in self.get_ordered_mirage_tracks(last_song):
@@ -790,7 +773,7 @@ class AutoQueueBase(SimilarityData):
                 yield
         if found:
             self.player_enqueue(found)
-            if MIRAGE and self.by_mirage:
+            if self.by_mirage:
                 for dummy in self.analyze_track(self.get_last_songs()[-1]):
                     yield
         if not found:
@@ -978,10 +961,16 @@ class AutoQueueBase(SimilarityData):
         return self.get_ids_for_filenames(filenames)
 
     def analyze_track(self, song, add_neighbours=True):
+        import gst
         artist_names = song.get_artists()
         filename = song.get_filename()
         yield
         if not filename:
+            return
+        try:
+            filename = unicode(filename, 'utf-8')
+        except:
+            self.log('filename not valid unicode.')
             return
         db = Db(self.get_db_path())
         trackid_scms = db.get_track(filename)

@@ -3,10 +3,6 @@ from mirage import Mir, Matrix, Db, ScmsConfiguration
 from mirage import distance
 from decimal import Decimal, getcontext
 
-# we have to do this or the tests break badly
-import pygst
-pygst.require("0.10")
-
 import gst
 
 mir = Mir()
@@ -37,7 +33,6 @@ class TestMir(unittest.TestCase):
     def setUp(self):
         connection = sqlite3.connect(":memory:")
         self.db = Db(":memory:", connection=connection)
-        connection.text_factory = str
         connection.execute(
             'CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, '
             'filename VARCHAR(300), scms BLOB)')

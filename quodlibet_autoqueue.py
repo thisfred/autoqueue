@@ -17,11 +17,9 @@ from collections import deque
 
 from autoqueue import AutoQueueBase, SongBase
 
-try:
-    from mirage import Mir
-    MIRAGE = True
-except ImportError:
-    MIRAGE = False
+from mirage import Mir
+
+import gst
 
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) api key from last.fm here:
@@ -156,8 +154,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     @property
     def mir(self):
-        if not MIRAGE:
-            return
         if hasattr(main, 'mir'):
             return main.mir
         main.mir = Mir()

@@ -364,7 +364,6 @@ class Db(object):
             return self.connection
         connection = sqlite3.connect(
             self.dbpath, timeout=5.0, isolation_level="immediate")
-        connection.text_factory = str
         return connection
 
     def add_track(self, filename, scms):
