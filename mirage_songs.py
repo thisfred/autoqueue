@@ -31,7 +31,7 @@ class MirageSongsPlugin(SongsMenuPlugin):
         SongsMenuPlugin.__init__(self, *args)
         bus = dbus.SessionBus()
         sim = bus.get_object(
-            'org.autoqueue.Similarity', '/org/autoqueue/Similarity')
+            'org.autoqueue', '/org/autoqueue/Similarity')
         self.similarity = dbus.Interface(
             sim, dbus_interface='org.autoqueue.SimilarityInterface')
 

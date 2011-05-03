@@ -31,7 +31,7 @@ except ImportError:
 
 DBusGMainLoop(set_as_default=True)
 
-DBUS_BUSNAME = 'org.autoqueue.Similarity'
+DBUS_BUSNAME = 'org.autoqueue'
 DBUS_IFACE = 'org.autoqueue.SimilarityInterface'
 DBUS_PATH = '/org/autoqueue/Similarity'
 
