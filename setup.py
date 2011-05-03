@@ -17,7 +17,7 @@ CLEANFILES = [SERVICE_FILE, 'MANIFEST']
 def replace_prefix(prefix):
     """Replace every '@prefix@' with prefix within 'filename' content."""
     # replace .service file, DATA_DIR constant
-    for filename in (SERVICE_FILE):
+    for filename in ([SERVICE_FILE]):
         with open(filename + '.in') as in_file:
             content = in_file.read()
             with open(filename, 'w') as out_file:
@@ -49,25 +49,27 @@ class Clean(DistUtilsExtra.auto.clean_build_tree):
 
         DistUtilsExtra.auto.clean_build_tree.run(self)
 
-optional = {}                           # pylint: disable=C0103
-data_files = []                         # pylint: disable=C0103
+OPTIONAL = {}
+DATA_FILES = [
+    ('lib/autoqueue', ['bin/autoqueue-similarity-service']),
+    ('share/dbus-1/services/', [SERVICE_FILE])]
 
 if os.path.exists('/usr/share/pyshared/quodlibet/plugins/'):
-    data_files.extend(
+    DATA_FILES.extend(
         [('/usr/share/pyshared/quodlibet/plugins/events/',
          ['quodlibet_autoqueue.py']),
         ('/usr/share/pyshared/quodlibet/plugins/songsmenu/',
          ['mirage_songs.py',
           'mirage_miximize.py'])])
 if os.path.exists('/usr/lib/rhythmbox/plugins'):
-    data_files.append(
+    DATA_FILES.append(
         ('/usr/lib/rhythmbox/plugins/rhythmbox_autoqueue',
          ['rhythmbox_autoqueue/rhythmbox_autoqueue.rb-plugin',
           'rhythmbox_autoqueue/__init__.py']),)
 
-if data_files:
+if DATA_FILES:
     optional = {                        # pylint: disable=C0103
-        'data_files': data_files}
+        'data_files': DATA_FILES}
 
 DistUtilsExtra.auto.setup(
     name='autoqueue',
@@ -82,9 +84,6 @@ DistUtilsExtra.auto.setup(
     package_data={'mirage': ['res/*']},
     requires=['scipy', 'ctypes'],
     provides=['mirage', 'autoqueue'],
-    data_files=[
-        ('lib/autoqueue', ['bin/autoqueue-similarity-service']),
-        ('share/dbus-1/services/', [SERVICE_FILE])],
     cmdclass={
         'install': Install,
         'clean': Clean,
