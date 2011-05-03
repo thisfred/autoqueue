@@ -73,13 +73,12 @@ if DATA_FILES:
 
 DistUtilsExtra.auto.setup(
     name='autoqueue',
-    version='1.0alpha1',
+    version='1.0alpha2',
     packages=['autoqueue', 'mirage'],
     license='GNU GPL v2',
     author='Eric Casteleijn',
     author_email='thisfred@gmail.com',
     description='A cross music player plugin that queues similar tracks.',
-    long_description=open('README.txt').read(),
     url='https://launchpad.net/autoqueue',
     package_data={'mirage': ['res/*']},
     requires=['scipy', 'ctypes'],
