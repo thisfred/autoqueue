@@ -20,56 +20,67 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
 
-import os, struct, math
-from decimal import Decimal
-from datetime import datetime
+import math
+import os
+import struct
+
 import cPickle as pickle
+
+from decimal import Decimal
 from cStringIO import StringIO
-from ctypes import *
-import sqlite3
-from scipy import *
+from ctypes import cdll, Structure, POINTER, c_float, c_int, byref
+from scipy import array, fromfile, zeros, dot, single, vectorize
 
 DEBUG = True
 
 
 class MirageAudio(Structure):
+    """Mirage audio."""
     pass
 
-try:
-    cdll.LoadLibrary("/usr/lib/banshee/Extensions/libmirageaudio.so")
-except:
-    cdll.LoadLibrary("/usr/lib/banshee-1/Extensions/libmirageaudio.so")
+# pylint: disable=C0103
 
-libmirageaudio = CDLL("libmirageaudio.so")
+try:
+    libmirageaudio = cdll.LoadLibrary(
+        "/usr/lib/banshee/Extensions/libmirageaudio.so")
+except:  # pylint: disable=W0702
+    libmirageaudio = cdll.LoadLibrary(
+        "/usr/lib/banshee-1/Extensions/libmirageaudio.so")
 
 
 class MatrixDimensionMismatchException(Exception):
+    """Matrix dimension mismatch."""
     pass
 
 
 class MatrixSingularException(Exception):
+    """Matrix singular."""
     pass
 
 
 class MfccFailedException(Exception):
+    """Mfcc failed."""
     pass
 
 
 class ScmsImpossibleException(Exception):
+    """Scms impossible."""
     pass
 
 
 class MirAnalysisImpossibleException(Exception):
+    """Mir analysis impossible."""
     pass
 
 
 class AudioDecoderErrorException(Exception):
+    """Audio decoder error."""
     pass
 
 
 class AudioDecoderCanceledException(Exception):
+    """Audio decoder canceled."""
     pass
-
 
 mirageaudio_initialize = libmirageaudio.mirageaudio_initialize
 mirageaudio_decode = libmirageaudio.mirageaudio_decode
@@ -77,7 +88,9 @@ mirageaudio_decode.restype = POINTER(c_float)
 mirageaudio_destroy = libmirageaudio.mirageaudio_destroy
 mirageaudio_canceldecode = libmirageaudio.mirageaudio_canceldecode
 
+
 def distance(scms1, scms2, scmsconf):
+    """Compute distance between two scmses."""
     val = 0.0
     dim = scmsconf.get_dimension()
     covlen = scmsconf.get_covariance_length()
@@ -95,7 +108,7 @@ def distance(scms1, scms2, scmsconf):
         idx = i * dim - (i * i + i) / 2
         val += s1cov[idx + i] * s2icov[idx + i] + s2cov[idx + i] * s1icov[
             idx + i]
-        for k in range (i+1, dim):
+        for k in range(i + 1, dim):
             val += 2 * s1cov[idx + k] * s2icov[idx + k] + 2 * s2cov[
                 idx + k] * s1icov[idx + k]
 
@@ -115,7 +128,9 @@ def distance(scms1, scms2, scmsconf):
     val = val / 4 - scmsconf.get_dimension() / 2
     return val
 
+
 def gauss_jordan(a, n, b, m):
+    """Gauss Jordan."""
     icol = 0
     irow = 0
     big = Decimal()
@@ -163,7 +178,7 @@ def gauss_jordan(a, n, b, m):
         for ll in range(1, n + 1):
             if ll != icol:
                 dum = a[ll, icol]
-                a [ll, icol] = Decimal(0)
+                a[ll, icol] = Decimal(0)
                 for l in range(1, n + 1):
                     a[ll, l] -= a[icol, l] * dum
                 for l in range(1, m + 1):
@@ -176,37 +191,23 @@ def gauss_jordan(a, n, b, m):
                 a[k, indxc[l]] = temp
 
 
-
 def write_line(string):
+    """Write to console."""
     if not DEBUG:
         return
     print string
 
+
 def write(string):
+    """Write to console."""
     if not DEBUG:
         return
     print string,
 
 
-class DbgTimer(object):
-    def __init__(self):
-        self.startt = 0
-        self.stopt = 0
-        self.time = 0
-
-    def start(self):
-        if not DEBUG:
-            return
-        self.startt = datetime.now()
-
-    def stop(self):
-        if not DEBUG:
-            return
-        self.stopt = datetime.now()
-        self.time = self.stopt - self.startt
-
-
 class AudioDecoder(object):
+    """Audio decoder."""
+
     def __init__(self, rate, seconds, winsize):
         self.seconds = seconds
         self.rate = rate
@@ -215,10 +216,10 @@ class AudioDecoder(object):
             c_int(rate), c_int(seconds), c_int(winsize))
 
     def decode(self, filename):
+        """Decode audio in filename."""
         frames = c_int(0)
         size = c_int(0)
         ret = c_int(0)
-
         data = mirageaudio_decode(
             self.ma, filename, byref(frames), byref(size), byref(ret))
         if ret == -1:
@@ -230,13 +231,12 @@ class AudioDecoder(object):
 
         write_line("Mirage: decoded frames=%s,size=%s" % (frames, size))
 
-
         # build a list of tuples with (value, position), then sort
         # it according to value.
         frameselection = [0.0] * frames.value
         for j in range(frames.value):
             for i in range(size.value):
-                frameselection[j] += data[i*frames.value+j]
+                frameselection[j] += data[i * frames.value + j]
         frameselection = [(frame, i) for i, frame in enumerate(frameselection)]
         frameselection.sort()
         copyframes = frames.value / 2
@@ -244,20 +244,24 @@ class AudioDecoder(object):
         for j in range(copyframes):
             for i in range(size.value):
                 stft.d[i, j] = data[
-                    i*frames.value+frameselection[copyframes+j][1]]
+                    i * frames.value + frameselection[copyframes + j][1]]
         return stft
 
     def cancel_decode(self):
+        """Cancel decoding."""
         mirageaudio_canceldecode(self.ma)
 
 
 class Matrix(object):
+    """Matrix."""
+
     def __init__(self, rows, columns):
         self.rows = rows
         self.columns = columns
         self.d = zeros([rows, columns])
 
     def multiply(self, m2):
+        """Matrix multiplication."""
         if self.columns != m2.rows:
             raise MatrixDimensionMismatchException
         m3 = Matrix(self.rows, m2.columns)
@@ -265,29 +269,13 @@ class Matrix(object):
         return m3
 
     def mean(self):
+        """Matrix mean."""
         mean = Vector(self.rows)
         mean.d = self.d.mean(1)
         return mean
 
-    def mprint(self, rows, columns):
-        print "Rows: %s Columns: %s" % (self.rows, self.columns)
-        print '['
-        for i in range(rows):
-            for j in range(columns):
-                print self.d[i, j],
-            print ";"
-        print ']'
-
-    def print_turn(self, rows, columns):
-        print "Rows: %s Columns: %s" % (self.rows, self.columns)
-        print '['
-        for i in range(columns):
-            for j in range(rows):
-                print self.d[j, i],
-            print ";"
-        print ']'
-
     def covariance(self, mean):
+        """Matrix covariance."""
         cache = Matrix(self.rows, self.columns)
         factor = 1.0 / (self.columns - 1)
         for j in range(self.rows):
@@ -296,22 +284,19 @@ class Matrix(object):
 
         cov = Matrix(mean.rows, mean.rows)
         for i in range(cov.rows):
-            for j in range(i+1):
-                sum = 0.0
+            for j in range(i + 1):
+                total = 0.0
                 for k in range(self.columns):
-                    sum += cache.d[i, k] * cache.d[j, k]
-                sum *= factor
-                cov.d[i, j] = sum
+                    total += cache.d[i, k] * cache.d[j, k]
+                total *= factor
+                cov.d[i, j] = total
                 if i == j:
                     continue
-                cov.d[j, i] = sum
+                cov.d[j, i] = total
         return cov
 
-    def write(self, filename):
-        """we will use pickle, I think"""
-        pass
-
     def load(self, filename):
+        """Load from file."""
         f = open(filename, 'rb')
         thebytes = f.read(4)
         self.rows = struct.unpack('=l', thebytes)[0]
@@ -321,6 +306,7 @@ class Matrix(object):
         self.d = arr.reshape(self.rows, self.columns)
 
     def inverse(self):
+        """Matrix inverse."""
         e = array([Decimal()] * ((self.rows + 1) * (self.columns + 1)))
         e = e.reshape([self.rows + 1, self.columns + 1])
         for i in range(1, self.rows + 1):
@@ -342,200 +328,20 @@ class Matrix(object):
 
 
 class Vector(Matrix):
+    """Vector."""
+
     def __init__(self, rows):
         super(Vector, self).__init__(rows, 1)
 
 
-class Db(object):
-    def __init__(self, path, connection=None):
-        self.dbpath = path
-        self.connection = connection
-
-    def close_database_connection(self, connection):
-        if self.dbpath == ':memory:':
-            return
-        connection.close()
-
-    def get_database_connection(self):
-        if self.dbpath == ':memory:':
-            if not self.connection:
-                self.connection = sqlite3.connect(':memory:')
-                self.connection.text_factory = str
-            return self.connection
-        connection = sqlite3.connect(
-            self.dbpath, timeout=5.0, isolation_level="immediate")
-        return connection
-
-    def add_track(self, filename, scms):
-        connection = self.get_database_connection()
-        connection.execute("INSERT INTO mirage (filename, scms) VALUES (?, ?)",
-                       (filename,
-                        sqlite3.Binary(instance_to_picklestring(scms))))
-        connection.commit()
-        self.close_database_connection(connection)
-
-    def remove_track(self, trackid):
-        connection = self.get_database_connection()
-        connection.execute("DELETE FROM mirage WHERE trackid = ?", (trackid,))
-        connection.commit()
-        self.close_database_connection(connection)
-
-    def remove_tracks(self, trackids):
-        connection = self.get_database_connection()
-        connection.execute("DELETE FROM mirage WHERE trackid IN (%s);" % (
-            ','.join(trackids),))
-        connection.commit()
-        self.close_database_connection(connection)
-
-    def get_track(self, filename):
-        connection = self.get_database_connection()
-        rows = connection.execute(
-            "SELECT trackid, scms FROM mirage WHERE filename = ?", (filename,))
-        for row in rows:
-            self.close_database_connection(connection)
-            return (row[0], instance_from_picklestring(row[1]))
-        self.close_database_connection(connection)
-        return None
-
-    def get_track_id(self, filename):
-        connection = self.get_database_connection()
-        rows = connection.execute(
-            "SELECT trackid FROM mirage WHERE filename = ?", (filename,))
-        for row in rows:
-            self.close_database_connection(connection)
-            return row[0]
-        self.close_database_connection(connection)
-        return None
-
-    def has_scores(self, trackid, no=20):
-        connection = self.get_database_connection()
-        cursor = connection.execute(
-            'SELECT COUNT(*) FROM distance WHERE track_1 = ?',
-            (trackid,))
-        l1 = cursor.fetchone()[0]
-        self.close_database_connection(connection)
-        if l1 < no:
-            print "Only %d connections found, minimum %d." % (l1, no)
-            return False
-        connection = self.get_database_connection()
-        cursor = connection.execute(
-            "SELECT COUNT(track_1) FROM distance WHERE track_2 = ? AND "
-            "distance < (SELECT MAX(distance) FROM distance WHERE track_1 = "
-            "?);", (trackid, trackid))
-        l2 = cursor.fetchone()[0]
-        self.close_database_connection(connection)
-        if l2 > l1:
-            print "Found %d incoming connections and only %d outgoing." % (
-                l2, l1)
-            return False
-        return True
-
-    def get_tracks(self, exclude_ids=None):
-        if not exclude_ids:
-            exclude_ids = []
-        connection = self.get_database_connection()
-        rows = connection.execute(
-            "SELECT scms, trackid FROM mirage WHERE trackid NOT IN (%s);" %
-            ','.join([str(ex) for ex in exclude_ids]))
-        result = [row for row in rows]
-        self.close_database_connection(connection)
-        return result
-
-    def get_all_track_ids(self):
-        connection = self.get_database_connection()
-        rows = connection.execute("SELECT trackid FROM mirage")
-        result = [row[0] for row in rows]
-        self.close_database_connection(connection)
-        return result
-
-    def reset(self):
-        connection = self.get_database_connection()
-        connection.execute("DELETE FROM mirage")
-        connection.commit()
-        self.close_database_connection(connection)
-
-    def add_neighbours(self, trackid, scms, exclude_ids=None, neighbours=20):
-        to_add = neighbours * 2
-        connection = self.get_database_connection()
-        connection.execute(
-            "DELETE FROM distance WHERE track_1 = ?", (trackid,))
-        connection.commit()
-        self.close_database_connection(connection)
-        yield
-        if not exclude_ids:
-            exclude_ids = []
-        c = ScmsConfiguration(20)
-        best = []
-        for buf, otherid in self.get_tracks(
-            exclude_ids=exclude_ids):
-            if trackid == otherid:
-                yield
-                continue
-            other = instance_from_picklestring(buf)
-            dist = int(distance(scms, other, c) * 1000)
-            if dist < 0:
-                yield
-                continue
-            if len(best) > to_add - 1:
-                if dist > best[-1][0]:
-                    yield
-                    continue
-            best.append((dist, trackid, otherid))
-            best.sort()
-            while len(best) > to_add:
-                best.pop()
-            yield
-        added = 0
-        if best:
-            connection = self.get_database_connection()
-            while best:
-                added += 1
-                best_tup = best.pop()
-                try:
-                    connection.execute(
-                        "INSERT INTO distance (distance, track_1, track_2) "
-                        "VALUES (?, ?, ?)", best_tup)
-                except OverFlowError:
-                    print "SNAFU:", repr(best_tup)
-            connection.commit()
-            self.close_database_connection(connection)
-        print "added %d connections" % added
-
-    def compare(self, id1, id2):
-        c = ScmsConfiguration(20)
-        t1 = self.get_track(id1)[1]
-        t2 = self.get_track(id2)[1]
-        return int(distance(t1, t2, c) * 1000)
-
-    def get_filename(self, trackid):
-        connection = self.get_database_connection()
-        rows = connection.execute(
-            'SELECT filename FROM mirage WHERE trackid = ?', (trackid, ))
-        filename = None
-        for row in rows:
-            try:
-                filename = unicode(row[0], 'utf-8')
-            except UnicodeDecodeError:
-                break
-            break
-        connection.close()
-        return filename
-
-    def get_neighbours(self, trackid):
-        connection = self.get_database_connection()
-        neighbours = [row for row in connection.execute(
-            "SELECT distance, track_2 FROM distance WHERE track_1 = ? "
-            "ORDER BY distance ASC",
-            (trackid,))]
-        self.close_database_connection(connection)
-        return neighbours
-
 class Mfcc(object):
+    """Mfcc."""
+
     def __init__(self, winsize, srate, filters, cc):
-        here = os.path.dirname( __file__)
-        self.dct = Matrix(1,1)
+        here = os.path.dirname(__file__)
+        self.dct = Matrix(1, 1)
         self.dct.load(os.path.join(here, 'res', 'dct.filter'))
-        self.filterweights = Matrix(1,1)
+        self.filterweights = Matrix(1, 1)
         self.filterweights.load(os.path.join(
             here, 'res', 'filterweights.filter'))
 
@@ -552,60 +358,73 @@ class Mfcc(object):
                     self.fwft[i][1] = self.filterweights.columns
 
     def apply(self, m):
+        """Apply matrix."""
+
         def f(x):
+            """Function."""
             if x < 1.0:
                 return 0.0
             return 10.0 * math.log10(x)
         vf = vectorize(f)
 
-        t = DbgTimer()
-        t.start()
         mel = Matrix(self.filterweights.rows, m.columns)
         try:
+            # pylint: disable=E0602
             mel.d = mel.d + dot(self.filterweights.d, m.d)
+            # pylint: enable=E0602
         except ValueError:
             raise MfccFailedException
         mel.d = vf(mel.d)
 
         try:
             mfcc = self.dct.multiply(mel)
-            t.stop()
-            write_line("Mirage: mfcc Execution Time: %s" % t.time)
             return mfcc
         except MatrixDimensionMismatchException:
             raise MfccFailedException
 
 
 def instance_from_picklestring(picklestring):
+    """Read from pickle."""
     f = StringIO(picklestring)
     return pickle.load(f)
 
+
 def instance_to_picklestring(instance):
+    """Write to pickle."""
     f = StringIO()
     pickle.dump(instance, f, protocol=2)
     return f.getvalue()
 
+
 class ScmsConfiguration(object):
+    """Scms configuration."""
+
     def __init__(self, dimension):
         self.dim = dimension
         self.covlen = (self.dim * self.dim + self.dim) / 2
-        self.mdiff = zeros([self.dim])
-        self.aicov = zeros([self.covlen])
+        self.mdiff = zeros([self.dim])  # pylint: disable=E0602
+        self.aicov = zeros([self.covlen])  # pylint: disable=E0602
 
     def get_dimension(self):
+        """Return dimension."""
         return self.dim
 
     def get_covariance_length(self):
+        """Get covariance length."""
         return self.covlen
 
     def get_add_inverse_covariance(self):
+        """Get add inverse covariance."""
         return self.aicov
 
     def get_mean_diff(self):
+        """Get mean diff."""
         return self.mdiff
 
 
 class Scms(object):
+    """Scms."""
+
     def __init__(self, dim):
         self.mean = []
         self.cov = []
@@ -615,11 +434,9 @@ class Scms(object):
 
 
 def scms_factory(mfcc):
-    t = DbgTimer()
-    t.start()
+    """Scms factory."""
 
     m = mfcc.mean()
-
     c = mfcc.covariance(m)
 
     try:
@@ -634,12 +451,12 @@ def scms_factory(mfcc):
         for j in range(i, dim):
             s.cov.append(c.d[i, j])
             s.icov.append(ic.d[i, j])
-    t.stop()
-    write_line("Mirage: scms created in: %s" % t.time)
     return s
 
 
 class Mir(object):
+    """Mirage analysis class."""
+
     def __init__(self):
         self.samplingrate = 22050
         self.windowsize = 1024
@@ -654,15 +471,12 @@ class Mir(object):
             self.samplingrate, self.secondstoanalyze, self.windowsize)
 
     def cancel_analyze(self):
+        """Cancel analysis."""
         self.ad.cancel_decode()
 
     def analyze(self, filename):
-        t = DbgTimer()
-        t.start()
-
+        """Analyze file."""
         stftdata = self.ad.decode(filename)
         mfccdata = self.mfcc.apply(stftdata)
         scms = scms_factory(mfccdata)
-
-        t.stop()
         return scms

@@ -21,22 +21,10 @@ from mirage import Mir
 
 import gst
 
-# If you change even a single character of code, I would ask that you
-# get and use your own (free) api key from last.fm here:
-# http://www.last.fm/api/account
-API_KEY = "09d0975a99a4cab235b731d31abf0057"
-
-TRACK_URL = "http://ws.audioscrobbler.com/2.0/?method=track.getsimilar" \
-            "&artist=%s&track=%s&api_key=" + API_KEY
-ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
-             "&artist=%s&api_key=" + API_KEY
 INT_SETTINGS = {
     'artist_block_time': {
         'value': 1,
         'label': 'block artist (days)'},
-    'track_block_time': {
-        'value': 90,
-        'label': 'block track (days)'},
     'desired_queue_length': {
         'value': 4440,
         'label': 'queue (seconds)'},
@@ -46,30 +34,17 @@ INT_SETTINGS = {
     }
 
 BOOL_SETTINGS = {
-    'by_mirage': {
-        'value': False,
-        'label': 'use mirage'},
-    'by_tracks': {
-        'value': True,
-        'label': 'by track'},
-    'by_artists': {
-        'value': True,
-        'label': 'by artist'},
-    'by_tags': {
-        'value': True,
-        'label': 'by tags'},
     'verbose': {
         'value': False,
         'label': 'log to console'},
-    'weed': {
-        'value': False,
-        'label': 'keep db clean'},
     }
 STR_SETTINGS = {
     'restrictions': {
         'value': '',
         'label': 'restrict'},
     }
+
+NO_OP = lambda *a, **kw: None
 
 
 def escape(the_string):
@@ -178,18 +153,10 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         self.on_song_started(ssong)
 
     def plugin_on_removed(self, songs):
-        if not self.weed:
-            return
-        rartists = []
-        rtitles = []
-        rfilenames = []
         for song in songs:
-            rartists.append(Song(song).get_artist())
-            rtitles.append(Song(song).get_title())
-            rfilenames.append(Song(song).get_filename())
-        self.prune_artists.extend(rartists)
-        self.prune_titles.extend(rtitles)
-        self.prune_filenames.extend(rfilenames)
+            self.similarity.remove_track_by_filename(
+                song('~filename'), reply_handler=NO_OP,
+                error_handler=self.error_handler)
 
     def PluginPreferences(self, parent):
         def bool_changed(widget):
