@@ -56,14 +56,14 @@ DATA_FILES = [
 
 if os.path.exists('/usr/share/pyshared/quodlibet/plugins/'):
     DATA_FILES.extend(
-        [('/usr/share/pyshared/quodlibet/plugins/events/',
+        [('share/pyshared/quodlibet/plugins/events/',
          ['quodlibet_autoqueue.py']),
-        ('/usr/share/pyshared/quodlibet/plugins/songsmenu/',
+        ('share/pyshared/quodlibet/plugins/songsmenu/',
          ['mirage_songs.py',
           'mirage_miximize.py'])])
 if os.path.exists('/usr/lib/rhythmbox/plugins'):
     DATA_FILES.append(
-        ('/usr/lib/rhythmbox/plugins/rhythmbox_autoqueue',
+        ('lib/rhythmbox/plugins/rhythmbox_autoqueue',
          ['rhythmbox_autoqueue/rhythmbox_autoqueue.rb-plugin',
           'rhythmbox_autoqueue/__init__.py']),)
 
