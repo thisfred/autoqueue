@@ -73,7 +73,7 @@ if DATA_FILES:
 
 DistUtilsExtra.auto.setup(
     name='autoqueue',
-    version='1.0.0alpha4',
+    version='1.0.0alpha5',
     packages=['autoqueue', 'mirage'],
     license='GNU GPL v2',
     author='Eric Casteleijn',
