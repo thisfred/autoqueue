@@ -1,53 +1,42 @@
-import unittest, sqlite3
-from mirage import Mir, Matrix, Db, ScmsConfiguration
+"""Tests for mirage."""
+import unittest
+from mirage import Mir, Matrix, ScmsConfiguration
 from mirage import distance
 from decimal import Decimal, getcontext
 
 import gst
 
-mir = Mir()
+MIR = Mir()
 
-filenames = [
+FILENAMES = [
     'mirage/tests/testfiles/test.mp3',
     'mirage/tests/testfiles/test2.mp3',
     'mirage/tests/testfiles/test3.ogg',
     'mirage/tests/testfiles/test4.ogg',
     'mirage/tests/testfiles/test5.ogg']
 
-scmses = {}
+SCMSES = {}
 
-for filename in filenames:
-    scmses[filename] = mir.analyze(filename)
+for filename in FILENAMES:
+    SCMSES[filename] = MIR.analyze(filename)
 
-scms = scmses[filenames[0]]
-scms2 = scmses[filenames[1]]
-scms3 = scmses[filenames[2]]
-scms4 = scmses[filenames[3]]
-scms5 = scmses[filenames[4]]
+SCMS = SCMSES[FILENAMES[0]]
+SCMS2 = SCMSES[FILENAMES[1]]
+SCMS3 = SCMSES[FILENAMES[2]]
+SCMS4 = SCMSES[FILENAMES[3]]
+SCMS5 = SCMSES[FILENAMES[4]]
+
 
 def decimize(f):
+    """Convert to decimal."""
     return Decimal(str(f))
 
 
 class TestMir(unittest.TestCase):
-    def setUp(self):
-        connection = sqlite3.connect(":memory:")
-        self.db = Db(":memory:", connection=connection)
-        connection.execute(
-            'CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, '
-            'filename VARCHAR(300), scms BLOB)')
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
-            "INTEGER, distance INTEGER)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS mfnx ON mirage (filename)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS dtrack1x ON distance (track_1)")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS dtrack2x ON distance (track_2)")
-        connection.commit()
+    """Test mirage analysis and comparison."""
 
     def test_matrix(self):
+        """Test the matrix object."""
         getcontext().prec = 6
         mat = Matrix(8, 5)
         for i in range(mat.rows):
@@ -65,6 +54,7 @@ class TestMir(unittest.TestCase):
              0.875, 1.0, 1.125, 1.25, 1.375]])
 
     def test_multiply(self):
+        """Test matrix multiplication."""
         getcontext().prec = 6
         mat = Matrix(8, 5)
         for i in range(mat.rows):
@@ -88,81 +78,35 @@ class TestMir(unittest.TestCase):
              0.0, 2.3375, 4.675, 7.0125]])
 
     def test_analysis(self):
-        c = ScmsConfiguration(20)
+        """Test mirage analysis."""
+        conf = ScmsConfiguration(20)
 
-        self.assertEqual(0, int(distance(scms, scms, c)))
-        self.assertEqual(75, int(distance(scms, scms2, c)))
-        self.assertEqual(52, int(distance(scms, scms3, c)))
-        self.assertEqual(69, int(distance(scms, scms4, c)))
-        self.assertEqual(240, int(distance(scms, scms5, c)))
+        self.assertEqual(0, int(distance(SCMS, SCMS, conf)))
+        self.assertEqual(75, int(distance(SCMS, SCMS2, conf)))
+        self.assertEqual(52, int(distance(SCMS, SCMS3, conf)))
+        self.assertEqual(69, int(distance(SCMS, SCMS4, conf)))
+        self.assertEqual(240, int(distance(SCMS, SCMS5, conf)))
 
-        self.assertEqual(75, int(distance(scms2, scms, c)))
-        self.assertEqual(0, int(distance(scms2, scms2, c)))
-        self.assertEqual(16, int(distance(scms2, scms3, c)))
-        self.assertEqual(59, int(distance(scms2, scms4, c)))
-        self.assertEqual(124, int(distance(scms2, scms5, c)))
+        self.assertEqual(75, int(distance(SCMS2, SCMS, conf)))
+        self.assertEqual(0, int(distance(SCMS2, SCMS2, conf)))
+        self.assertEqual(16, int(distance(SCMS2, SCMS3, conf)))
+        self.assertEqual(59, int(distance(SCMS2, SCMS4, conf)))
+        self.assertEqual(124, int(distance(SCMS2, SCMS5, conf)))
 
-        self.assertEqual(52, int(distance(scms3, scms, c)))
-        self.assertEqual(16, int(distance(scms3, scms2, c)))
-        self.assertEqual(0, int(distance(scms3, scms3, c)))
-        self.assertEqual(49, int(distance(scms3, scms4, c)))
-        self.assertEqual(84, int(distance(scms3, scms5, c)))
+        self.assertEqual(52, int(distance(SCMS3, SCMS, conf)))
+        self.assertEqual(16, int(distance(SCMS3, SCMS2, conf)))
+        self.assertEqual(0, int(distance(SCMS3, SCMS3, conf)))
+        self.assertEqual(49, int(distance(SCMS3, SCMS4, conf)))
+        self.assertEqual(84, int(distance(SCMS3, SCMS5, conf)))
 
-        self.assertEqual(69, int(distance(scms4, scms, c)))
-        self.assertEqual(59, int(distance(scms4, scms2, c)))
-        self.assertEqual(49, int(distance(scms4, scms3, c)))
-        self.assertEqual(0, int(distance(scms4, scms4, c)))
-        self.assertEqual(124, int(distance(scms4, scms5, c)))
+        self.assertEqual(69, int(distance(SCMS4, SCMS, conf)))
+        self.assertEqual(59, int(distance(SCMS4, SCMS2, conf)))
+        self.assertEqual(49, int(distance(SCMS4, SCMS3, conf)))
+        self.assertEqual(0, int(distance(SCMS4, SCMS4, conf)))
+        self.assertEqual(124, int(distance(SCMS4, SCMS5, conf)))
 
-        self.assertEqual(240, int(distance(scms5, scms, c)))
-        self.assertEqual(124, int(distance(scms5, scms2, c)))
-        self.assertEqual(84, int(distance(scms5, scms3, c)))
-        self.assertEqual(124, int(distance(scms5, scms4, c)))
-        self.assertEqual(0, int(distance(scms5, scms5, c)))
-
-    def test_add_track(self):
-        for filename in filenames:
-            self.db.add_track(filename, scmses[filename])
-        self.assertEqual(
-            [1,2,3,4,5],
-            sorted([id for (scms, id) in
-                    self.db.get_tracks()]))
-        self.assertEqual(
-            [1,2,5],
-            sorted([id for (scms, id) in
-                    self.db.get_tracks(exclude_ids=['3','4'])]))
-
-    def test_get_track(self):
-        for filename in filenames:
-            self.db.add_track(filename, scmses[filename])
-        scms3_db = self.db.get_track(filenames[2])[1]
-        scms4_db = self.db.get_track(filenames[3])[1]
-        c = ScmsConfiguration(20)
-        self.assertEqual(49, int(distance(scms3_db, scms4_db, c)))
-
-    def test_add_neighbours(self):
-        for filename in filenames:
-            testscms = scmses[filename]
-            self.db.add_track(filename, testscms)
-            track_id = self.db.get_track_id(filename)
-            for dummy in self.db.add_neighbours(track_id, testscms):
-                pass
-        connection = self.db.get_database_connection()
-        distances = [
-            row for row in connection.execute("SELECT * FROM distance")]
-        self.assertEqual(
-            [(2, 1, 75208), (3, 1, 52895), (3, 2, 16559), (4, 1, 69194),
-             (4, 2, 59488), (4, 3, 49652), (5, 1, 240408), (5, 4, 124490),
-             (5, 2, 124272), (5, 3, 84228)],
-            distances)
-
-    def test_get_neighbours(self):
-        for filename in filenames:
-            testscms = scmses[filename]
-            self.db.add_track(filename, testscms)
-            track_id = self.db.get_track_id(filename)
-            for dummy in self.db.add_neighbours(track_id, testscms):
-                pass
-        self.assertEqual(
-            [(84228, 3), (124272, 2), (124490, 4), (240408, 1)],
-            [a for a in self.db.get_neighbours(5)])
+        self.assertEqual(240, int(distance(SCMS5, SCMS, conf)))
+        self.assertEqual(124, int(distance(SCMS5, SCMS2, conf)))
+        self.assertEqual(84, int(distance(SCMS5, SCMS3, conf)))
+        self.assertEqual(124, int(distance(SCMS5, SCMS4, conf)))
+        self.assertEqual(0, int(distance(SCMS5, SCMS5, conf)))
