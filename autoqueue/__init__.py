@@ -75,10 +75,6 @@ class SongBase(object):
         """Return filename for the song."""
 
     @abstractmethod
-    def get_length(self):
-        """Return length in seconds."""
-
-    @abstractmethod
     def get_last_started(self):
         """Return the datetime the song was last played."""
 
@@ -162,7 +158,7 @@ class AutoQueueBase(object):
         self.running = False
         self.log('Error handler received: %r, %r' % (args, kwargs))
 
-    def player_get_cache_dir(self):
+    def get_cache_dir(self):
         """Get the directory to store temporary data.
 
         Defaults to $XDG_CACHE_HOME/autoqueue on Gnome.
@@ -180,7 +176,7 @@ class AutoQueueBase(object):
     def get_blocked_artists_pickle(self):
         """Read the list of blocked artists from disk."""
         dump = os.path.join(
-            self.player_get_cache_dir(), "autoqueue_block_cache")
+            self.get_cache_dir(), "autoqueue_block_cache")
         try:
             pickle = open(dump, 'r')
             try:
@@ -206,7 +202,7 @@ class AutoQueueBase(object):
             artist_name,
             len(self._blocked_artists)))
         dump = os.path.join(
-            self.player_get_cache_dir(), "autoqueue_block_cache")
+            self.get_cache_dir(), "autoqueue_block_cache")
         try:
             os.remove(dump)
         except OSError:
