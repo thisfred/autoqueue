@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
+"""Tests for autoqueue."""
 import gobject
-import sqlite3
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime
 from xml.dom import minidom
-from autoqueue import SongBase, AutoQueueBase, Throttle
+from collections import deque
+from autoqueue import SongBase, AutoQueueBase
+
 
 # we have to do this or the tests break badly
 gobject.threads_init()
 
-WAIT_BETWEEN_REQUESTS = timedelta(0,0,10)
 
 FAKE_RESPONSES = {
     'http://ws.audioscrobbler.com/2.0/?method=track.getsimilar&artist='
@@ -31,6 +32,7 @@ FAKE_RESPONSES = {
 
 
 class FakePlayer(object):
+    """Fake music player object."""
     def __init__(self, plugin_on_song_started):
         self.queue = []
         self.library = [
@@ -56,7 +58,8 @@ class FakePlayer(object):
         self.plugin_on_song_started = plugin_on_song_started
 
     def satisfies_criteria(self, song, criteria):
-        positions = {'artist':0, 'title':1, 'tags':2}
+        """Check that song satisfies search criteria."""
+        positions = {'artist': 0, 'title': 1, 'tags': 2}
         for criterium in criteria:
             if criterium.startswith('not_'):
                 ncriterium = criterium.split("_")[1]
@@ -67,7 +70,6 @@ class FakePlayer(object):
                         song[positions[ncriterium]]):
                         return False
                 else:
-                    #print song, criteria
                     if song[positions[ncriterium]] in criteria[criterium]:
                         return False
             else:
@@ -83,12 +85,16 @@ class FakePlayer(object):
         return True
 
     def play_song_from_queue(self):
+        """Fake playing a song from the queue."""
         func = self.plugin_on_song_started
         queue_song = self.queue.pop(0)
         func(queue_song)
 
 
 class FakeSong(SongBase):
+    """Fake song object."""
+
+    # pylint: disable=W0231
     def __init__(self, artist, title, tags=None, performers=None,
                  filename=None):
         self.filename = filename
@@ -96,6 +102,7 @@ class FakeSong(SongBase):
         self.title = title
         self.tags = tags
         self.performers = performers or []
+    # pylint: enable=W0231
 
     def get_artist(self):
         return self.artist.lower()
@@ -127,11 +134,69 @@ class FakeSong(SongBase):
         return .5
 
 
+class FakeSimilarityService(object):
+    """Fake similarity Service implementation."""
+
+    def analyze_track(self, filename, add_neighbours, exclude_filenames,
+                      priority, reply_handler=None, error_handler=None,
+                      timeout=0):
+        """Fake analyze."""
+        reply_handler()
+
+    def get_ordered_mirage_tracks(self, filename, reply_handler=None,
+                                  error_handler=None, timeout=0):
+        """Fake get_ordered_mirage_tracks."""
+        reply_handler([])
+
+    def get_ordered_similar_tracks(self, artist_name, title,
+                                   reply_handler=None, error_handler=None,
+                                   timeout=0):
+        """Fake get similar tracks."""
+        reply_handler([(715, 'joanna newsom', 'peach, plum, pear')])
+
+    def last_fm_request(self, url):
+        """Fake last.fm request."""
+        urlfile = FAKE_RESPONSES.get(url)
+        if not urlfile:
+            return None
+        stream = open(urlfile, 'r')
+        try:
+            xmldoc = minidom.parse(stream).documentElement
+            return xmldoc
+        except:  # pylint: disable=W0702
+            return None
+
+
 class FakeAutoQueue(AutoQueueBase):
-    def __init__(self):
+    """Fake autoqueue plugin implementation."""
+
+    def __init__(self):                 # pylint: disable=W0231
         self.connection = None
         self.player = FakePlayer(self.start)
-        super(FakeAutoQueue, self).__init__()
+        self.artist_block_time = 1
+        self._blocked_artists = deque([])
+        self._blocked_artists_times = deque([])
+        self._cache_dir = None
+        self.desired_queue_length = 0
+        self.cached_misses = deque([])
+        self.by_mirage = False
+        self.by_tracks = True
+        self.by_artists = True
+        self.by_tags = True
+        self.running = False
+        self.verbose = False
+        self.weed = False
+        self.song = None
+        self.restrictions = None
+        self.prune_artists = []
+        self.prune_titles = []
+        self.prune_filenames = []
+        self._rows = []
+        self._nrows = []
+        self.last_songs = []
+        self.last_song = None
+        self.found = None
+        self.similarity = FakeSimilarityService()
         self.by_tags = True
         self.verbose = True
 
@@ -139,18 +204,14 @@ class FakeAutoQueue(AutoQueueBase):
         """Simulate song start."""
         self.on_song_started(song)
 
-    def get_db_path(self):
-        return ":memory:"
-
-    def get_database_connection(self):
-        if self.connection:
-            return self.connection
-        self.connection = sqlite3.connect(":memory:")
-        return self.connection
-
-    def close_database_connection(self, connection):
-        """Close the database connection."""
-        pass
+    def block_artist(self, artist_name):
+        """Block songs by artist from being played for a while."""
+        now = datetime.now()
+        self._blocked_artists.append(artist_name)
+        self._blocked_artists_times.append(now)
+        self.log("Blocked artist: %s (%s)" % (
+            artist_name,
+            len(self._blocked_artists)))
 
     def player_construct_file_search(self, filename, restrictions=None):
         """Construct a search that looks for songs with this artist
@@ -205,250 +266,26 @@ class FakeAutoQueue(AutoQueueBase):
         """Return (wrapped) song objects for the songs in the queue."""
         return self.player.queue
 
-    def last_fm_request(self, url):
-        urlfile = FAKE_RESPONSES.get(url)
-        if not urlfile:
-            return None
-        stream = open(urlfile, 'r')
-        try:
-            xmldoc = minidom.parse(stream).documentElement
-            return xmldoc
-        except:
-            return None
-
-    def analyze_track(self, song, add_neighbours=False):
-        yield
-
-
-@Throttle(WAIT_BETWEEN_REQUESTS)
-def throttled_method():
-    return
-
-
-@Throttle(timedelta(0))
-def unthrottled_method():
-    return
-
 
 class TestAutoQueue(unittest.TestCase):
+    """Test autoqueue functionality."""
+
     def setUp(self):
         self.autoqueue = FakeAutoQueue()
 
-    def test_get_database_connection(self):
-        connection = self.autoqueue.get_database_connection()
-        cursor = connection.cursor()
-        cursor.execute("SELECT * FROM tracks;")
-        rows = cursor.fetchall()
-        self.assertEqual([], rows)
-
-    def test_get_artist(self):
-        artist = 'joni mitchell'
-        row = self.autoqueue.get_artist(artist)
-        self.assertEqual((artist, None), row[1:])
-
-    def test_get_track(self):
-        artist = "nina simone"
-        title = "i think it's going to rain today"
-        artist_id = self.autoqueue.get_artist(artist)[0]
-        row = self.autoqueue.get_track(artist, title)
-        self.assertEqual((artist_id, title, None), row[1:])
-
-    def test_get_similar_artists_from_lastfm(self):
-        artist = 'joni mitchell'
-        artist_id = self.autoqueue.get_artist(artist)
-        similar_artists = self.autoqueue.get_similar_artists_from_lastfm(
-            artist, artist_id)
-        td = [
-            {'score': 10000, 'artist': u'rickie lee jones'},
-            {'score': 9271, 'artist': u'carole king'},
-            {'score': 8669, 'artist': u'ani difranco'},
-            {'score': 8127, 'artist': u'joan baez'},
-            {'score': 7473, 'artist': u'neil young'},
-            {'score': 7051, 'artist': u'martha wainwright'},
-            {'score': 7044, 'artist': u'indigo girls'},
-            {'score': 6880, 'artist': u'james taylor'},
-            {'score': 6705, 'artist': u'paul simon'},
-            {'score': 6677, 'artist': u'dar williams'},
-            {'score': 6404, 'artist': u'crosby, stills, nash & young'},
-            {'score': 6229, 'artist': u'k.d. lang'},
-            {'score': 6151, 'artist': u'simon & garfunkel'},
-            {'score': 6064, 'artist': u'joan armatrading'},
-            {'score': 5959, 'artist': u'patty griffin'},
-            {'score': 5883, 'artist': u'leonard cohen'},
-            {'score': 5840, 'artist': u'tim buckley'},
-            {'score': 5702, 'artist': u'suzanne vega'},
-            {'score': 5649, 'artist': u'janis ian'},
-            {'score': 5591, 'artist': u'kate bush'},
-            {'score': 5555, 'artist': u'cat stevens'},
-            {'score': 5477, 'artist': u'neil young & crazy horse'}]
-        sim = [track for track in similar_artists][:22]
-        self.assertEqual(td, sim)
-        artist = u'habib koité & bamada'
-        row = self.autoqueue.get_artist(artist)
-        artist_id = row[0]
-        similar_artists = self.autoqueue.get_similar_artists_from_lastfm(
-            artist, artist_id)
-        sim = [track for track in similar_artists][:22]
-        td = [
-            {'score': 10000, 'artist': u'salif keita'},
-            {'score': 9536, 'artist': u'mamou sidib\xe9'},
-            {'score': 9330, 'artist': u'k\xe9l\xe9tigui diabat\xe9'},
-            {'score': 9058, 'artist': u'ali farka tour\xe9'},
-            {'score': 8917, 'artist': u'habib koit\xe9'},
-            {'score': 8569, 'artist': u'amadou & mariam'},
-            {'score': 5950, 'artist': u'tinariwen'},
-            {'score': 5826, 'artist': u'boubacar traor\xe9'},
-            {'score': 5371, 'artist': u'oliver mtukudzi'},
-            {'score': 381, 'artist': u'super rail band'},
-            {'score': 359, 'artist': u'lobi traor\xe9'},
-            {'score': 358,
-              'artist': u'ali farka tour\xe9 & toumani diabat\xe9'},
-            {'score': 358, 'artist': u'tartit'},
-            {'score': 355, 'artist': u'issa bagayogo'},
-            {'score': 349, 'artist': u'kasse mady diabate'},
-            {'score': 347, 'artist': u'rokia traor\xe9'},
-            {'score': 346, 'artist': u'daby tour\xe9'},
-            {'score': 346, 'artist': u'oumou sangar\xe9'},
-            {'score': 340, 'artist': u'luciana souza'},
-            {'score': 337, 'artist': u'kandia kouyate'},
-            {'score': 326,
-              'artist': u'ali farka tour\xe9 and ry cooder'},
-            {'score': 318, 'artist': u'sali sidibe'}]
-        self.assertEqual(td, sim)
-
-    def test_get_similar_tracks_from_lastfm(self):
-        artist = 'nina simone'
-        title = "i think it's going to rain today"
-        track = self.autoqueue.get_track(artist, title)
-        track_id = track[0]
-        similar_tracks = self.autoqueue.get_similar_tracks_from_lastfm(
-            artist, title, track_id)
-        td = [{'title': u'how long has this been going o',
-                'score': 447, 'artist': u'ella fitzgerald'},
-               {'title': u'our love is here to stay', 'score': 446,
-                'artist': u'dinah washington'},
-               {'title': u'love for sale', 'score': 444,
-                'artist': u'dinah washington'},
-               {'title': u'will i find my love today?', 'score': 443,
-                'artist': u'marlena shaw'},
-               {'title': u'a couple of loosers', 'score': 443,
-                'artist': u'marlena shaw'},
-               {'title': u'reasons', 'score': 438,
-                'artist': u'minnie riperton'},
-               {'title': u'sorry (digitally remastered 02)',
-                'score': 438,
-                'artist': u'natalie cole'},
-               {'title': u'stand by (digitally remastered 02)',
-                'score': 438, 'artist': u'natalie cole'},
-               {'title': u'adventures in paradise', 'score': 436,
-                'artist': u'minnie riperton'},
-               {'title': u"i've got my love to keep me wa", 'score': 436,
-                'artist': u'ella fitzgerald'},
-               {'title': u'find him', 'score': 428,
-                'artist': u'cassandra wilson'},
-               {'title': u'almost like being in love (lp version)',
-                'score': 428, 'artist': u'della reese'},
-               {'title': u'jacaranda bougainvillea', 'score': 426,
-                'artist': u'al jarreau'},
-               {'title': u'mellow mood', 'score': 426,
-                'artist': u'jimmy smith and wes montgomery'}]
-        sim = [track for track in similar_tracks][:14]
-        self.assertEqual(td, sim)
-
-    def test_get_ordered_similar_artists(self):
-        song = FakeSong('nina simone', 'ne me quitte pas')
-        artist = song.get_artist()
-        similar_artists = self.autoqueue.get_ordered_similar_artists(song)
-        td = [
-            {'score': 10000, 'artist': u'billie holiday'},
-            {'score': 7934, 'artist': u'ella fitzgerald'},
-            {'score': 7402, 'artist': u'sarah vaughan'},
-            {'score': 6731, 'artist': u'dinah washington'},
-            {'score': 6518, 'artist': u'madeleine peyroux'},
-            {'score': 6042, 'artist': u'etta james'},
-            {'score': 5065, 'artist': u'peggy lee'},
-            {'score': 4984, 'artist': u'julie london'},
-            {'score': 4905,
-                     'artist': u'ella fitzgerald & louis armstrong'},
-            {'score': 4887, 'artist': u'blossom dearie'}]
-        for i, item in enumerate(td):
-            self.assertEqual(td[i], similar_artists.next())
-        row = self.autoqueue.get_artist(artist)
-        self.assertEqual((artist, None), row[1:])
-        artist = 'dionne warwick'
-        row = self.autoqueue.get_artist(artist)
-        self.assertEqual((artist, None), row[1:])
-
-    def test_get_ordered_similar_tracks(self):
-        song = FakeSong('joni mitchell', 'carey')
-        artist = song.get_artist()
-        title = song.get_title()
-        similar_tracks = self.autoqueue.get_ordered_similar_tracks(song)
-        td = [
-            {'title': u'things behind the sun', 'score': 838,
-             'artist': u'nick drake'},
-            {'title': u'horn', 'score': 807, 'artist': u'nick drake'},
-            {'title': u'peach, plum, pear', 'score': 715,
-             'artist': u'joanna newsom'},
-            {'title': u'suzanne', 'score': 700,
-             'artist': u'leonard cohen'},
-            {'title': u'sprout and the bean', 'score': 691,
-             'artist': u'joanna newsom'},
-            {'title': u"blowin' in the wind", 'score': 664,
-             'artist': u'bob dylan'},
-            {'title': u'famous blue raincoat', 'score': 635,
-             'artist': u'leonard cohen'},
-            {'title': u'song for the asking', 'score': 598,
-             'artist': u'simon & garfunkel'},
-            {'title': u"the times they are a-changin'", 'score': 593,
-             'artist': u'bob dylan'},
-            {'title': u'keep the customer satisfied', 'score': 535,
-             'artist': u'simon & garfunkel'},
-            {'title': u'peace train', 'score': 520,
-             'artist': u'cat stevens'},
-            {'title': u'fire and rain', 'score': 511,
-             'artist': u'james taylor'},
-            {'title': u'enough to be on your way', 'score': 451,
-             'artist': u'james taylor'},
-            {'title': u"that's the spirit", 'score': 449,
-             'artist': u'judee sill'}]
-        sim = [track for track in similar_tracks][:14]
-        self.assertEqual(td, sim)
-        artist_id = self.autoqueue.get_artist(artist)[0]
-        row = self.autoqueue.get_track(artist, title)
-        self.assertEqual((artist_id, title, None), row[1:])
-        artist = 'leonard cohen'
-        title = 'suzanne'
-        artist_id = self.autoqueue.get_artist(artist)[0]
-        row = self.autoqueue.get_track(artist, title)
-        self.assertEqual((artist_id, title, None), row[1:])
-
     def test_queue_needs_songs(self):
+        """Test the queue_needs_songs method."""
         self.autoqueue.desired_queue_length = 4
         self.assertEqual(True, self.autoqueue.queue_needs_songs())
         test_song = FakeSong('Joni Mitchell', 'Carey')
-        for i in range(4):
+        for _ in range(4):
             self.autoqueue.player_enqueue(test_song)
         self.assertEqual(False, self.autoqueue.queue_needs_songs())
 
     def test_on_song_started(self):
+        """Test the on_song_started handler."""
         test_song = FakeSong('Joni Mitchell', 'Carey')
         self.autoqueue.start(test_song)
         songs_in_queue = self.autoqueue.player_get_songs_in_queue()
         self.assertEqual('joanna newsom', songs_in_queue[0].get_artist())
         self.assertEqual('peach, plum, pear', songs_in_queue[0].get_title())
-
-
-class TestThrottle(unittest.TestCase):
-    """Test the throttle decorator."""
-
-    def test_throttle(self):
-        """Test throttling."""
-        now = datetime.now()
-        times = 0
-        while True:
-            throttled_method()
-            times += 1
-            if datetime.now() > (now + timedelta(0, 0, 1000)):
-                break
-        self.assertEqual(True, times < 100)

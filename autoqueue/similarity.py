@@ -1,5 +1,7 @@
 """Autoqueue similarity service."""
 
+# TODO: real logging
+
 import dbus
 import dbus.service
 import gobject
@@ -32,7 +34,7 @@ except ImportError:
 DBusGMainLoop(set_as_default=True)
 
 DBUS_BUSNAME = 'org.autoqueue'
-DBUS_IFACE = 'org.autoqueue.SimilarityInterface'
+IFACE = 'org.autoqueue.SimilarityInterface'
 DBUS_PATH = '/org/autoqueue/Similarity'
 
 # If you change even a single character of code, I would ask that you
@@ -86,18 +88,18 @@ class DatabaseWrapper(Thread):
 
     def set_path(self, path):
         """Set the database path."""
-        self.path = path
+        self.path = path                # pylint: disable=W0201
 
     def set_queue(self, queue):
         """Set the queue to use."""
-        self.queue = queue
+        self.queue = queue              # pylint: disable=W0201
 
     def run(self):
         connection = sqlite3.connect(
             self.path, timeout=5.0, isolation_level="immediate")
         cursor = connection.cursor()
         while True:
-            priority, cmd = self.queue.get()
+            _, cmd = self.queue.get()
             sql = cmd.sql
             if sql == ('STOP',):
                 cmd.result_queue.put(None)
@@ -108,8 +110,7 @@ class DatabaseWrapper(Thread):
             try:
                 cursor.execute(*sql)
             except:
-                for s in sql:
-                    print repr(s)
+                print repr(sql)         # pylint: disable=W0702
             if not sql[0].upper().startswith('SELECT'):
                 commit_needed = True
             for row in cursor.fetchall():
@@ -119,11 +120,10 @@ class DatabaseWrapper(Thread):
             cmd.result_queue.put(result)
 
 
-class Db(object):
+class Database(object):
     """Database access class."""
 
     def __init__(self):
-        self._data_dir = None
         self.db_path = os.path.join(
             self.player_get_data_dir(), "similarity.db")
         self.queue = PriorityQueue()
@@ -147,14 +147,11 @@ class Db(object):
         Defaults to $XDG_DATA_HOME/autoqueue on Gnome.
 
         """
-        if self._data_dir:
-            return self._data_dir
         if not XDG:
             return NotImplemented
         data_dir = os.path.join(xdg.BaseDirectory.xdg_data_home, 'autoqueue')
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
-        self._data_dir = data_dir
         return data_dir
 
     def add_track(self, filename, scms, priority):
@@ -257,7 +254,7 @@ class Db(object):
         if not exclude_filenames:
             exclude_filenames = []
         to_add = neighbours * 2
-        _ = self.execute_sql(
+        self.execute_sql(
             ("DELETE FROM distance WHERE track_1 = ?;", (trackid,)),
             priority=priority)
         conf = ScmsConfiguration(20)
@@ -302,7 +299,7 @@ class Db(object):
             "SELECT * FROM artists WHERE name = ?;", (artist_name,)))
         for row in rows:
             return row
-        _ = self.execute_sql((
+        self.execute_sql((
             "INSERT INTO artists (name) VALUES (?);", (artist_name,)))
         rows = self.execute_sql((
             "SELECT * FROM artists WHERE name = ?;", (artist_name,)))
@@ -318,7 +315,7 @@ class Db(object):
             (artist_id, title)), priority=0)
         for row in rows:
             return row
-        _ = self.execute_sql((
+        self.execute_sql((
             "INSERT INTO tracks (artist, title) VALUES (?, ?);",
             (artist_id, title)), priority=0)
         rows = self.execute_sql((
@@ -488,7 +485,8 @@ class Db(object):
                 'DELETE FROM artist_2_artist WHERE artist1 = ? OR artist2 = '
                 '?;', (artist_id, artist_id)), priority=10)
             self.execute_sql(
-                ('DELETE FROM artists WHERE id = ?', (artist_id,)), priority=10)
+                ('DELETE FROM artists WHERE id = ?', (artist_id,)),
+                priority=10)
 
 
 class SimilarityService(dbus.service.Object):
@@ -496,7 +494,7 @@ class SimilarityService(dbus.service.Object):
 
     def __init__(self, bus_name, object_path):
         import gst
-        self.db = Db()
+        self.db = Database()
         self.lastfm = True
         self.cache_time = 90
         super(SimilarityService, self).__init__(
@@ -592,22 +590,22 @@ class SimilarityService(dbus.service.Object):
             self.lastfm = False
             return None
 
-    @method(dbus_interface=DBUS_IFACE, in_signature='s')
+    @method(dbus_interface=IFACE, in_signature='s')
     def remove_track_by_filename(self, filename):
         """Remove tracks from database."""
         self.db.remove_track_by_filename(filename)
 
-    @method(dbus_interface=DBUS_IFACE, in_signature='ss')
+    @method(dbus_interface=IFACE, in_signature='ss')
     def remove_track(self, artist, title):
         """Remove tracks from database."""
         self.db.remove_track(artist, title)
 
-    @method(dbus_interface=DBUS_IFACE, in_signature='s')
+    @method(dbus_interface=IFACE, in_signature='s')
     def remove_artist(self, artist):
         """Remove tracks from database."""
         self.db.remove_artist(artist)
 
-    @method(dbus_interface=DBUS_IFACE, in_signature='sbasi')
+    @method(dbus_interface=IFACE, in_signature='sbasi')
     def analyze_track(self, filename, add_neighbours, exclude_filenames,
                       priority):
         """Perform mirage analysis of a track."""
@@ -635,14 +633,13 @@ class SimilarityService(dbus.service.Object):
             trackid, scms, exclude_filenames=exclude_filenames,
             neighbours=NEIGHBOURS, priority=priority)
 
-    @method(dbus_interface=DBUS_IFACE, in_signature='s', out_signature='a(is)')
+    @method(dbus_interface=IFACE, in_signature='s', out_signature='a(is)')
     def get_ordered_mirage_tracks(self, filename):
         """Get similar tracks by mirage acoustic analysis."""
         trackid = self.db.get_track_id(filename, priority=0)
         return self.db.get_neighbours(trackid)
 
-    @method(dbus_interface=DBUS_IFACE, in_signature='ss',
-            out_signature='a(iss)')
+    @method(dbus_interface=IFACE, in_signature='ss', out_signature='a(iss)')
     def get_ordered_similar_tracks(self, artist_name, title):
         """Get similar tracks from last.fm/the database.
 
@@ -663,8 +660,7 @@ class SimilarityService(dbus.service.Object):
         return self.get_similar_tracks_from_lastfm(
             artist_name, title, track_id)
 
-    @method(dbus_interface=DBUS_IFACE, in_signature='as',
-            out_signature='a(is)')
+    @method(dbus_interface=IFACE, in_signature='as', out_signature='a(is)')
     def get_ordered_similar_artists(self, artists):
         """Get similar artists from the database.
 
@@ -694,6 +690,7 @@ class SimilarityService(dbus.service.Object):
         return results
 
     def run(self):
+        """Run loop."""
         self.loop.run()
 
 
