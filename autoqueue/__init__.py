@@ -333,7 +333,7 @@ class AutoQueueBase(object):
             else:
                 try:
                     excluded_filenames.append(unicode(filename, 'utf-8'))
-                except:
+                except UnicodeDecodeError:
                     self.log('Could not decode filename: %r' % filename)
         filename = song.get_filename()
         try:
@@ -343,7 +343,7 @@ class AutoQueueBase(object):
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 5, reply_handler=NO_OP,
                 error_handler=NO_OP, timeout=300)
-        except:
+        except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             self.fill_queue()
@@ -387,7 +387,7 @@ class AutoQueueBase(object):
                 if not isinstance(filename, unicode):
                     try:
                         filename = filename.decode('utf-8')
-                    except:
+                    except UnicodeDecodeError:
                         self.log('failed to decode filename %r' % filename)
                 self.similarity.remove_track_by_filename(
                     filename, reply_handler=NO_OP,
@@ -438,7 +438,7 @@ class AutoQueueBase(object):
             else:
                 try:
                     excluded_filenames.append(unicode(filename, 'utf-8'))
-                except:
+                except UnicodeDecodeError:
                     self.log('Could not decode filename: %r' % filename)
         filename = song.get_filename()
         try:
@@ -449,7 +449,7 @@ class AutoQueueBase(object):
                 filename, True, excluded_filenames, 0,
                 reply_handler=self.analyzed,
                 error_handler=self.error_handler, timeout=300)
-        except:
+        except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
 
     def analyzed(self):
@@ -462,7 +462,7 @@ class AutoQueueBase(object):
                 filename,
                 reply_handler=self.mirage_reply_handler,
                 error_handler=self.error_handler, timeout=300)
-        except:
+        except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
 
     def done(self):
@@ -475,7 +475,7 @@ class AutoQueueBase(object):
             else:
                 try:
                     excluded_filenames.append(unicode(filename, 'utf-8'))
-                except:
+                except UnicodeDecodeError:
                     self.log('Could not decode filename: %r' % filename)
         filename = song.get_filename()
         try:
@@ -486,7 +486,7 @@ class AutoQueueBase(object):
                 filename, True, excluded_filenames, 0,
                 reply_handler=NO_OP,
                 error_handler=NO_OP, timeout=300)
-        except:
+        except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
         self.running = False
 
@@ -575,7 +575,7 @@ class AutoQueueBase(object):
             else:
                 try:
                     excluded_filenames.append(unicode(filename, 'utf-8'))
-                except:
+                except UnicodeDecodeError:
                     self.log('Could not decode filename: %r' % filename)
         filename = song.get_filename()
         try:
@@ -586,7 +586,7 @@ class AutoQueueBase(object):
                 filename, True, excluded_filenames, 0,
                 reply_handler=self.analyzed,
                 error_handler=self.error_handler, timeout=300)
-        except:
+        except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
 
     def process_results(self, results):
