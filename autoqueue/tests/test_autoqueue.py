@@ -213,6 +213,10 @@ class FakeAutoQueue(AutoQueueBase):
             artist_name,
             len(self._blocked_artists)))
 
+    def player_set_variables_from_config(self):
+        """Set configuration variables."""
+        pass
+
     def player_construct_file_search(self, filename, restrictions=None):
         """Construct a search that looks for songs with this artist
         and title.
