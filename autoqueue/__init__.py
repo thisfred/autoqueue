@@ -24,6 +24,7 @@ import dbus
 import os
 import random
 
+from abc import ABCMeta, abstractmethod
 from dbus.mainloop.glib import DBusGMainLoop
 from collections import deque
 from datetime import datetime, timedelta
@@ -45,51 +46,49 @@ NO_OP = lambda *a, **kw: None
 class SongBase(object):
     """A wrapper object around player specific song objects."""
 
+    __metaclass__ = ABCMeta
+
     def __init__(self, song):
         self.song = song
 
     def __str__(self):
         return "<Song: %s - %s>" % (self.get_artist(), self.get_title())
 
+    @abstractmethod
     def get_artist(self):
         """Return lowercase UNICODE name of artist."""
-        return NotImplemented
 
+    @abstractmethod
     def get_artists(self):
         """Return lowercase UNICODE name of artists and performers."""
-        return NotImplemented
 
+    @abstractmethod
     def get_title(self):
         """Return lowercase UNICODE title of song."""
-        return NotImplemented
 
+    @abstractmethod
     def get_tags(self):
         """Return a list of tags for the song."""
-        return []
 
+    @abstractmethod
     def get_filename(self):
         """Return filename for the song."""
-        return NotImplemented
 
+    @abstractmethod
     def get_length(self):
         """Return length in seconds."""
-        return NotImplemented
 
+    @abstractmethod
     def get_last_started(self):
         """Return the datetime the song was last played."""
-        return NotImplemented
 
+    @abstractmethod
     def get_rating(self):
         """Return the rating of the song."""
-        return NotImplemented
 
+    @abstractmethod
     def get_playcount(self):
         """Return the playcount of the song."""
-        return NotImplemented
-
-    def get_added(self):
-        """Return the datetime the song was added to the library."""
-        return NotImplemented
 
     def get_play_frequency(self):
         """Return the play frequency of the song (plays / day)."""
@@ -124,27 +123,19 @@ def tag_score(song, tags):
 class AutoQueueBase(object):
     """Generic base class for autoqueue plugins."""
 
+    __metaclass__ = ABCMeta
+
     def __init__(self):
         self.artist_block_time = 1
         self._blocked_artists = deque([])
         self._blocked_artists_times = deque([])
         self._cache_dir = None
-        self.desired_queue_length = 0
+        self.desired_queue_length = 15 * 60
         self.cached_misses = deque([])
-        self.by_mirage = False
-        self.by_tracks = True
-        self.by_artists = True
-        self.by_tags = True
         self.running = False
         self.verbose = False
-        self.weed = False
         self.song = None
         self.restrictions = None
-        self.prune_artists = []
-        self.prune_titles = []
-        self.prune_filenames = []
-        self._rows = []
-        self._nrows = []
         self.player_set_variables_from_config()
         self.get_blocked_artists_pickle()
         self.last_songs = []
@@ -249,45 +240,45 @@ class AutoQueueBase(object):
                 song.get_filename() for song in self.player_search(search)])
         return filenames
 
+    @abstractmethod
     def player_construct_file_search(self, filename, restrictions=None):
         """Construct a search that looks for songs with this artist and title.
 
         """
-        return NotImplemented
 
+    @abstractmethod
     def player_construct_track_search(self, artist, title, restrictions=None):
         """Construct a search that looks for songs with this artist
         and title.
         """
-        return NotImplemented
 
+    @abstractmethod
     def player_construct_artist_search(self, artist, restrictions=None):
         """Construct a search that looks for songs with this artist."""
-        return NotImplemented
 
+    @abstractmethod
     def player_construct_tag_search(self, tags, restrictions=None):
         """Construct a search that looks for songs with these tags."""
-        return NotImplemented
 
+    @abstractmethod
     def player_set_variables_from_config(self):
         """Initialize user settings from the configuration storage."""
-        return NotImplemented
 
+    @abstractmethod
     def player_get_queue_length(self):
         """Get the current length of the queue."""
-        return 0
 
+    @abstractmethod
     def player_enqueue(self, song):
         """Put the song at the end of the queue."""
-        return NotImplemented
 
+    @abstractmethod
     def player_search(self, search):
         """Perform a player search."""
-        return NotImplemented
 
+    @abstractmethod
     def player_get_songs_in_queue(self):
         """Return (wrapped) song objects for the songs in the queue."""
-        return []
 
     def player_execute_async(self, method, *args, **kwargs):
         """Override this if the player has a way to execute methods
@@ -418,7 +409,7 @@ class AutoQueueBase(object):
                 return song
         self.cached_misses.append((artist, title, filename, tags))
         while len(self.cached_misses) > 1000:
-            print self.cached_misses.popleft()
+            self.cached_misses.popleft()
 
     def fill_queue(self):
         """Search for appropriate songs and put them in the queue."""
