@@ -59,8 +59,7 @@ if os.path.exists('/usr/share/pyshared/quodlibet/plugins/'):
         [('share/pyshared/quodlibet/plugins/events/',
          ['quodlibet_autoqueue.py']),
         ('share/pyshared/quodlibet/plugins/songsmenu/',
-         ['mirage_songs.py',
-          'mirage_miximize.py'])])
+         ['mirage_songs.py'])])
 if os.path.exists('/usr/lib/rhythmbox/plugins'):
     DATA_FILES.append(
         ('lib/rhythmbox/plugins/rhythmbox_autoqueue',
@@ -74,7 +73,7 @@ if DATA_FILES:
 DistUtilsExtra.auto.setup(
     name='autoqueue',
     description='A cross music player plugin that queues similar tracks',
-    version='1.0.0alpha7',
+    version='1.0.0alpha8',
     packages=['autoqueue', 'mirage'],
     license='GNU GPL v2',
     author='Eric Casteleijn',
