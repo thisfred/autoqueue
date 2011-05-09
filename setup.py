@@ -51,7 +51,10 @@ class Clean(DistUtilsExtra.auto.clean_build_tree):
 
 DistUtilsExtra.auto.setup(
     name='autoqueue',
-    description='A cross music player plugin that queues similar tracks',
+    description='A cross music player plug-in that queues similar tracks',
+    long_description=(
+        'A cross music player plug-in that adds similar tracks to the'
+        'queue. Currently works with quodlibet, rhythmbox and mpd.'),
     version='1.0.0alpha8',
     packages=['autoqueue', 'mirage'],
     license='GNU GPL v2',
