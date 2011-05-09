@@ -49,27 +49,6 @@ class Clean(DistUtilsExtra.auto.clean_build_tree):
 
         DistUtilsExtra.auto.clean_build_tree.run(self)
 
-OPTIONAL = {}
-DATA_FILES = [
-    ('lib/autoqueue', ['bin/autoqueue-similarity-service']),
-    ('share/dbus-1/services/', [SERVICE_FILE])]
-
-if os.path.exists('/usr/share/pyshared/quodlibet/plugins/'):
-    DATA_FILES.extend(
-        [('share/pyshared/quodlibet/plugins/events/',
-         ['quodlibet_autoqueue.py']),
-        ('share/pyshared/quodlibet/plugins/songsmenu/',
-         ['mirage_songs.py'])])
-if os.path.exists('/usr/lib/rhythmbox/plugins'):
-    DATA_FILES.append(
-        ('lib/rhythmbox/plugins/rhythmbox_autoqueue',
-         ['rhythmbox_autoqueue/rhythmbox_autoqueue.rb-plugin',
-          'rhythmbox_autoqueue/__init__.py']),)
-
-if DATA_FILES:
-    optional = {                        # pylint: disable=C0103
-        'data_files': DATA_FILES}
-
 DistUtilsExtra.auto.setup(
     name='autoqueue',
     description='A cross music player plugin that queues similar tracks',
@@ -86,4 +65,13 @@ DistUtilsExtra.auto.setup(
         'install': Install,
         'clean': Clean,
     },
-    **optional)
+    data_files=[
+        ('lib/autoqueue', ['bin/autoqueue-similarity-service']),
+        ('share/dbus-1/services/', [SERVICE_FILE]),
+        ('share/pyshared/quodlibet/plugins/events/',
+         ['quodlibet_autoqueue.py']),
+        ('share/pyshared/quodlibet/plugins/songsmenu/',
+         ['mirage_songs.py']),
+        ('lib/rhythmbox/plugins/rhythmbox_autoqueue',
+         ['rhythmbox_autoqueue/rhythmbox_autoqueue.rb-plugin',
+          'rhythmbox_autoqueue/__init__.py'])])
