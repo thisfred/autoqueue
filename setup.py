@@ -55,7 +55,7 @@ DistUtilsExtra.auto.setup(
     long_description=(
         'A cross music player plug-in that adds similar tracks to the'
         'queue. Currently works with quodlibet, rhythmbox and mpd.'),
-    version='1.0.0alpha8',
+    version='1.0.0alpha9',
     packages=['autoqueue', 'mirage'],
     license='GNU GPL v2',
     author='Eric Casteleijn',
