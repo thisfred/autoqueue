@@ -155,7 +155,6 @@ class AutoQueueBase(object):
 
     def error_handler(self, *args, **kwargs):
         """Log errors when calling D-Bus methods in a async way."""
-        self.running = False
         self.log('Error handler received: %r, %r' % (args, kwargs))
 
     def get_cache_dir(self):
