@@ -7,14 +7,14 @@ it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation"""
 
 import gtk
-import gobject
-from gtk import gdk
+from datetime import datetime
 from plugins.events import EventPlugin
 from widgets import main
 from parse import Query
 from library import library
 import config
 from collections import deque
+from quodlibet.util import copool
 
 from autoqueue import AutoQueueBase, SongBase
 
@@ -235,30 +235,14 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
         return table
 
-    def _idle_callback(self):
-        """Idle callback for async processing."""
-        gdk.threads_enter()
-        while self._generators:
-            for dummy in self._generators[0]:
-                gdk.threads_leave()
-                return True
-            self._generators.popleft()
-        gdk.threads_leave()
-        return False
-
     def player_execute_async(self, method, *args, **kwargs):
         """Override this if the player has a way to execute methods
         asynchronously, like the copooling in autoqueue.
 
         """
-        if 'funcid' in kwargs:
-            del kwargs['funcid']
-        add_callback = False
-        if not self._generators:
-            add_callback = True
-        self._generators.append(method(*args, **kwargs))
-        if add_callback:
-            gobject.idle_add(self._idle_callback)
+        if 'funcid' not in kwargs:
+            kwargs['funcid'] = method.__name__ + str(datetime.now())
+        copool.add(method, *args, **kwargs)
 
     def player_construct_file_search(self, filename, restrictions=None):
         """Construct a search that looks for songs with this filename."""
