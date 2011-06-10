@@ -504,7 +504,13 @@ class SimilarityService(dbus.service.Object):
 
     def log(self, message):
         """Log message."""
-        print message
+        try:
+            print message
+        except:
+            try:
+                print message.encode('utf-8')
+            except:
+                return
 
     def get_similar_tracks_from_lastfm(self, artist_name, title, track_id):
         """Get similar tracks to the last one in the queue."""
