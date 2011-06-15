@@ -132,14 +132,14 @@ class AutoQueueBase(object):
         self.verbose = False
         self.song = None
         self.restrictions = None
+        self.use_mirage = True
+        self.use_lastfm = True
+        self.use_groupings = True
         self.player_set_variables_from_config()
         self.get_blocked_artists_pickle()
         self.last_songs = []
         self.last_song = None
         self.found = None
-        self.use_mirage = True
-        self.use_lastfm = True
-        self.use_groupings = True
         bus = dbus.SessionBus()
         sim = bus.get_object(
             'org.autoqueue', '/org/autoqueue/Similarity')
