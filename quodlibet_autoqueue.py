@@ -24,22 +24,26 @@ INT_SETTINGS = {
         'label': 'block artist (days)'},
     'desired_queue_length': {
         'value': 4440,
-        'label': 'queue (seconds)'},
-    'cache_time': {
-        'value': 90,
-        'label': 'cache information from lastfm (days)'},
-    }
+        'label': 'queue (seconds)'}}
 
 BOOL_SETTINGS = {
     'verbose': {
         'value': False,
         'label': 'log to console'},
-    }
+    'use_mirage': {
+        'value': True,
+        'label': 'use mirage similarity'},
+    'use_lastfm': {
+        'value': True,
+        'label': 'use last.fm similarity'},
+    'use_groupings': {
+        'value': True,
+        'label': 'use grouping similarity'}}
+
 STR_SETTINGS = {
     'restrictions': {
         'value': '',
-        'label': 'restrict'},
-    }
+        'label': 'restrict'}}
 
 NO_OP = lambda *a, **kw: None
 

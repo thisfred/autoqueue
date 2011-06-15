@@ -137,6 +137,9 @@ class AutoQueueBase(object):
         self.last_songs = []
         self.last_song = None
         self.found = None
+        self.use_mirage = True
+        self.use_lastfm = True
+        self.use_groupings = True
         bus = dbus.SessionBus()
         sim = bus.get_object(
             'org.autoqueue', '/org/autoqueue/Similarity')
@@ -444,10 +447,13 @@ class AutoQueueBase(object):
         try:
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
-            self.similarity.get_ordered_mirage_tracks(
-                filename,
-                reply_handler=self.mirage_reply_handler,
-                error_handler=self.error_handler, timeout=300)
+            if self.use_mirage:
+                self.similarity.get_ordered_mirage_tracks(
+                    filename,
+                    reply_handler=self.mirage_reply_handler,
+                    error_handler=self.error_handler, timeout=300)
+            else:
+                self.mirage_reply_handler([])
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
 
@@ -496,10 +502,13 @@ class AutoQueueBase(object):
             return
         artist_name = self.last_song.get_artist()
         title = self.last_song.get_title()
-        self.similarity.get_ordered_similar_tracks(
-            artist_name, title,
-            reply_handler=self.similar_tracks_handler,
-            error_handler=self.error_handler, timeout=300)
+        if self.use_lastfm:
+            self.similarity.get_ordered_similar_tracks(
+                artist_name, title,
+                reply_handler=self.similar_tracks_handler,
+                error_handler=self.error_handler, timeout=300)
+        else:
+            self.similar_artists_handler([])
 
     def similar_tracks_handler(self, results):
         """Handler for similar tracks returned from dbus."""
@@ -541,15 +550,16 @@ class AutoQueueBase(object):
                 return
             self.queue_song()
             return
-        for _ in self.process_results(
-                self.get_ordered_similar_by_tag(self.last_song)):
-            yield
-        if self.found:
-            if not self.queue_needs_songs():
-                self.done()
+        if self.use_groupings:
+            for _ in self.process_results(
+                    self.get_ordered_similar_by_tag(self.last_song)):
+                yield
+            if self.found:
+                if not self.queue_needs_songs():
+                    self.done()
+                    return
+                self.queue_song()
                 return
-            self.queue_song()
-            return
         if not self.last_songs:
             self.running = False
             return
