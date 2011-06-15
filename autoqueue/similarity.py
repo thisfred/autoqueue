@@ -6,19 +6,18 @@ import dbus
 import dbus.service
 import gobject
 import os
-import urllib
 
 from threading import Thread
 from Queue import Queue, PriorityQueue
-from time import strptime, sleep
+from time import strptime
 from datetime import datetime, timedelta
-
-from xml.dom import minidom
 
 from dbus.mainloop.glib import DBusGMainLoop
 from dbus.service import method
 
 import sqlite3
+
+from autoqueue.pylast import LastFMNetwork, WSError
 
 from mirage import (
     Mir, MatrixDimensionMismatchException, MfccFailedException,
@@ -48,31 +47,10 @@ ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
              "&artist=%s&api_key=" + API_KEY
 
 # be nice to last.fm
-WAIT_BETWEEN_REQUESTS = timedelta(0, 1)
+API_KEY = "09d0975a99a4cab235b731d31abf0057"
 
 # TODO make configurable
 NEIGHBOURS = 20
-
-
-class Throttle(object):
-    """Decorator that throttles calls to a function or method."""
-
-    def __init__(self, wait):
-        self.wait = wait
-        self.last_called = datetime.now()
-
-    def __call__(self, func):
-        """Return the decorator."""
-
-        def wrapper(*args, **kwargs):
-            """The implementation of the decorator."""
-            while self.last_called + self.wait > datetime.now():
-                sleep(0.1)
-            result = func(*args, **kwargs)
-            self.last_called = datetime.now()
-            return result
-
-        return wrapper
 
 
 class SQLCommand(object):
@@ -501,6 +479,7 @@ class SimilarityService(dbus.service.Object):
             bus_name=bus_name, object_path=object_path)
         self.mir = Mir()
         self.loop = gobject.MainLoop()
+        self.network = LastFMNetwork(api_key=API_KEY)
 
     def log(self, message):
         """Log message."""
@@ -513,88 +492,48 @@ class SimilarityService(dbus.service.Object):
                 return
 
     def get_similar_tracks_from_lastfm(self, artist_name, title, track_id):
-        """Get similar tracks to the last one in the queue."""
-        self.log("Getting similar tracks from last.fm for: %s - %s" % (
-            artist_name, title))
-        enc_artist_name = artist_name.encode("utf-8")
-        enc_title = title.encode("utf-8")
-        url = TRACK_URL % (
-            urllib.quote_plus(enc_artist_name),
-            urllib.quote_plus(enc_title))
-        xmldoc = self.last_fm_request(url)
-        if xmldoc is None:
-            return []
-        nodes = xmldoc.getElementsByTagName("track")
-        results = []
+        """Get similar tracks."""
+        try:
+            lastfm_track = self.network.get_track(artist_name, title)
+        except WSError:
+            return
         tracks_to_update = {}
-        for node in nodes:
-            similar_artist = similar_title = ''
-            match = None
-            for child in node.childNodes:
-                if child.nodeName == 'artist':
-                    similar_artist = child.getElementsByTagName(
-                        "name")[0].firstChild.nodeValue.lower().decode('utf-8')
-                elif child.nodeName == 'name':
-                    similar_title = child.firstChild.nodeValue.lower().decode(
-                        'utf-8')
-                elif child.nodeName == 'match':
-                    match = int(float(child.firstChild.nodeValue) * 100)
-                if (similar_artist != '' and similar_title != ''
-                    and match is not None):
-                    break
-            result = {
-                'score': match,
-                'artist': similar_artist,
-                'title': similar_title}
-            tracks_to_update.setdefault(track_id, []).append(result)
-            results.append((match, similar_artist, similar_title))
+        results = []
+        try:
+            for similar in lastfm_track.get_similar():
+                match = similar.match
+                similar_artist = similar.artist.get_name()
+                similar_title = similar.item.title
+                tracks_to_update.setdefault(track_id, []).append({
+                    'score': match,
+                    'artist': similar_artist,
+                    'title': similar_title})
+                results.append((match, similar_artist, similar_title))
+        except WSError:
+            return
         self.db.update_similar_tracks(tracks_to_update)
         return results
 
     def get_similar_artists_from_lastfm(self, artist_name, artist_id):
         """Get similar artists from lastfm."""
-        self.log("Getting similar artists from last.fm for: %s " % artist_name)
-        enc_artist_name = artist_name.encode("utf-8")
-        url = ARTIST_URL % (
-            urllib.quote_plus(enc_artist_name))
-        xmldoc = self.last_fm_request(url)
-        if xmldoc is None:
-            return []
-        nodes = xmldoc.getElementsByTagName("artist")
-        results = []
+        try:
+            lastfm_artist = self.network.get_artist(artist_name)
+        except WSError:
+            return
         artists_to_update = {}
-        for node in nodes:
-            name = node.getElementsByTagName(
-                "name")[0].firstChild.nodeValue.lower().decode('utf-8')
-            match = 0
-            matchnode = node.getElementsByTagName("match")
-            if matchnode:
-                match = int(float(matchnode[0].firstChild.nodeValue) * 100)
-            result = {
-                'score': match,
-                'artist': name}
-            artists_to_update.setdefault(artist_id, []).append(result)
-            results.append((match, name))
+        results = []
+        try:
+            for similar in lastfm_artist.get_similar():
+                match = similar.match
+                name = similar.item.get_name()
+                artists_to_update.setdefault(artist_id, []).append({
+                    'score': match,
+                    'artist': name})
+                results.append((match, name))
+        except WSError:
+            return
         self.db.update_similar_artists(artists_to_update)
         return results
-
-    @Throttle(WAIT_BETWEEN_REQUESTS)
-    def last_fm_request(self, url):
-        """Make an http request to last.fm."""
-        if not self.lastfm:
-            return None
-        try:
-            stream = urllib.urlopen(url)
-        except Exception, e:            # pylint: disable=W0703
-            self.log("Error: %s" % e)
-            return None
-        try:
-            xmldoc = minidom.parse(stream).documentElement
-            return xmldoc
-        except Exception, e:            # pylint: disable=W0703
-            self.log("Error: %s" % e)
-            self.lastfm = False
-            return None
 
     @method(dbus_interface=IFACE, in_signature='s')
     def remove_track_by_filename(self, filename):
