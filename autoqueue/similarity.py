@@ -502,7 +502,7 @@ class SimilarityService(dbus.service.Object):
         try:
             for similar in lastfm_track.get_similar():
                 match = similar.match
-                similar_artist = similar.artist.get_name()
+                similar_artist = similar.item.artist.get_name()
                 similar_title = similar.item.title
                 tracks_to_update.setdefault(track_id, []).append({
                     'score': match,
