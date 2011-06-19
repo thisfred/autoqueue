@@ -391,23 +391,28 @@ class Database(object):
         """Write similar artist information to the database."""
         for artist_id, similar in artists_to_update.items():
             for artist in similar:
-                id2 = self.get_artist(artist['artist'])[0]
-                if self.get_artist_match(artist_id, id2):
-                    self.update_artist_match(artist_id, id2, artist['score'])
-                    continue
-                self.insert_artist_match(artist_id, id2, artist['score'])
+                row = self.get_artist(artist['artist'])
+                if row:
+                    id2 = row[0]
+                    if self.get_artist_match(artist_id, id2):
+                        self.update_artist_match(
+                            artist_id, id2, artist['score'])
+                        continue
+                    self.insert_artist_match(artist_id, id2, artist['score'])
             self.update_artist(artist_id)
 
     def update_similar_tracks(self, tracks_to_update):
         """Write similar track information to the database."""
         for track_id, similar in tracks_to_update.items():
             for track in similar:
-                id2 = self.get_track_from_artist_and_title(
-                    track['artist'], track['title'])[0]
-                if self.get_track_match(track_id, id2):
-                    self.update_track_match(track_id, id2, track['score'])
-                    continue
-                self.insert_track_match(track_id, id2, track['score'])
+                row = self.get_track_from_artist_and_title(
+                    track['artist'], track['title'])
+                if row:
+                    id2 = row[0]
+                    if self.get_track_match(track_id, id2):
+                        self.update_track_match(track_id, id2, track['score'])
+                        continue
+                    self.insert_track_match(track_id, id2, track['score'])
             self.update_track(track_id)
 
     def create_db(self):
@@ -502,8 +507,9 @@ class SimilarityService(dbus.service.Object):
         try:
             for similar in lastfm_track.get_similar():
                 match = similar.match
-                similar_artist = similar.item.artist.get_name()
-                similar_title = similar.item.title
+                item = similar.item
+                similar_artist = item.artist.get_name()
+                similar_title = item.title
                 tracks_to_update.setdefault(track_id, []).append({
                     'score': match,
                     'artist': similar_artist,
