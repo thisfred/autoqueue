@@ -142,7 +142,8 @@ class AutoQueueBase(object):
         self.found = None
         bus = dbus.SessionBus()
         sim = bus.get_object(
-            'org.autoqueue', '/org/autoqueue/Similarity')
+            'org.autoqueue', '/org/autoqueue/Similarity',
+            follow_name_owner_changes=True)
         self.similarity = dbus.Interface(
             sim, dbus_interface='org.autoqueue.SimilarityInterface')
 

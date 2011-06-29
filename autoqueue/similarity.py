@@ -17,7 +17,7 @@ from dbus.service import method
 
 import sqlite3
 
-from autoqueue.pylast import LastFMNetwork, WSError
+from autoqueue.pylast import LastFMNetwork, WSError, NetworkError
 
 from mirage import (
     Mir, MatrixDimensionMismatchException, MfccFailedException,
@@ -500,7 +500,8 @@ class SimilarityService(dbus.service.Object):
         """Get similar tracks."""
         try:
             lastfm_track = self.network.get_track(artist_name, title)
-        except WSError:
+        except (WSError, NetworkError), e:
+            print e
             return
         tracks_to_update = {}
         results = []
@@ -515,7 +516,8 @@ class SimilarityService(dbus.service.Object):
                     'artist': similar_artist,
                     'title': similar_title})
                 results.append((match, similar_artist, similar_title))
-        except WSError:
+        except (WSError, NetworkError), e:
+            print e
             return
         self.db.update_similar_tracks(tracks_to_update)
         return results
