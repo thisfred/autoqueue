@@ -11,7 +11,7 @@ from threading import Thread
 from Queue import Queue, PriorityQueue
 from time import strptime
 from datetime import datetime, timedelta
-
+from collections import namedtuple
 from dbus.mainloop.glib import DBusGMainLoop
 from dbus.service import method
 
@@ -51,6 +51,32 @@ API_KEY = "09d0975a99a4cab235b731d31abf0057"
 
 # TODO make configurable
 NEIGHBOURS = 20
+
+
+def cluster_match(cluster1, cluster2):
+    """@cluster1 and @cluster2 have matching ends."""
+    return (
+        cluster1[0] == cluster2[0] or cluster1[-1] == cluster2[0] or
+        cluster1[0] == cluster2[-1] or cluster1[-1] == cluster2[-1])
+
+
+def in_the_middle(song1, song2, cluster):
+    """@song1 or @song2 is in @cluster and not on one of the ends."""
+    if song1 in cluster:
+        index = cluster.index(song1)
+        if index > 0 and index < len(cluster) - 1:
+            return True
+    if song2 in cluster:
+        index = cluster.index(song2)
+        if index > 0 and index < len(cluster) - 1:
+            return True
+    return False
+
+
+def at_the_ends(song1, song2, cluster):
+    """@song1 and @song1 are at either end of @cluster."""
+    return (cluster[0] == song1 and cluster[-1] == song2) or (
+        cluster[-1] == song1 and cluster[0] == song2)
 
 
 class SQLCommand(object):
@@ -98,8 +124,118 @@ class DatabaseWrapper(Thread):
             cmd.result_queue.put(result)
 
 
-class Database(object):
-    """Database access class."""
+class Pair():
+    """A pair of songs"""
+    def __init__(self, song1, song2, score):
+        self.song1 = song1
+        self.song2 = song2
+        self.score = score
+
+    def other(self, song):
+        """Return the song paired with @song."""
+        if self.song1 == song:
+            return self.song2
+        return self.song1
+
+    def songs(self):
+        """Return both songs."""
+        return [self.song1, self.song2]
+
+    def __cmp__(self, other):
+        if self.score < other.score:
+            return -1
+        if self.score > other.score:
+            return 1
+        return 0
+
+
+class Clusterer(object):
+    """Build a list of songs in optimized order."""
+
+    def __init__(self, songs, comparison_function):
+        self.clusters = []
+        self.similarities = []
+        self.build_similarity_matrix(songs, comparison_function)
+        self.build_clusters()
+
+    def build_similarity_matrix(self, songs, comparison_function):
+        """Build the similarity matrix."""
+        for song in songs:
+            for song2 in songs[songs.index(song) + 1:]:
+                self.similarities.append(
+                    Pair(song, song2, comparison_function(song[0], song2[0])))
+        self.similarities.sort(reverse=True)
+
+    def join(self, cluster1, cluster2):
+        """Join two clusters together."""
+        if cluster1[0] == cluster2[0]:
+            cluster2.reverse()
+            result = cluster2 + cluster1[1:]
+        elif cluster1[-1] == cluster2[0]:
+            result = cluster1 + cluster2[1:]
+        elif cluster1[0] == cluster2[-1]:
+            result = cluster2 + cluster1[1:]
+        else:
+            cluster2.reverse()
+            result = cluster1[:-1] + cluster2
+        self.clean_similarities(result)
+        return result
+
+    def merge_clusters(self):
+        """Merge clusters """
+        new = []
+        clusters = self.clusters
+        while clusters:
+            cluster1 = clusters.pop()
+            for cluster in clusters[:]:
+                if cluster_match(cluster, cluster1):
+                    new.append(self.join(cluster1, cluster))
+                    clusters.remove(cluster)
+                    break
+            else:
+                new.append(cluster1)
+        self.clusters = new
+
+    def build_clusters(self):
+        """Build clusters out of similarity matrix."""
+        sim = self.similarities.pop()
+        self.clusters = [sim.songs()]
+        while self.similarities:
+            sim = self.similarities.pop()
+            new = []
+            found = None
+            new = []
+            for cluster in self.clusters[:]:
+                if not found:
+                    if cluster[0] in sim.songs():
+                        found = cluster[0]
+                        cluster = [sim.other(found)] + cluster
+                        self.clean_similarities(cluster)
+                    elif cluster[-1] in sim.songs():
+                        found = cluster[-1]
+                        cluster = cluster + [sim.other(found)]
+                        self.clean_similarities(cluster)
+                new.append(cluster)
+            self.clusters = new
+            if found is None:
+                self.clusters.append(sim.songs())
+            self.merge_clusters()
+
+    def clean_similarities(self, cluster):
+        """Remove similarity scores for processed cluster."""
+        new = []
+        for sim in self.similarities:
+            song1, song2 = sim.songs()
+            if in_the_middle(song1, song2, cluster):
+                continue
+            elif at_the_ends(song1, song2, cluster):
+                continue
+            new.append(sim)
+        self.similarities = new
+
+
+class Similarity(object):
+    """Here the actual similarity computation and lookup happens."""
 
     def __init__(self):
         self.db_path = os.path.join(
@@ -111,13 +247,20 @@ class Database(object):
         self._db_wrapper.set_queue(self.queue)
         self._db_wrapper.start()
         self.create_db()
-        print "Db created."
+        self.mir = Mir()
+        self.network = LastFMNetwork(api_key=API_KEY)
+        self.cache_time = 90
 
     def execute_sql(self, sql, priority=1):
         """Put sql command on the queue to be executed."""
         command = SQLCommand(sql)
         self.queue.put((priority, command))
         return command.result_queue.get()
+
+    def execute_sql_async(self, sql, priority=1):
+        """Put sql command on the queue to be executed."""
+        command = SQLCommand(sql)
+        self.queue.put((priority, command))
 
     def player_get_data_dir(self):
         """Get the directory to store user data.
@@ -134,7 +277,7 @@ class Database(object):
 
     def add_track(self, filename, scms, priority):
         """Add track to database."""
-        self.execute_sql(
+        self.execute_sql_async(
             ("INSERT INTO mirage (filename, scms) VALUES (?, ?);",
             (filename, sqlite3.Binary(instance_to_picklestring(scms)))),
             priority=priority)
@@ -145,10 +288,10 @@ class Database(object):
             ('SELECT trackid FROM mirage WHERE filename = ?', (filename,)),
             priority=10):
             track_id = row[0]
-            self.execute_sql((
+            self.execute_sql_async((
                 'DELETE FROM distance WHERE track_1 = ? OR track_2 = ?;',
             (track_id, track_id)), priority=10)
-            self.execute_sql((
+            self.execute_sql_async((
                 "DELETE FROM mirage WHERE trackid = ?;",
                 (track_id,)), priority=10)
 
@@ -159,10 +302,10 @@ class Database(object):
             'tracks.artist IN (SELECT artists.id FROM artists WHERE '
             'artists.name = ?);', (artist, title)), priority=10):
             track_id = row[0]
-            self.execute_sql(
+            self.execute_sql_async(
                 ('DELETE FROM track_2_track WHERE track1 = ? or track2 = ?;',
                  (track_id, track_id)), priority=10)
-            self.execute_sql(
+            self.execute_sql_async(
                 ('DELETE FROM tracks WHERE id = ?;', (track_id,)), priority=10)
         self.delete_orphan_artist(artist)
 
@@ -172,10 +315,10 @@ class Database(object):
             ('SELECT id from artists WHERE artists.name = ?;', (artist,)),
             priority=10):
             artist_id = row[0]
-            self.execute_sql(
+            self.execute_sql_async(
                 ('DELETE FROM artists WHERE artists.id = ?;', (artist_id)),
                 priority=10)
-            self.execute_sql(
+            self.execute_sql_async(
                 ('DELETE FROM tracks WHERE tracks.artist = ?;', (artist_id)),
                 priority=10)
 
@@ -232,7 +375,7 @@ class Database(object):
         if not exclude_filenames:
             exclude_filenames = []
         to_add = neighbours * 2
-        self.execute_sql(
+        self.execute_sql_async(
             ("DELETE FROM distance WHERE track_1 = ?;", (trackid,)),
             priority=priority)
         conf = ScmsConfiguration(20)
@@ -257,7 +400,7 @@ class Database(object):
             while best:
                 added += 1
                 best_tup = best.pop()
-                self.execute_sql((
+                self.execute_sql_async((
                     "INSERT INTO distance (distance, track_1, track_2) "
                     "VALUES (?, ?, ?);", best_tup), priority=priority)
         print "added %d connections" % added
@@ -277,7 +420,7 @@ class Database(object):
             "SELECT * FROM artists WHERE name = ?;", (artist_name,)))
         for row in rows:
             return row
-        self.execute_sql((
+        self.execute_sql_async((
             "INSERT INTO artists (name) VALUES (?);", (artist_name,)))
         rows = self.execute_sql((
             "SELECT * FROM artists WHERE name = ?;", (artist_name,)))
@@ -293,7 +436,7 @@ class Database(object):
             (artist_id, title)), priority=0)
         for row in rows:
             return row
-        self.execute_sql((
+        self.execute_sql_async((
             "INSERT INTO tracks (artist, title) VALUES (?, ?);",
             (artist_id, title)), priority=0)
         rows = self.execute_sql((
@@ -349,41 +492,41 @@ class Database(object):
 
     def update_artist_match(self, artist1, artist2, match):
         """Write match score to the database."""
-        self.execute_sql((
+        self.execute_sql_async((
             "UPDATE artist_2_artist SET match = ? WHERE artist1 = ? AND"
             " artist2 = ?;",
             (match, artist1, artist2)), priority=10)
 
     def update_track_match(self, track1, track2, match):
         """Write match score to the database."""
-        self.execute_sql((
+        self.execute_sql_async((
             "UPDATE track_2_track SET match = ? WHERE track1 = ? AND"
             " track2 = ?;",
             (match, track1, track2)), priority=10)
 
     def insert_artist_match(self, artist1, artist2, match):
         """Write match score to the database."""
-        self.execute_sql((
+        self.execute_sql_async((
             "INSERT INTO artist_2_artist (artist1, artist2, match) VALUES"
             " (?, ?, ?);",
             (artist1, artist2, match)), priority=10)
 
     def insert_track_match(self, track1, track2, match):
         """Write match score to the database."""
-        self.execute_sql((
+        self.execute_sql_async((
             "INSERT INTO track_2_track (track1, track2, match) VALUES"
             " (?, ?, ?);",
             (track1, track2, match)), priority=10)
 
     def update_artist(self, artist_id):
         """Write artist information to the database."""
-        self.execute_sql((
+        self.execute_sql_async((
             "UPDATE artists SET updated = DATETIME('now') WHERE id = ?;",
             (artist_id,)), priority=10)
 
     def update_track(self, track_id):
         """Write track information to the database."""
-        self.execute_sql((
+        self.execute_sql_async((
             "UPDATE tracks SET updated = DATETIME('now') WHERE id = ?",
             (track_id,)), priority=10)
 
@@ -417,43 +560,43 @@ class Database(object):
 
     def create_db(self):
         """Set up a database for the artist and track similarity scores."""
-        self.execute_sql((
+        self.execute_sql_async((
             'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name'
             ' VARCHAR(100), updated DATE);',), priority=0)
-        self.execute_sql((
+        self.execute_sql_async((
             'CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER,'
             ' artist2 INTEGER, match INTEGER);',), priority=0)
-        self.execute_sql((
+        self.execute_sql_async((
             'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, artist'
             ' INTEGER, title VARCHAR(100), updated DATE);',), priority=0)
-        self.execute_sql((
+        self.execute_sql_async((
             'CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, track2'
             ' INTEGER, match INTEGER);',), priority=0)
-        self.execute_sql((
+        self.execute_sql_async((
             'CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, '
             'filename VARCHAR(300), scms BLOB);',), priority=0)
-        self.execute_sql((
+        self.execute_sql_async((
             "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
             "INTEGER, distance INTEGER);",), priority=0)
-        self.execute_sql((
+        self.execute_sql_async((
             "CREATE INDEX IF NOT EXISTS a2aa1x ON artist_2_artist "
             "(artist1);",), priority=0)
-        self.execute_sql((
+        self.execute_sql_async((
             "CREATE INDEX IF NOT EXISTS a2aa2x ON artist_2_artist "
             "(artist2);",), priority=0)
-        self.execute_sql(
+        self.execute_sql_async(
             ("CREATE INDEX IF NOT EXISTS t2tt1x ON track_2_track (track1);",),
             priority=0)
-        self.execute_sql(
+        self.execute_sql_async(
             ("CREATE INDEX IF NOT EXISTS t2tt2x ON track_2_track (track2);",),
             priority=0)
-        self.execute_sql(
+        self.execute_sql_async(
             ("CREATE INDEX IF NOT EXISTS mfnx ON mirage (filename);",),
             priority=0)
-        self.execute_sql(
+        self.execute_sql_async(
             ("CREATE INDEX IF NOT EXISTS dtrack1x ON distance (track_1);",),
             priority=0)
-        self.execute_sql(
+        self.execute_sql_async(
             ("CREATE INDEX IF NOT EXISTS dtrack2x ON distance (track_2);",),
             priority=0)
 
@@ -464,27 +607,12 @@ class Database(object):
                 'artists.id NOT IN (SELECT tracks.artist from tracks);',
                 (artist,)), priority=10):
             artist_id = row[0]
-            self.execute_sql((
+            self.execute_sql_async((
                 'DELETE FROM artist_2_artist WHERE artist1 = ? OR artist2 = '
                 '?;', (artist_id, artist_id)), priority=10)
-            self.execute_sql(
+            self.execute_sql_async(
                 ('DELETE FROM artists WHERE id = ?', (artist_id,)),
                 priority=10)
-
-
-class SimilarityService(dbus.service.Object):
-    """Service that can be queried for similar songs."""
-
-    def __init__(self, bus_name, object_path):
-        import gst
-        self.db = Database()
-        self.lastfm = True
-        self.cache_time = 90
-        super(SimilarityService, self).__init__(
-            bus_name=bus_name, object_path=object_path)
-        self.mir = Mir()
-        self.loop = gobject.MainLoop()
-        self.network = LastFMNetwork(api_key=API_KEY)
 
     def log(self, message):
         """Log message."""
@@ -495,6 +623,34 @@ class SimilarityService(dbus.service.Object):
                 print message.encode('utf-8')
             except:
                 return
+
+    def analyze_track(self, filename, add_neighbours, exclude_filenames,
+                      priority):
+        """Perform mirage analysis of a track."""
+        if not filename:
+            return
+        trackid_scms = self.get_track_from_filename(
+            filename, priority=priority)
+        if not trackid_scms:
+            self.log("no mirage data found for %s, analyzing track" % filename)
+            try:
+                scms = self.mir.analyze(filename.encode('utf-8'))
+            except (MatrixDimensionMismatchException, MfccFailedException,
+                    IndexError), e:
+                self.log(repr(e))
+                return
+            self.add_track(filename, scms, priority=priority)
+            trackid = self.get_track_id(filename, priority=priority)
+        else:
+            trackid, scms = trackid_scms
+        if not add_neighbours:
+            return
+        if self.has_scores(trackid, no=NEIGHBOURS,
+                                      priority=priority):
+            return
+        self.add_neighbours(
+            trackid, scms, exclude_filenames=exclude_filenames,
+            neighbours=NEIGHBOURS, priority=priority)
 
     def get_similar_tracks_from_lastfm(self, artist_name, title, track_id):
         """Get similar tracks."""
@@ -519,7 +675,7 @@ class SimilarityService(dbus.service.Object):
         except (WSError, NetworkError), e:
             print e
             return
-        self.db.update_similar_tracks(tracks_to_update)
+        self.update_similar_tracks(tracks_to_update)
         return results
 
     def get_similar_artists_from_lastfm(self, artist_name, artist_id):
@@ -540,80 +696,33 @@ class SimilarityService(dbus.service.Object):
                 results.append((match, name))
         except WSError:
             return
-        self.db.update_similar_artists(artists_to_update)
+        self.update_similar_artists(artists_to_update)
         return results
 
-    @method(dbus_interface=IFACE, in_signature='s')
-    def remove_track_by_filename(self, filename):
-        """Remove tracks from database."""
-        self.db.remove_track_by_filename(filename)
-
-    @method(dbus_interface=IFACE, in_signature='ss')
-    def remove_track(self, artist, title):
-        """Remove tracks from database."""
-        self.db.remove_track(artist, title)
-
-    @method(dbus_interface=IFACE, in_signature='s')
-    def remove_artist(self, artist):
-        """Remove tracks from database."""
-        self.db.remove_artist(artist)
-
-    @method(dbus_interface=IFACE, in_signature='sbasi')
-    def analyze_track(self, filename, add_neighbours, exclude_filenames,
-                      priority):
-        """Perform mirage analysis of a track."""
-        if not filename:
-            return
-        trackid_scms = self.db.get_track_from_filename(
-            filename, priority=priority)
-        if not trackid_scms:
-            self.log("no mirage data found for %s, analyzing track" % filename)
-            try:
-                scms = self.mir.analyze(filename.encode('utf-8'))
-            except (MatrixDimensionMismatchException, MfccFailedException,
-                    IndexError), e:
-                self.log(repr(e))
-                return
-            self.db.add_track(filename, scms, priority=priority)
-            trackid = self.db.get_track_id(filename, priority=priority)
-        else:
-            trackid, scms = trackid_scms
-        if not add_neighbours:
-            return
-        if self.db.has_scores(trackid, no=NEIGHBOURS, priority=priority):
-            return
-        self.db.add_neighbours(
-            trackid, scms, exclude_filenames=exclude_filenames,
-            neighbours=NEIGHBOURS, priority=priority)
-
-    @method(dbus_interface=IFACE, in_signature='s', out_signature='a(is)')
     def get_ordered_mirage_tracks(self, filename):
         """Get similar tracks by mirage acoustic analysis."""
-        trackid = self.db.get_track_id(filename, priority=0)
-        return self.db.get_neighbours(trackid)
+        trackid = self.get_track_id(filename, priority=0)
+        return self.get_neighbours(trackid)
 
-    @method(dbus_interface=IFACE, in_signature='ss', out_signature='a(iss)')
     def get_ordered_similar_tracks(self, artist_name, title):
         """Get similar tracks from last.fm/the database.
 
         Sorted by descending match score.
 
         """
-        artist_name = artist_name
-        title = title
         now = datetime.now()
-        track = self.db.get_track_from_artist_and_title(artist_name, title)
+        track = self.get_track_from_artist_and_title(
+            artist_name, title)
         track_id, updated = track[0], track[3]
         if updated:
             updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
             if updated + timedelta(self.cache_time) > now:
                 self.log("Getting similar tracks from db for: %s - %s" % (
                     artist_name, title))
-                return self.db.get_similar_tracks(track_id)
+                return self.get_similar_tracks(track_id)
         return self.get_similar_tracks_from_lastfm(
             artist_name, title, track_id)
 
-    @method(dbus_interface=IFACE, in_signature='as', out_signature='a(is)')
     def get_ordered_similar_artists(self, artists):
         """Get similar artists from the database.
 
@@ -625,7 +734,7 @@ class SimilarityService(dbus.service.Object):
         for name in artists:
             artist_name = name
             result = None
-            artist = self.db.get_artist(artist_name)
+            artist = self.get_artist(artist_name)
             artist_id, updated = artist[0], artist[2]
             if updated:
                 updated = datetime(
@@ -634,13 +743,98 @@ class SimilarityService(dbus.service.Object):
                     self.log(
                         "Getting similar artists from db for: %s " %
                         artist_name)
-                    result = self.db.get_similar_artists(artist_id)
+                    result = self.get_similar_artists(artist_id)
             if not result:
                 result = self.get_similar_artists_from_lastfm(
                     artist_name, artist_id)
             results.extend(result)
         results.sort(reverse=True)
         return results
+
+    def miximize(self, filenames):
+        """Return ideally ordered list of filenames."""
+        self.log("mirage analysis")
+        songs = []
+        Song = namedtuple('Song', 'filename scms')
+        for filename in filenames:
+            trackid_scms = self.get_track_from_filename(filename, priority=10)
+            if not trackid_scms:
+                try:
+                    scms = self.mir.analyze(filename)
+                except:
+                    return
+                self.add_track(filename, scms, priority=10)
+            else:
+                _, scms = trackid_scms
+            songs.append(Song(filename, scms))
+        conf = ScmsConfiguration(20)
+        clusterer = Clusterer(
+            songs, lambda song1, song2: distance(song1.scms, song2.scms, conf))
+        qsongs = []
+        for cluster in clusterer.clusters:
+            qsongs.extend([song.filename for song in cluster])
+        return qsongs
+
+
+class SimilarityService(dbus.service.Object):
+    """Service that can be queried for similar songs."""
+
+    def __init__(self, bus_name, object_path):
+        import gst
+        self.similarity = Similarity()
+        super(SimilarityService, self).__init__(
+            bus_name=bus_name, object_path=object_path)
+        self.loop = gobject.MainLoop()
+
+    @method(dbus_interface=IFACE, in_signature='s')
+    def remove_track_by_filename(self, filename):
+        """Remove tracks from database."""
+        self.similarity.remove_track_by_filename(filename)
+
+    @method(dbus_interface=IFACE, in_signature='ss')
+    def remove_track(self, artist, title):
+        """Remove tracks from database."""
+        self.similarity.remove_track(artist, title)
+
+    @method(dbus_interface=IFACE, in_signature='s')
+    def remove_artist(self, artist):
+        """Remove tracks from database."""
+        self.similarity.remove_artist(artist)
+
+    @method(dbus_interface=IFACE, in_signature='sbasi')
+    def analyze_track(self, filename, add_neighbours, exclude_filenames,
+                      priority):
+        """Perform mirage analysis of a track."""
+        self.similarity.analyze_track(
+            filename, add_neighbours, exclude_filenames, priority)
+
+    @method(dbus_interface=IFACE, in_signature='s', out_signature='a(is)')
+    def get_ordered_mirage_tracks(self, filename):
+        """Get similar tracks by mirage acoustic analysis."""
+        return self.similarity.get_ordered_mirage_tracks(filename)
+
+    @method(dbus_interface=IFACE, in_signature='ss', out_signature='a(iss)')
+    def get_ordered_similar_tracks(self, artist_name, title):
+        """Get similar tracks from last.fm/the database.
+
+        Sorted by descending match score.
+
+        """
+        return self.similarity.get_ordered_similar_tracks(artist_name, title)
+
+    @method(dbus_interface=IFACE, in_signature='as', out_signature='a(is)')
+    def get_ordered_similar_artists(self, artists):
+        """Get similar artists from the database.
+
+        Sorted by descending match score.
+
+        """
+        return self.similarity.get_ordered_similar_artists(artists)
+
+    @method(dbus_interface=IFACE, in_signature='as', out_signature='as')
+    def miximize(self, filenames):
+        """Return ideally ordered list of filenames."""
+        return self.similarity.miximize(filenames)
 
     def run(self):
         """Run loop."""
