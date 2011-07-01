@@ -160,10 +160,10 @@ class Clusterer(object):
 
     def build_similarity_matrix(self, songs, comparison_function):
         """Build the similarity matrix."""
-        for song in songs:
-            for song2 in songs[songs.index(song) + 1:]:
+        for song1 in songs:
+            for song2 in songs[songs.index(song1) + 1:]:
                 self.similarities.append(
-                    Pair(song, song2, comparison_function(song[0], song2[0])))
+                    Pair(song1, song2, comparison_function(song1, song2)))
         self.similarities.sort(reverse=True)
 
     def join(self, cluster1, cluster2):
@@ -199,10 +199,9 @@ class Clusterer(object):
     def build_clusters(self):
         """Build clusters out of similarity matrix."""
         sim = self.similarities.pop()
-        self.clusters = [sim.songs()]
+        self.clusters = [[sim.songs()]]
         while self.similarities:
             sim = self.similarities.pop()
-            new = []
             found = None
             new = []
             for cluster in self.clusters[:]:
@@ -210,25 +209,25 @@ class Clusterer(object):
                     if cluster[0] in sim.songs():
                         found = cluster[0]
                         cluster = [sim.other(found)] + cluster
-                        self.clean_similarities(cluster)
+                        self.clean_similarities(found)
                     elif cluster[-1] in sim.songs():
                         found = cluster[-1]
                         cluster = cluster + [sim.other(found)]
-                        self.clean_similarities(cluster)
+                        self.clean_similarities(found)
                 new.append(cluster)
             self.clusters = new
             if found is None:
                 self.clusters.append(sim.songs())
             self.merge_clusters()
 
-    def clean_similarities(self, cluster):
+    def clean_similarities(self, found):
         """Remove similarity scores for processed cluster."""
         new = []
         for sim in self.similarities:
             song1, song2 = sim.songs()
-            if in_the_middle(song1, song2, cluster):
+            if song1 == found:
                 continue
-            elif at_the_ends(song1, song2, cluster):
+            if song2 == found:
                 continue
             new.append(sim)
         self.similarities = new
