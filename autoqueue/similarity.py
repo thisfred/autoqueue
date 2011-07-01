@@ -759,7 +759,7 @@ class Similarity(object):
                 try:
                     scms = self.mir.analyze(filename)
                 except:
-                    return
+                    continue
                 self.add_track(filename, scms, priority=10)
             else:
                 _, scms = trackid_scms
