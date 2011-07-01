@@ -126,10 +126,11 @@ class DatabaseWrapper(Thread):
 
 class Pair():
     """A pair of songs"""
-    def __init__(self, song1, song2, score):
+
+    def __init__(self, song1, song2, song_distance):
         self.song1 = song1
         self.song2 = song2
-        self.score = score
+        self.distance = song_distance
 
     def other(self, song):
         """Return the song paired with @song."""
@@ -142,9 +143,9 @@ class Pair():
         return [self.song1, self.song2]
 
     def __cmp__(self, other):
-        if self.score < other.score:
+        if self.distance < other.distance:
             return -1
-        if self.score > other.score:
+        if self.distance > other.distance:
             return 1
         return 0
 
@@ -250,16 +251,17 @@ class Similarity(object):
         self.network = LastFMNetwork(api_key=API_KEY)
         self.cache_time = 90
 
-    def execute_sql(self, sql, priority=1):
+    def execute_sql(self, sql=None, priority=1, command=None):
         """Put sql command on the queue to be executed."""
-        command = SQLCommand(sql)
+        if command is None:
+            command = SQLCommand(sql)
         self.queue.put((priority, command))
-        return command.result_queue.get()
 
-    def execute_sql_async(self, sql, priority=1):
-        """Put sql command on the queue to be executed."""
+    def get_sql_command(self, sql, priority=1):
+        """Build a SQLCommand, put it on the queue and return it."""
         command = SQLCommand(sql)
-        self.queue.put((priority, command))
+        self.execute_sql(command=command, priority=priority)
+        return command
 
     def player_get_data_dir(self):
         """Get the directory to store user data.
@@ -276,83 +278,87 @@ class Similarity(object):
 
     def add_track(self, filename, scms, priority):
         """Add track to database."""
-        self.execute_sql_async(
+        self.execute_sql(
             ("INSERT INTO mirage (filename, scms) VALUES (?, ?);",
             (filename, sqlite3.Binary(instance_to_picklestring(scms)))),
             priority=priority)
 
     def remove_track_by_filename(self, filename):
         """Remove tracks from database."""
-        for row in self.execute_sql(
-            ('SELECT trackid FROM mirage WHERE filename = ?', (filename,)),
-            priority=10):
+        sql = ('SELECT trackid FROM mirage WHERE filename = ?', (filename,))
+        command = self.get_sql_command(sql, priority=10)
+        for row in command.result_queue.get():
             track_id = row[0]
-            self.execute_sql_async((
+            self.execute_sql((
                 'DELETE FROM distance WHERE track_1 = ? OR track_2 = ?;',
             (track_id, track_id)), priority=10)
-            self.execute_sql_async((
+            self.execute_sql((
                 "DELETE FROM mirage WHERE trackid = ?;",
                 (track_id,)), priority=10)
 
     def remove_track(self, artist, title):
         """Delete missing track."""
-        for row in self.execute_sql((
+        sql = (
             'SELECT tracks.id FROM tracks WHERE tracks.title = ? AND WHERE '
             'tracks.artist IN (SELECT artists.id FROM artists WHERE '
-            'artists.name = ?);', (artist, title)), priority=10):
+            'artists.name = ?);', (artist, title))
+        command = self.get_sql_command(sql, priority=10)
+        for row in command.result_queue.get():
             track_id = row[0]
-            self.execute_sql_async(
+            self.execute_sql(
                 ('DELETE FROM track_2_track WHERE track1 = ? or track2 = ?;',
                  (track_id, track_id)), priority=10)
-            self.execute_sql_async(
+            self.execute_sql(
                 ('DELETE FROM tracks WHERE id = ?;', (track_id,)), priority=10)
         self.delete_orphan_artist(artist)
 
     def remove_artist(self, artist):
         """Delete missing artist."""
-        for row in self.execute_sql(
-            ('SELECT id from artists WHERE artists.name = ?;', (artist,)),
-            priority=10):
+        sql = ('SELECT id from artists WHERE artists.name = ?;', (artist,))
+        command = self.get_sql_command(sql, priority=10)
+        for row in command.result_queue.get():
             artist_id = row[0]
-            self.execute_sql_async(
+            self.execute_sql(
                 ('DELETE FROM artists WHERE artists.id = ?;', (artist_id)),
                 priority=10)
-            self.execute_sql_async(
+            self.execute_sql(
                 ('DELETE FROM tracks WHERE tracks.artist = ?;', (artist_id)),
                 priority=10)
 
     def get_track_from_filename(self, filename, priority):
         """Get track from database."""
-        rows = self.execute_sql((
+        sql = (
             "SELECT trackid, scms FROM mirage WHERE filename = ?;",
-            (filename,)), priority=priority)
-        for row in rows:
+            (filename,))
+        command = self.get_sql_command(sql, priority=priority)
+        for row in command.result_queue.get():
             return (row[0], instance_from_picklestring(row[1]))
         return None
 
     def get_track_id(self, filename, priority):
         """Get track id from database."""
-        rows = self.execute_sql(
-            ("SELECT trackid FROM mirage WHERE filename = ?;", (filename,)),
-            priority=priority)
-        for row in rows:
+        sql = ("SELECT trackid FROM mirage WHERE filename = ?;", (filename,))
+        command = self.get_sql_command(sql, priority=priority)
+        for row in command.result_queue.get():
             return row[0]
         return None
 
     def has_scores(self, trackid, no=20, priority=0):
         """Check if the track has sufficient neighbours."""
-        rows = self.execute_sql((
+        sql = (
             'SELECT COUNT(*) FROM distance WHERE track_1 = ?;',
-            (trackid,)), priority=priority)
-        l1 = rows[0][0]
+            (trackid,))
+        command = self.get_sql_command(sql, priority=priority)
+        l1 = command.result_queue.get()[0][0]
         if l1 < no:
             print "Only %d connections found, minimum %d." % (l1, no)
             return False
-        rows = self.execute_sql((
+        sql = (
             "SELECT COUNT(track_1) FROM distance WHERE track_2 = ? AND "
             "distance < (SELECT MAX(distance) FROM distance WHERE track_1 = "
-            "?);", (trackid, trackid)), priority=priority)
-        l2 = rows[0][0]
+            "?);", (trackid, trackid))
+        command = self.get_sql_command(sql, priority=priority)
+        l2 = command.result_queue.get()[0][0]
         if l2 > l1:
             print "Found %d incoming connections and only %d outgoing." % (
                 l2, l1)
@@ -363,10 +369,11 @@ class Similarity(object):
         """Get tracks from database."""
         if not exclude_filenames:
             exclude_filenames = []
-        rows = self.execute_sql((
-            "SELECT scms, trackid, filename FROM mirage;",), priority=priority)
-        return [(row[0], row[1]) for row in rows if row[2]
-                  not in exclude_filenames]
+        sql = ("SELECT scms, trackid, filename FROM mirage;",)
+        command = self.get_sql_command(sql, priority=priority)
+        return [
+            (row[0], row[1]) for row in command.result_queue.get()
+            if row[2] not in exclude_filenames]
 
     def add_neighbours(self, trackid, scms, exclude_filenames=None,
                        neighbours=20, priority=0):
@@ -374,7 +381,7 @@ class Similarity(object):
         if not exclude_filenames:
             exclude_filenames = []
         to_add = neighbours * 2
-        self.execute_sql_async(
+        self.execute_sql(
             ("DELETE FROM distance WHERE track_1 = ?;", (trackid,)),
             priority=priority)
         conf = ScmsConfiguration(20)
@@ -399,49 +406,49 @@ class Similarity(object):
             while best:
                 added += 1
                 best_tup = best.pop()
-                self.execute_sql_async((
+                self.execute_sql((
                     "INSERT INTO distance (distance, track_1, track_2) "
                     "VALUES (?, ?, ?);", best_tup), priority=priority)
         print "added %d connections" % added
 
     def get_neighbours(self, trackid):
         """Get neighbours for track."""
-        return self.execute_sql((
+        sql = (
             "SELECT distance, filename FROM distance INNER JOIN MIRAGE ON "
             "distance.track_2 = mirage.trackid WHERE track_1 = ? ORDER BY "
             "distance ASC;",
-            (trackid,)), priority=0)
+            (trackid,))
+        command = self.get_sql_command(sql, priority=0)
+        return command.result_queue.get()
 
     def get_artist(self, artist_name):
         """Get artist information from the database."""
         artist_name = artist_name.encode("UTF-8")
-        rows = self.execute_sql((
-            "SELECT * FROM artists WHERE name = ?;", (artist_name,)))
-        for row in rows:
+        sql = ("SELECT * FROM artists WHERE name = ?;", (artist_name,))
+        command = self.get_sql_command(sql)
+        for row in command.result_queue.get():
             return row
-        self.execute_sql_async((
+        self.execute_sql((
             "INSERT INTO artists (name) VALUES (?);", (artist_name,)))
-        rows = self.execute_sql((
-            "SELECT * FROM artists WHERE name = ?;", (artist_name,)))
-        for row in rows:
+        command = self.get_sql_command(sql)
+        for row in command.result_queue.get():
             return row
 
     def get_track_from_artist_and_title(self, artist_name, title):
         """Get track information from the database."""
         title = title.encode("UTF-8")
         artist_id = self.get_artist(artist_name)[0]
-        rows = self.execute_sql((
+        sql = (
             "SELECT * FROM tracks WHERE artist = ? AND title = ?;",
-            (artist_id, title)), priority=0)
-        for row in rows:
+            (artist_id, title))
+        command = self.get_sql_command(sql, priority=0)
+        for row in command.result_queue.get():
             return row
-        self.execute_sql_async((
+        self.execute_sql((
             "INSERT INTO tracks (artist, title) VALUES (?, ?);",
             (artist_id, title)), priority=0)
-        rows = self.execute_sql((
-            "SELECT * FROM tracks WHERE artist = ? AND title = ?;",
-            (artist_id, title)), priority=0)
-        for row in rows:
+        command = self.get_sql_command(sql, priority=0)
+        for row in command.result_queue.get():
             return row
 
     def get_similar_tracks(self, track_id):
@@ -450,13 +457,15 @@ class Similarity(object):
         Sorted by descending match score.
 
         """
-        return self.execute_sql((
+        sql = (
             "SELECT track_2_track.match, artists.name, tracks.title"
             " FROM track_2_track INNER JOIN tracks ON"
             " track_2_track.track2 = tracks.id INNER JOIN artists ON"
             " artists.id = tracks.artist WHERE track_2_track.track1"
             " = ? ORDER BY track_2_track.match DESC;",
-            (track_id,)), priority=0)
+            (track_id,))
+        command = self.get_sql_command(sql, priority=0)
+        return command.result_queue.get()
 
     def get_similar_artists(self, artist_id):
         """Get similar artists from the database.
@@ -464,68 +473,72 @@ class Similarity(object):
         Sorted by descending match score.
 
         """
-        return self.execute_sql((
+        sql = (
             "SELECT match, name FROM artist_2_artist INNER JOIN"
             " artists ON artist_2_artist.artist2 = artists.id WHERE"
             " artist_2_artist.artist1 = ? ORDER BY match DESC;",
-            (artist_id,)), priority=0)
+            (artist_id,))
+        command = self.get_sql_command(sql, priority=0)
+        return command.result_queue.get()
 
     def get_artist_match(self, artist1, artist2):
         """Get artist match score from database."""
-        rows = self.execute_sql((
+        sql = (
             "SELECT match FROM artist_2_artist WHERE artist1 = ?"
             " AND artist2 = ?;",
-            (artist1, artist2)), priority=2)
-        for row in rows:
+            (artist1, artist2))
+        command = self.get_sql_command(sql, priority=2)
+        for row in command.result_queue.get():
             return row[0]
         return 0
 
     def get_track_match(self, track1, track2):
         """Get track match score from database."""
-        rows = self.execute_sql((
+        sql = (
             "SELECT match FROM track_2_track WHERE track1 = ? AND track2 = ?;",
-            (track1, track2)), priority=2)
-        for row in rows:
+            (track1, track2))
+        command = self.get_sql_command(sql, priority=2)
+        for row in command.result_queue.get():
             return row[0]
         return 0
 
     def update_artist_match(self, artist1, artist2, match):
         """Write match score to the database."""
-        self.execute_sql_async((
+        self.execute_sql((
             "UPDATE artist_2_artist SET match = ? WHERE artist1 = ? AND"
             " artist2 = ?;",
             (match, artist1, artist2)), priority=10)
 
     def update_track_match(self, track1, track2, match):
         """Write match score to the database."""
-        self.execute_sql_async((
+        self.execute_sql((
             "UPDATE track_2_track SET match = ? WHERE track1 = ? AND"
             " track2 = ?;",
             (match, track1, track2)), priority=10)
 
     def insert_artist_match(self, artist1, artist2, match):
         """Write match score to the database."""
-        self.execute_sql_async((
+        self.execute_sql((
             "INSERT INTO artist_2_artist (artist1, artist2, match) VALUES"
             " (?, ?, ?);",
             (artist1, artist2, match)), priority=10)
 
     def insert_track_match(self, track1, track2, match):
         """Write match score to the database."""
-        self.execute_sql_async((
+        self.execute_sql((
             "INSERT INTO track_2_track (track1, track2, match) VALUES"
             " (?, ?, ?);",
             (track1, track2, match)), priority=10)
 
     def update_artist(self, artist_id):
         """Write artist information to the database."""
-        self.execute_sql_async((
+        self.execute_sql((
             "UPDATE artists SET updated = DATETIME('now') WHERE id = ?;",
             (artist_id,)), priority=10)
 
     def update_track(self, track_id):
         """Write track information to the database."""
-        self.execute_sql_async((
+        self.execute_sql((
             "UPDATE tracks SET updated = DATETIME('now') WHERE id = ?",
             (track_id,)), priority=10)
 
@@ -559,57 +572,59 @@ class Similarity(object):
 
     def create_db(self):
         """Set up a database for the artist and track similarity scores."""
-        self.execute_sql_async((
+        self.execute_sql((
             'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name'
             ' VARCHAR(100), updated DATE);',), priority=0)
-        self.execute_sql_async((
+        self.execute_sql((
             'CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER,'
             ' artist2 INTEGER, match INTEGER);',), priority=0)
-        self.execute_sql_async((
+        self.execute_sql((
             'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, artist'
             ' INTEGER, title VARCHAR(100), updated DATE);',), priority=0)
-        self.execute_sql_async((
+        self.execute_sql((
             'CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, track2'
             ' INTEGER, match INTEGER);',), priority=0)
-        self.execute_sql_async((
+        self.execute_sql((
             'CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, '
             'filename VARCHAR(300), scms BLOB);',), priority=0)
-        self.execute_sql_async((
+        self.execute_sql((
             "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
             "INTEGER, distance INTEGER);",), priority=0)
-        self.execute_sql_async((
+        self.execute_sql((
             "CREATE INDEX IF NOT EXISTS a2aa1x ON artist_2_artist "
             "(artist1);",), priority=0)
-        self.execute_sql_async((
+        self.execute_sql((
             "CREATE INDEX IF NOT EXISTS a2aa2x ON artist_2_artist "
             "(artist2);",), priority=0)
-        self.execute_sql_async(
+        self.execute_sql(
             ("CREATE INDEX IF NOT EXISTS t2tt1x ON track_2_track (track1);",),
             priority=0)
-        self.execute_sql_async(
+        self.execute_sql(
             ("CREATE INDEX IF NOT EXISTS t2tt2x ON track_2_track (track2);",),
             priority=0)
-        self.execute_sql_async(
+        self.execute_sql(
             ("CREATE INDEX IF NOT EXISTS mfnx ON mirage (filename);",),
             priority=0)
-        self.execute_sql_async(
+        self.execute_sql(
             ("CREATE INDEX IF NOT EXISTS dtrack1x ON distance (track_1);",),
             priority=0)
-        self.execute_sql_async(
+        self.execute_sql(
             ("CREATE INDEX IF NOT EXISTS dtrack2x ON distance (track_2);",),
             priority=0)
 
     def delete_orphan_artist(self, artist):
         """Delete artists that have no tracks."""
-        for row in self.execute_sql((
+        sql = (
                 'SELECT artists.id FROM artists WHERE artists.name = ? AND '
                 'artists.id NOT IN (SELECT tracks.artist from tracks);',
-                (artist,)), priority=10):
+                (artist,))
+        command = self.get_sql_command(sql, priority=10)
+        for row in command.result_queue.get():
             artist_id = row[0]
-            self.execute_sql_async((
+            self.execute_sql((
                 'DELETE FROM artist_2_artist WHERE artist1 = ? OR artist2 = '
                 '?;', (artist_id, artist_id)), priority=10)
-            self.execute_sql_async(
+            self.execute_sql(
                 ('DELETE FROM artists WHERE id = ?', (artist_id,)),
                 priority=10)
 
@@ -766,6 +781,7 @@ class Similarity(object):
             else:
                 _, scms = trackid_scms
             songs.append(Song(filename, scms))
+        self.log("clustering")
         conf = ScmsConfiguration(20)
         clusterer = Clusterer(
             songs, lambda song1, song2: distance(song1.scms, song2.scms, conf))
