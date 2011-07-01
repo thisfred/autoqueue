@@ -41,14 +41,6 @@ DBUS_PATH = '/org/autoqueue/Similarity'
 # http://www.last.fm/api/account
 API_KEY = "09d0975a99a4cab235b731d31abf0057"
 
-TRACK_URL = "http://ws.audioscrobbler.com/2.0/?method=track.getsimilar" \
-            "&artist=%s&track=%s&api_key=" + API_KEY
-ARTIST_URL = "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar" \
-             "&artist=%s&api_key=" + API_KEY
-
-# be nice to last.fm
-API_KEY = "09d0975a99a4cab235b731d31abf0057"
-
 # TODO make configurable
 NEIGHBOURS = 20
 
@@ -58,25 +50,6 @@ def cluster_match(cluster1, cluster2):
     return (
         cluster1[0] == cluster2[0] or cluster1[-1] == cluster2[0] or
         cluster1[0] == cluster2[-1] or cluster1[-1] == cluster2[-1])
-
-
-def in_the_middle(song1, song2, cluster):
-    """@song1 or @song2 is in @cluster and not on one of the ends."""
-    if song1 in cluster:
-        index = cluster.index(song1)
-        if index > 0 and index < len(cluster) - 1:
-            return True
-    if song2 in cluster:
-        index = cluster.index(song2)
-        if index > 0 and index < len(cluster) - 1:
-            return True
-    return False
-
-
-def at_the_ends(song1, song2, cluster):
-    """@song1 and @song1 are at either end of @cluster."""
-    return (cluster[0] == song1 and cluster[-1] == song2) or (
-        cluster[-1] == song1 and cluster[0] == song2)
 
 
 class SQLCommand(object):
@@ -142,6 +115,9 @@ class Pair():
         """Return both songs."""
         return [self.song1, self.song2]
 
+    def __eq__(self, other):
+        return self.song1 == other.song1 and self.song2 == other.song2
+
     def __cmp__(self, other):
         if self.distance < other.distance:
             return -1
@@ -149,15 +125,19 @@ class Pair():
             return 1
         return 0
 
+    def __repr__(self):
+        return '<Pair {song1}, {song2}: {distance}>'.format(
+            song1=self.song1, song2=self.song2, distance=self.distance)
+
 
 class Clusterer(object):
     """Build a list of songs in optimized order."""
 
     def __init__(self, songs, comparison_function):
         self.clusters = []
+        self.ends = []
         self.similarities = []
         self.build_similarity_matrix(songs, comparison_function)
-        self.build_clusters()
 
     def build_similarity_matrix(self, songs, comparison_function):
         """Build the similarity matrix."""
@@ -171,64 +151,67 @@ class Clusterer(object):
         """Join two clusters together."""
         if cluster1[0] == cluster2[0]:
             cluster2.reverse()
-            result = cluster2 + cluster1[1:]
+            self.clean(cluster1[0])
+            return cluster2 + cluster1[1:]
         elif cluster1[-1] == cluster2[0]:
-            result = cluster1 + cluster2[1:]
+            self.clean(cluster1[-1])
+            return cluster1 + cluster2[1:]
         elif cluster1[0] == cluster2[-1]:
-            result = cluster2 + cluster1[1:]
-        else:
-            cluster2.reverse()
-            result = cluster1[:-1] + cluster2
-        self.clean_similarities(result)
-        return result
+            self.clean(cluster1[0])
+            return cluster2 + cluster1[1:]
+        cluster2.reverse()
+        self.clean(cluster1[-1])
+        return cluster1[:-1] + cluster2
 
-    def merge_clusters(self):
-        """Merge clusters """
-        new = []
-        clusters = self.clusters
-        while clusters:
-            cluster1 = clusters.pop()
-            for cluster in clusters[:]:
-                if cluster_match(cluster, cluster1):
-                    new.append(self.join(cluster1, cluster))
-                    clusters.remove(cluster)
-                    break
-            else:
-                new.append(cluster1)
-        self.clusters = new
+    def pop_cluster_ending_in(self, song):
+        """Pop a cluster with @song at either end."""
+        for cluster in self.clusters[:]:
+            if cluster[0] == song:
+                self.clusters.remove(cluster)
+                self.ends.remove(cluster[0])
+                self.ends.remove(cluster[-1])
+                return cluster
+            if cluster[-1] == song:
+                self.clusters.remove(cluster)
+                self.ends.remove(cluster[0])
+                self.ends.remove(cluster[-1])
+                return cluster
 
-    def build_clusters(self):
+    def cluster(self):
         """Build clusters out of similarity matrix."""
         sim = self.similarities.pop()
-        self.clusters = [[sim.songs()]]
+        self.clusters = [sim.songs()]
+        self.ends = sim.songs()
         while self.similarities:
             sim = self.similarities.pop()
-            found = None
-            new = []
-            for cluster in self.clusters[:]:
-                if not found:
-                    if cluster[0] in sim.songs():
-                        found = cluster[0]
-                        cluster = [sim.other(found)] + cluster
-                        self.clean_similarities(found)
-                    elif cluster[-1] in sim.songs():
-                        found = cluster[-1]
-                        cluster = cluster + [sim.other(found)]
-                        self.clean_similarities(found)
-                new.append(cluster)
-            self.clusters = new
-            if found is None:
-                self.clusters.append(sim.songs())
-            self.merge_clusters()
+            songs = sim.songs()
+            if sim.song1 in self.ends or sim.song2 in self.ends:
+                cluster1 = self.pop_cluster_ending_in(sim.song1)
+                cluster2 = self.pop_cluster_ending_in(sim.song2)
+                if cluster1 and cluster2:
+                    new_cluster = self.join(cluster1, songs)
+                    new_cluster = self.join(new_cluster, cluster2)
+                elif cluster1:
+                    if sim.song1 in cluster1 and sim.song2 in cluster1:
+                        new_cluster = cluster1
+                    else:
+                        new_cluster = self.join(cluster1, songs)
+                else:
+                    if sim.song1 in cluster2 and sim.song2 in cluster2:
+                        new_cluster = cluster2
+                    else:
+                        new_cluster = self.join(cluster2, songs)
+                self.clusters.append(new_cluster)
+                self.ends.extend([new_cluster[0], new_cluster[-1]])
+            else:
+                self.clusters.append(songs)
+                self.ends.extend(songs)
 
-    def clean_similarities(self, found):
+    def clean(self, found):
         """Remove similarity scores for processed cluster."""
         new = []
         for sim in self.similarities:
-            song1, song2 = sim.songs()
-            if song1 == found:
-                continue
-            if song2 == found:
+            if found in sim.songs():
                 continue
             new.append(sim)
         self.similarities = new
@@ -785,6 +768,7 @@ class Similarity(object):
         conf = ScmsConfiguration(20)
         clusterer = Clusterer(
             songs, lambda song1, song2: distance(song1.scms, song2.scms, conf))
+        clusterer.cluster()
         qsongs = []
         for cluster in clusterer.clusters:
             qsongs.extend([song.filename for song in cluster])
