@@ -72,9 +72,9 @@ class DatabaseWrapper(Thread):
         self.queue = queue              # pylint: disable=W0201
 
     def run(self):
-        connection = sqlite3.connect(
-            self.path, timeout=5.0, isolation_level="immediate")
+        connection = sqlite3.connect(self.path, isolation_level='immediate')
         cursor = connection.cursor()
+        commit_needed = False
         while True:
             _, cmd = self.queue.get()
             sql = cmd.sql
@@ -82,12 +82,12 @@ class DatabaseWrapper(Thread):
                 cmd.result_queue.put(None)
                 connection.close()
                 break
-            commit_needed = False
             result = []
+            commit_needed = False
             try:
                 cursor.execute(*sql)
-            except:
-                print repr(sql)         # pylint: disable=W0702
+            except Exception, e:
+                print e, repr(sql)         # pylint: disable=W0702
             if not sql[0].upper().startswith('SELECT'):
                 commit_needed = True
             for row in cursor.fetchall():
@@ -282,7 +282,7 @@ class Similarity(object):
     def remove_track(self, artist, title):
         """Delete missing track."""
         sql = (
-            'SELECT tracks.id FROM tracks WHERE tracks.title = ? AND WHERE '
+            'SELECT tracks.id FROM tracks WHERE tracks.title = ? AND '
             'tracks.artist IN (SELECT artists.id FROM artists WHERE '
             'artists.name = ?);', (artist, title))
         command = self.get_sql_command(sql, priority=10)
@@ -302,10 +302,10 @@ class Similarity(object):
         for row in command.result_queue.get():
             artist_id = row[0]
             self.execute_sql(
-                ('DELETE FROM artists WHERE artists.id = ?;', (artist_id)),
+                ('DELETE FROM artists WHERE artists.id = ?;', (artist_id,)),
                 priority=10)
             self.execute_sql(
-                ('DELETE FROM tracks WHERE tracks.artist = ?;', (artist_id)),
+                ('DELETE FROM tracks WHERE tracks.artist = ?;', (artist_id,)),
                 priority=10)
 
     def get_track_from_filename(self, filename, priority):
@@ -401,36 +401,37 @@ class Similarity(object):
             "distance.track_2 = mirage.trackid WHERE track_1 = ? ORDER BY "
             "distance ASC;",
             (trackid,))
-        command = self.get_sql_command(sql, priority=0)
+        command = self.get_sql_command(sql, priority=1)
         return command.result_queue.get()
 
     def get_artist(self, artist_name):
         """Get artist information from the database."""
-        artist_name = artist_name.encode("UTF-8")
         sql = ("SELECT * FROM artists WHERE name = ?;", (artist_name,))
-        command = self.get_sql_command(sql)
+        command = self.get_sql_command(sql, priority=1)
         for row in command.result_queue.get():
             return row
-        self.execute_sql((
-            "INSERT INTO artists (name) VALUES (?);", (artist_name,)))
-        command = self.get_sql_command(sql)
+        sql2 = ("INSERT INTO artists (name) VALUES (?);", (artist_name,))
+        command = self.get_sql_command(sql2, priority=0)
+        command.result_queue.get()
+        command = self.get_sql_command(sql, priority=1)
         for row in command.result_queue.get():
             return row
 
     def get_track_from_artist_and_title(self, artist_name, title):
         """Get track information from the database."""
-        title = title.encode("UTF-8")
         artist_id = self.get_artist(artist_name)[0]
         sql = (
             "SELECT * FROM tracks WHERE artist = ? AND title = ?;",
             (artist_id, title))
-        command = self.get_sql_command(sql, priority=0)
+        command = self.get_sql_command(sql, priority=3)
         for row in command.result_queue.get():
             return row
-        self.execute_sql((
+        sql2 = (
             "INSERT INTO tracks (artist, title) VALUES (?, ?);",
-            (artist_id, title)), priority=0)
-        command = self.get_sql_command(sql, priority=0)
+            (artist_id, title))
+        command = self.get_sql_command(sql2, priority=2)
+        command.result_queue.get()
+        command = self.get_sql_command(sql, priority=3)
         for row in command.result_queue.get():
             return row
 
@@ -557,22 +558,26 @@ class Similarity(object):
         """Set up a database for the artist and track similarity scores."""
         self.execute_sql((
             'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name'
-            ' VARCHAR(100), updated DATE);',), priority=0)
+            ' VARCHAR(100), updated DATE, UNIQUE(name));',), priority=0)
         self.execute_sql((
             'CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER,'
-            ' artist2 INTEGER, match INTEGER);',), priority=0)
+            ' artist2 INTEGER, match INTEGER, UNIQUE(artist1, artist2));',),
+                         priority=0)
         self.execute_sql((
             'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, artist'
-            ' INTEGER, title VARCHAR(100), updated DATE);',), priority=0)
+            ' INTEGER, title VARCHAR(100), updated DATE, '
+            'UNIQUE(artist, title));',), priority=0)
         self.execute_sql((
             'CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, track2'
-            ' INTEGER, match INTEGER);',), priority=0)
+            ' INTEGER, match INTEGER, UNIQUE(track1, track2));',), priority=0)
         self.execute_sql((
             'CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, '
-            'filename VARCHAR(300), scms BLOB);',), priority=0)
+            'filename VARCHAR(300), scms BLOB, UNIQUE(filename));',),
+                         priority=0)
         self.execute_sql((
             "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
-            "INTEGER, distance INTEGER);",), priority=0)
+            "INTEGER, distance INTEGER, UNIQUE(track_1, track_2));",),
+                         priority=0)
         self.execute_sql((
             "CREATE INDEX IF NOT EXISTS a2aa1x ON artist_2_artist "
             "(artist1);",), priority=0)
@@ -628,7 +633,11 @@ class Similarity(object):
             return
         trackid_scms = self.get_track_from_filename(
             filename, priority=priority)
-        if not trackid_scms:
+        if trackid_scms:
+            if not add_neighbours:
+                return
+            trackid, scms = trackid_scms
+        else:
             self.log("no mirage data found for %s, analyzing track" % filename)
             try:
                 scms = self.mir.analyze(filename.encode('utf-8'))
@@ -636,12 +645,10 @@ class Similarity(object):
                     IndexError), e:
                 self.log(repr(e))
                 return
-            self.add_track(filename, scms, priority=priority)
+            self.add_track(filename, scms, priority=priority-1)
+            if not add_neighbours:
+                return
             trackid = self.get_track_id(filename, priority=priority)
-        else:
-            trackid, scms = trackid_scms
-        if not add_neighbours:
-            return
         if self.has_scores(trackid, no=NEIGHBOURS,
                                       priority=priority):
             return
@@ -655,7 +662,7 @@ class Similarity(object):
             lastfm_track = self.network.get_track(artist_name, title)
         except (WSError, NetworkError), e:
             print e
-            return
+            return []
         tracks_to_update = {}
         results = []
         try:
@@ -671,7 +678,7 @@ class Similarity(object):
                 results.append((match, similar_artist, similar_title))
         except (WSError, NetworkError), e:
             print e
-            return
+            return []
         self.update_similar_tracks(tracks_to_update)
         return results
 
@@ -679,8 +686,9 @@ class Similarity(object):
         """Get similar artists from lastfm."""
         try:
             lastfm_artist = self.network.get_artist(artist_name)
-        except WSError:
-            return
+        except (WSError, NetworkError), e:
+            print e
+            return []
         artists_to_update = {}
         results = []
         try:
@@ -691,8 +699,9 @@ class Similarity(object):
                     'score': match,
                     'artist': name})
                 results.append((match, name))
-        except WSError:
-            return
+        except (WSError, NetworkError), e:
+            print e
+            return []
         self.update_similar_artists(artists_to_update)
         return results
 
@@ -788,29 +797,30 @@ class SimilarityService(dbus.service.Object):
     @method(dbus_interface=IFACE, in_signature='s')
     def remove_track_by_filename(self, filename):
         """Remove tracks from database."""
-        self.similarity.remove_track_by_filename(filename)
+        self.similarity.remove_track_by_filename(unicode(filename))
 
     @method(dbus_interface=IFACE, in_signature='ss')
     def remove_track(self, artist, title):
         """Remove tracks from database."""
-        self.similarity.remove_track(artist, title)
+        self.similarity.remove_track(unicode(artist), unicode(title))
 
     @method(dbus_interface=IFACE, in_signature='s')
     def remove_artist(self, artist):
         """Remove tracks from database."""
-        self.similarity.remove_artist(artist)
+        self.similarity.remove_artist(unicode(artist))
 
     @method(dbus_interface=IFACE, in_signature='sbasi')
     def analyze_track(self, filename, add_neighbours, exclude_filenames,
                       priority):
         """Perform mirage analysis of a track."""
         self.similarity.analyze_track(
-            filename, add_neighbours, exclude_filenames, priority)
+            unicode(filename), add_neighbours,
+            [unicode(e) for e in exclude_filenames], priority)
 
     @method(dbus_interface=IFACE, in_signature='s', out_signature='a(is)')
     def get_ordered_mirage_tracks(self, filename):
         """Get similar tracks by mirage acoustic analysis."""
-        return self.similarity.get_ordered_mirage_tracks(filename)
+        return self.similarity.get_ordered_mirage_tracks(unicode(filename))
 
     @method(dbus_interface=IFACE, in_signature='ss', out_signature='a(iss)')
     def get_ordered_similar_tracks(self, artist_name, title):
@@ -819,7 +829,8 @@ class SimilarityService(dbus.service.Object):
         Sorted by descending match score.
 
         """
-        return self.similarity.get_ordered_similar_tracks(artist_name, title)
+        return self.similarity.get_ordered_similar_tracks(
+            unicode(artist_name), unicode(title))
 
     @method(dbus_interface=IFACE, in_signature='as', out_signature='a(is)')
     def get_ordered_similar_artists(self, artists):
@@ -828,12 +839,13 @@ class SimilarityService(dbus.service.Object):
         Sorted by descending match score.
 
         """
-        return self.similarity.get_ordered_similar_artists(artists)
+        return self.similarity.get_ordered_similar_artists(
+            [unicode(a) for a in artists])
 
     @method(dbus_interface=IFACE, in_signature='as', out_signature='as')
     def miximize(self, filenames):
         """Return ideally ordered list of filenames."""
-        return self.similarity.miximize(filenames)
+        return self.similarity.miximize([unicode(f) for f in filenames])
 
     def run(self):
         """Run loop."""

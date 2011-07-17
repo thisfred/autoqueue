@@ -330,8 +330,9 @@ class AutoQueueBase(object):
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
+            self.log('Analyzing %s' % filename)
             self.similarity.analyze_track(
-                filename, True, excluded_filenames, 5, reply_handler=NO_OP,
+                filename, False, excluded_filenames, 5, reply_handler=NO_OP,
                 error_handler=NO_OP, timeout=300)
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
@@ -379,14 +380,17 @@ class AutoQueueBase(object):
                         filename = filename.decode('utf-8')
                     except UnicodeDecodeError:
                         self.log('failed to decode filename %r' % filename)
+                self.log('Remove similarity for %s' % filename)
                 self.similarity.remove_track_by_filename(
                     filename, reply_handler=NO_OP,
                     error_handler=NO_OP)
             elif (artist and title) and not self.restrictions:
+                self.log('Remove %s - %s' % (artist, title))
                 self.similarity.remove_track(
                     artist, title, reply_handler=NO_OP,
                     error_handler=NO_OP)
             elif artist and not self.restrictions:
+                self.log('Remove %s' % artist)
                 self.similarity.remove_artist(
                     artist, reply_handler=NO_OP,
                     error_handler=NO_OP)
@@ -435,6 +439,7 @@ class AutoQueueBase(object):
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
+            self.log('Analyzing: %s' % filename)
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 0,
                 reply_handler=self.analyzed,
@@ -449,6 +454,7 @@ class AutoQueueBase(object):
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
             if self.use_mirage:
+                self.log('Get similar tracks for: %s' % filename)
                 self.similarity.get_ordered_mirage_tracks(
                     filename,
                     reply_handler=self.mirage_reply_handler,
@@ -475,6 +481,7 @@ class AutoQueueBase(object):
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
+            self.log('Analyzing: %s' % filename)
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 0,
                 reply_handler=NO_OP,
@@ -504,6 +511,7 @@ class AutoQueueBase(object):
         artist_name = self.last_song.get_artist()
         title = self.last_song.get_title()
         if self.use_lastfm:
+            self.log('Get similar tracks for: %s - %s' % (artist_name, title))
             self.similarity.get_ordered_similar_tracks(
                 artist_name, title,
                 reply_handler=self.similar_tracks_handler,
@@ -528,8 +536,10 @@ class AutoQueueBase(object):
                 return
             self.queue_song()
             return
+        artists = self.last_song.get_artists()
+        self.log('Get similar artists for %s' % artists)
         self.similarity.get_ordered_similar_artists(
-            self.last_song.get_artists(),
+            artists,
             reply_handler=self.similar_artists_handler,
             error_handler=self.error_handler, timeout=300)
 
@@ -579,6 +589,7 @@ class AutoQueueBase(object):
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
+            self.log('Analyzing: %s' % filename)
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 0,
                 reply_handler=self.analyzed,
@@ -593,25 +604,25 @@ class AutoQueueBase(object):
             if not result:
                 continue
             yield
-            look_for = result.get('artist')
+            look_for = unicode(result.get('artist', ''))
             if look_for:
-                title = result.get('title')
+                title = unicode(result.get('title', ''))
                 if title:
                     look_for += ' - ' + title
-            elif result.get('filename'):
-                look_for = result['filename']
-            elif result.get('tags'):
+            elif 'filename' in result:
+                look_for = unicode(result['filename'])
+            elif 'tags' in result:
                 look_for = result['tags']
             else:
                 self.log(repr(result))
-                look_for = repr(result)
+                look_for = unicode(result)
             self.log('looking for: %06d %s' % (
                 result.get('score', 0), look_for))
-            artist = result.get('artist')
+            artist = unicode(result.get('artist', ''))
             if artist:
                 if artist in blocked:
                     continue
-            filename = result.get("filename")
+            filename = unicode(result.get("filename", ''))
             tags = result.get("tags")
             if filename:
                 self.found = self.search_and_filter(filename=filename)
@@ -619,8 +630,8 @@ class AutoQueueBase(object):
                 self.found = self.search_and_filter(tags=tags)
             else:
                 self.found = self.search_and_filter(
-                    artist=result.get("artist"),
-                    title=result.get("title"))
+                    artist=unicode(result.get("artist", '')),
+                    title=unicode(result.get("title", '')))
             if self.found:
                 break
         if self.found:
@@ -642,7 +653,7 @@ class AutoQueueBase(object):
         """Get similar tracks by tag."""
         tags = last_song.get_tags()
         if not tags:
-            return
+            return []
         tagset = set([])
         for tag in tags:
             if tag.startswith("artist:") or tag.startswith("album:"):
