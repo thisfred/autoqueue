@@ -4,3 +4,4 @@ dist
 autoqueue.egg-info
 _trial_temp
 MANIFEST
+rhythmbox_autoqueue/%gconf.xml
