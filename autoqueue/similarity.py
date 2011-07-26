@@ -667,7 +667,7 @@ class Similarity(object):
         results = []
         try:
             for similar in lastfm_track.get_similar():
-                match = similar.match
+                match = int(100 * similar.match)
                 item = similar.item
                 similar_artist = item.artist.get_name()
                 similar_title = item.title
@@ -693,7 +693,7 @@ class Similarity(object):
         results = []
         try:
             for similar in lastfm_artist.get_similar():
-                match = similar.match
+                match = int(100 * similar.match)
                 name = similar.item.get_name()
                 artists_to_update.setdefault(artist_id, []).append({
                     'score': match,

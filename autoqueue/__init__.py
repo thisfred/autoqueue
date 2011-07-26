@@ -1,7 +1,7 @@
 """AutoQueue: an automatic queueing plugin library.
 version 0.3
 
-Copyright 2007-2010 Eric Casteleijn <thisfred@gmail.com>,
+Copyright 2007-2011 Eric Casteleijn <thisfred@gmail.com>,
                     Daniel Nouri <daniel.nouri@gmail.com>
                     Jasper OpdeCoul <jasper.opdecoul@gmail.com>
 
@@ -39,6 +39,8 @@ except ImportError:
     XDG = False
 
 THRESHOLD = .5
+
+TIMEOUT = 3000
 
 NO_OP = lambda *a, **kw: None
 
@@ -333,7 +335,7 @@ class AutoQueueBase(object):
             self.log('Analyzing %s' % filename)
             self.similarity.analyze_track(
                 filename, False, excluded_filenames, 5, reply_handler=NO_OP,
-                error_handler=NO_OP, timeout=300)
+                error_handler=NO_OP, timeout=TIMEOUT)
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
@@ -443,7 +445,7 @@ class AutoQueueBase(object):
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 0,
                 reply_handler=self.analyzed,
-                error_handler=self.error_handler, timeout=300)
+                error_handler=self.error_handler, timeout=TIMEOUT)
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
 
@@ -458,7 +460,7 @@ class AutoQueueBase(object):
                 self.similarity.get_ordered_mirage_tracks(
                     filename,
                     reply_handler=self.mirage_reply_handler,
-                    error_handler=self.error_handler, timeout=300)
+                    error_handler=self.error_handler, timeout=TIMEOUT)
             else:
                 self.mirage_reply_handler([])
         except UnicodeDecodeError:
@@ -485,7 +487,7 @@ class AutoQueueBase(object):
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 0,
                 reply_handler=NO_OP,
-                error_handler=NO_OP, timeout=300)
+                error_handler=NO_OP, timeout=TIMEOUT)
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
         self.running = False
@@ -511,11 +513,15 @@ class AutoQueueBase(object):
         artist_name = self.last_song.get_artist()
         title = self.last_song.get_title()
         if self.use_lastfm:
-            self.log('Get similar tracks for: %s - %s' % (artist_name, title))
-            self.similarity.get_ordered_similar_tracks(
-                artist_name, title,
-                reply_handler=self.similar_tracks_handler,
-                error_handler=self.error_handler, timeout=300)
+            if artist_name and title:
+                self.log(
+                    'Get similar tracks for: %s - %s' % (artist_name, title))
+                self.similarity.get_ordered_similar_tracks(
+                    artist_name, title,
+                    reply_handler=self.similar_tracks_handler,
+                    error_handler=self.error_handler, timeout=TIMEOUT)
+            else:
+                self.similar_tracks_handler([])
         else:
             self.similar_artists_handler([])
 
@@ -541,7 +547,7 @@ class AutoQueueBase(object):
         self.similarity.get_ordered_similar_artists(
             artists,
             reply_handler=self.similar_artists_handler,
-            error_handler=self.error_handler, timeout=300)
+            error_handler=self.error_handler, timeout=TIMEOUT)
 
     def similar_artists_handler(self, results):
         """Handler for similar artists returned from dbus."""
@@ -593,7 +599,7 @@ class AutoQueueBase(object):
             self.similarity.analyze_track(
                 filename, True, excluded_filenames, 0,
                 reply_handler=self.analyzed,
-                error_handler=self.error_handler, timeout=300)
+                error_handler=self.error_handler, timeout=TIMEOUT)
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
 
