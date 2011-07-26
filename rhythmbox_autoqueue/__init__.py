@@ -68,7 +68,8 @@ class Song(SongBase):
 
     def get_rating(self):
         """Return the rating of the song."""
-        return 5.0 / self.db.entry_get(self.song, rhythmdb.PROP_RATING)
+        rating = self.db.entry_get(self.song, rhythmdb.PROP_RATING)
+        return rating / 5.0
 
     def get_playcount(self):
         """Return the playcount of the song."""
