@@ -121,8 +121,6 @@ def tag_score(song, tags):
 class AutoQueueBase(object):
     """Generic base class for autoqueue plugins."""
 
-    __metaclass__ = ABCMeta
-
     def __init__(self):
         self.artist_block_time = 1
         self._blocked_artists = deque([])
@@ -241,43 +239,34 @@ class AutoQueueBase(object):
                 song.get_filename() for song in self.player_search(search)])
         return filenames
 
-    @abstractmethod
     def player_construct_file_search(self, filename, restrictions=None):
         """Construct a search that looks for songs with this artist and title.
 
         """
 
-    @abstractmethod
     def player_construct_track_search(self, artist, title, restrictions=None):
         """Construct a search that looks for songs with this artist
         and title.
         """
 
-    @abstractmethod
     def player_construct_artist_search(self, artist, restrictions=None):
         """Construct a search that looks for songs with this artist."""
 
-    @abstractmethod
     def player_construct_tag_search(self, tags, restrictions=None):
         """Construct a search that looks for songs with these tags."""
 
-    @abstractmethod
     def player_set_variables_from_config(self):
         """Initialize user settings from the configuration storage."""
 
-    @abstractmethod
     def player_get_queue_length(self):
         """Get the current length of the queue."""
 
-    @abstractmethod
     def player_enqueue(self, song):
         """Put the song at the end of the queue."""
 
-    @abstractmethod
     def player_search(self, search):
         """Perform a player search."""
 
-    @abstractmethod
     def player_get_songs_in_queue(self):
         """Return (wrapped) song objects for the songs in the queue."""
 
