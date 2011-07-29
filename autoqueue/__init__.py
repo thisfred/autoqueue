@@ -30,6 +30,20 @@ from collections import deque
 from datetime import datetime, timedelta
 from cPickle import Pickler, Unpickler
 
+try:
+    from ctypes import cdll
+    from scipy import array
+    try:
+        libmirageaudio = cdll.LoadLibrary(
+            "/usr/lib/banshee/Extensions/libmirageaudio.so")
+    except:  # pylint: disable=W0702
+        libmirageaudio = cdll.LoadLibrary(
+            "/usr/lib/banshee-1/Extensions/libmirageaudio.so")
+    USE_MIRAGE = True
+except:
+    USE_MIRAGE = False
+
+
 DBusGMainLoop(set_as_default=True)
 
 try:
@@ -132,7 +146,7 @@ class AutoQueueBase(object):
         self.verbose = False
         self.song = None
         self.restrictions = None
-        self.use_mirage = True
+        self.use_mirage = USE_MIRAGE
         self.use_lastfm = True
         self.use_groupings = True
         self.player_set_variables_from_config()
@@ -322,9 +336,10 @@ class AutoQueueBase(object):
                 filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
             self.log('Analyzing %s' % filename)
-            self.similarity.analyze_track(
-                filename, False, excluded_filenames, 5, reply_handler=NO_OP,
-                error_handler=NO_OP, timeout=TIMEOUT)
+            if self.use_mirage:
+                self.similarity.analyze_track(
+                    filename, False, excluded_filenames, 5,
+                    reply_handler=NO_OP, error_handler=NO_OP, timeout=TIMEOUT)
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
         if self.desired_queue_length == 0 or self.queue_needs_songs():
@@ -371,10 +386,11 @@ class AutoQueueBase(object):
                         filename = filename.decode('utf-8')
                     except UnicodeDecodeError:
                         self.log('failed to decode filename %r' % filename)
-                self.log('Remove similarity for %s' % filename)
-                self.similarity.remove_track_by_filename(
-                    filename, reply_handler=NO_OP,
-                    error_handler=NO_OP)
+                if self.use_mirage:
+                    self.log('Remove similarity for %s' % filename)
+                    self.similarity.remove_track_by_filename(
+                        filename, reply_handler=NO_OP,
+                        error_handler=NO_OP)
             elif (artist and title) and not self.restrictions:
                 self.log('Remove %s - %s' % (artist, title))
                 self.similarity.remove_track(
@@ -430,11 +446,14 @@ class AutoQueueBase(object):
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
-            self.log('Analyzing: %s' % filename)
-            self.similarity.analyze_track(
-                filename, True, excluded_filenames, 0,
-                reply_handler=self.analyzed,
-                error_handler=self.error_handler, timeout=TIMEOUT)
+            if self.use_mirage:
+                self.log('Analyzing: %s' % filename)
+                self.similarity.analyze_track(
+                    filename, True, excluded_filenames, 0,
+                    reply_handler=self.analyzed,
+                    error_handler=self.error_handler, timeout=TIMEOUT)
+            else:
+                self.mirage_reply_handler([])
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
 
@@ -473,10 +492,11 @@ class AutoQueueBase(object):
                 filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
             self.log('Analyzing: %s' % filename)
-            self.similarity.analyze_track(
-                filename, True, excluded_filenames, 0,
-                reply_handler=NO_OP,
-                error_handler=NO_OP, timeout=TIMEOUT)
+            if self.use_mirage:
+                self.similarity.analyze_track(
+                    filename, True, excluded_filenames, 0,
+                    reply_handler=NO_OP,
+                    error_handler=NO_OP, timeout=TIMEOUT)
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
         self.running = False
@@ -585,10 +605,13 @@ class AutoQueueBase(object):
                 filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
             self.log('Analyzing: %s' % filename)
-            self.similarity.analyze_track(
-                filename, True, excluded_filenames, 0,
-                reply_handler=self.analyzed,
-                error_handler=self.error_handler, timeout=TIMEOUT)
+            if self.use_mirage:
+                self.similarity.analyze_track(
+                    filename, True, excluded_filenames, 0,
+                    reply_handler=self.analyzed,
+                    error_handler=self.error_handler, timeout=TIMEOUT)
+            else:
+                self.mirage_reply_handler([])
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
 

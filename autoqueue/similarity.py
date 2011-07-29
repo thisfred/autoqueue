@@ -24,6 +24,7 @@ from mirage import (
     instance_from_picklestring, instance_to_picklestring, ScmsConfiguration,
     distance)
 
+
 try:
     import xdg.BaseDirectory
     XDG = True
@@ -86,8 +87,8 @@ class DatabaseWrapper(Thread):
             commit_needed = False
             try:
                 cursor.execute(*sql)
-            except Exception, e:
-                print e, repr(sql)         # pylint: disable=W0702
+            except Exception, e:        # pylint: disable=W0703
+                print e, repr(sql)
             if not sql[0].upper().startswith('SELECT'):
                 commit_needed = True
             for row in cursor.fetchall():

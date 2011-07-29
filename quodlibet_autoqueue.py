@@ -16,7 +16,7 @@ import config
 from collections import deque
 from quodlibet.util import copool
 
-from autoqueue import AutoQueueBase, SongBase
+from autoqueue import AutoQueueBase, SongBase, USE_MIRAGE
 
 INT_SETTINGS = {
     'artist_block_time': {
@@ -31,7 +31,7 @@ BOOL_SETTINGS = {
         'value': False,
         'label': 'log to console'},
     'use_mirage': {
-        'value': True,
+        'value': USE_MIRAGE,
         'label': 'use mirage similarity'},
     'use_lastfm': {
         'value': True,
