@@ -1,6 +1,6 @@
 """AutoQueue: an automatic queueing plugin for Quod Libet.
 version 0.3
-Copyright 2007-2009 Eric Casteleijn <thisfred@gmail.com>
+Copyright 2007-2011 Eric Casteleijn <thisfred@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
@@ -16,7 +16,7 @@ import config
 from collections import deque
 from quodlibet.util import copool
 
-from autoqueue import AutoQueueBase, SongBase, USE_MIRAGE
+from autoqueue import AutoQueueBase, SongBase
 
 INT_SETTINGS = {
     'artist_block_time': {
@@ -31,7 +31,7 @@ BOOL_SETTINGS = {
         'value': False,
         'label': 'log to console'},
     'use_mirage': {
-        'value': USE_MIRAGE,
+        'value': True,
         'label': 'use mirage similarity'},
     'use_lastfm': {
         'value': True,

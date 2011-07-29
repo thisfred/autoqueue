@@ -1,4 +1,22 @@
-"""Autoqueue similarity service."""
+"""Autoqueue similarity service.
+
+Copyright 2011 Eric Casteleijn <thisfred@gmail.com>,
+               Graham White
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2, or (at your option)
+any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
+"""
 
 # TODO: real logging
 
@@ -19,10 +37,14 @@ import sqlite3
 
 from autoqueue.pylast import LastFMNetwork, WSError, NetworkError
 
-from mirage import (
-    Mir, MatrixDimensionMismatchException, MfccFailedException,
-    instance_from_picklestring, instance_to_picklestring, ScmsConfiguration,
-    distance)
+try:
+    from mirage import (
+        Mir, MatrixDimensionMismatchException, MfccFailedException,
+        instance_from_picklestring, instance_to_picklestring,
+        ScmsConfiguration, distance)
+    MIRAGE = True
+except ImportError:
+    MIRAGE = False
 
 
 try:
@@ -231,7 +253,8 @@ class Similarity(object):
         self._db_wrapper.set_queue(self.queue)
         self._db_wrapper.start()
         self.create_db()
-        self.mir = Mir()
+        if MIRAGE:
+            self.mir = Mir()
         self.network = LastFMNetwork(api_key=API_KEY)
         self.cache_time = 90
 
@@ -646,7 +669,7 @@ class Similarity(object):
                     IndexError), e:
                 self.log(repr(e))
                 return
-            self.add_track(filename, scms, priority=priority-1)
+            self.add_track(filename, scms, priority=priority - 1)
             if not add_neighbours:
                 return
             trackid = self.get_track_id(filename, priority=priority)
@@ -847,6 +870,11 @@ class SimilarityService(dbus.service.Object):
     def miximize(self, filenames):
         """Return ideally ordered list of filenames."""
         return self.similarity.miximize([unicode(f) for f in filenames])
+
+    @method(dbus_interface=IFACE, out_signature='b')
+    def has_mirage(self):
+        """Get mirage installation status."""
+        return MIRAGE
 
     def run(self):
         """Run loop."""

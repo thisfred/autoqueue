@@ -4,6 +4,7 @@ version 0.3
 Copyright 2007-2011 Eric Casteleijn <thisfred@gmail.com>,
                     Daniel Nouri <daniel.nouri@gmail.com>
                     Jasper OpdeCoul <jasper.opdecoul@gmail.com>
+                    Graham White
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,20 +30,6 @@ from dbus.mainloop.glib import DBusGMainLoop
 from collections import deque
 from datetime import datetime, timedelta
 from cPickle import Pickler, Unpickler
-
-try:
-    from ctypes import cdll
-    from scipy import array
-    try:
-        libmirageaudio = cdll.LoadLibrary(
-            "/usr/lib/banshee/Extensions/libmirageaudio.so")
-    except:  # pylint: disable=W0702
-        libmirageaudio = cdll.LoadLibrary(
-            "/usr/lib/banshee-1/Extensions/libmirageaudio.so")
-    USE_MIRAGE = True
-except:
-    USE_MIRAGE = False
-
 
 DBusGMainLoop(set_as_default=True)
 
@@ -146,7 +133,7 @@ class AutoQueueBase(object):
         self.verbose = False
         self.song = None
         self.restrictions = None
-        self.use_mirage = USE_MIRAGE
+        self.use_mirage = True
         self.use_lastfm = True
         self.use_groupings = True
         self.player_set_variables_from_config()
@@ -160,6 +147,7 @@ class AutoQueueBase(object):
             follow_name_owner_changes=True)
         self.similarity = dbus.Interface(
             sim, dbus_interface='org.autoqueue.SimilarityInterface')
+        self.has_mirage = self.similarity.has_mirage()
 
     def log(self, msg):
         """Print debug messages."""
@@ -336,7 +324,7 @@ class AutoQueueBase(object):
                 filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
             self.log('Analyzing %s' % filename)
-            if self.use_mirage:
+            if self.has_mirage and self.use_mirage:
                 self.similarity.analyze_track(
                     filename, False, excluded_filenames, 5,
                     reply_handler=NO_OP, error_handler=NO_OP, timeout=TIMEOUT)
@@ -386,7 +374,7 @@ class AutoQueueBase(object):
                         filename = filename.decode('utf-8')
                     except UnicodeDecodeError:
                         self.log('failed to decode filename %r' % filename)
-                if self.use_mirage:
+                if self.has_mirage and self.use_mirage:
                     self.log('Remove similarity for %s' % filename)
                     self.similarity.remove_track_by_filename(
                         filename, reply_handler=NO_OP,
@@ -446,7 +434,7 @@ class AutoQueueBase(object):
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
-            if self.use_mirage:
+            if self.has_mirage and self.use_mirage:
                 self.log('Analyzing: %s' % filename)
                 self.similarity.analyze_track(
                     filename, True, excluded_filenames, 0,
@@ -463,7 +451,7 @@ class AutoQueueBase(object):
         try:
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
-            if self.use_mirage:
+            if self.has_mirage and self.use_mirage:
                 self.log('Get similar tracks for: %s' % filename)
                 self.similarity.get_ordered_mirage_tracks(
                     filename,
@@ -492,7 +480,7 @@ class AutoQueueBase(object):
                 filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
             self.log('Analyzing: %s' % filename)
-            if self.use_mirage:
+            if self.has_mirage and self.use_mirage:
                 self.similarity.analyze_track(
                     filename, True, excluded_filenames, 0,
                     reply_handler=NO_OP,
@@ -605,7 +593,7 @@ class AutoQueueBase(object):
                 filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
             self.log('Analyzing: %s' % filename)
-            if self.use_mirage:
+            if self.has_mirage and self.use_mirage:
                 self.similarity.analyze_track(
                     filename, True, excluded_filenames, 0,
                     reply_handler=self.analyzed,
