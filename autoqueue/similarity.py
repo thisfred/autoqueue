@@ -360,16 +360,6 @@ class Similarity(object):
         if l1 < no:
             print "Only %d connections found, minimum %d." % (l1, no)
             return False
-        sql = (
-            "SELECT COUNT(track_1) FROM distance WHERE track_2 = ? AND "
-            "distance < (SELECT MAX(distance) FROM distance WHERE track_1 = "
-            "?);", (trackid, trackid))
-        command = self.get_sql_command(sql, priority=priority)
-        l2 = command.result_queue.get()[0][0]
-        if l2 > l1:
-            print "Found %d incoming connections and only %d outgoing." % (
-                l2, l1)
-            return False
         return True
 
     def get_tracks(self, exclude_filenames=None, priority=0):
@@ -421,10 +411,12 @@ class Similarity(object):
     def get_neighbours(self, trackid):
         """Get neighbours for track."""
         sql = (
-            "SELECT distance, filename FROM distance INNER JOIN MIRAGE ON "
-            "distance.track_2 = mirage.trackid WHERE track_1 = ? ORDER BY "
+            "SELECT distance, filename FROM distance INNER JOIN mirage ON "
+            "distance.track_2 = mirage.trackid WHERE track_1 = ? UNION "
+            "SELECT distance, filename FROM distance INNER JOIN mirage ON "
+            "distance.track_1 = mirage.trackid WHERE track_2 = ? ORDER BY "
             "distance ASC;",
-            (trackid,))
+            (trackid, trackid))
         command = self.get_sql_command(sql, priority=1)
         return command.result_queue.get()
 
@@ -469,7 +461,11 @@ class Similarity(object):
             "SELECT track_2_track.match, artists.name, tracks.title"
             " FROM track_2_track INNER JOIN tracks ON"
             " track_2_track.track2 = tracks.id INNER JOIN artists ON"
-            " artists.id = tracks.artist WHERE track_2_track.track1"
+            " artists.id = tracks.artist WHERE track_2_track.track1 UNION "
+            "SELECT track_2_track.match, artists.name, tracks.title"
+            " FROM track_2_track INNER JOIN tracks ON"
+            " track_2_track.track1 = tracks.id INNER JOIN artists ON"
+            " artists.id = tracks.artist WHERE track_2_track.track2"
             " = ? ORDER BY track_2_track.match DESC;",
             (track_id,))
         command = self.get_sql_command(sql, priority=0)
@@ -484,7 +480,10 @@ class Similarity(object):
         sql = (
             "SELECT match, name FROM artist_2_artist INNER JOIN"
             " artists ON artist_2_artist.artist2 = artists.id WHERE"
-            " artist_2_artist.artist1 = ? ORDER BY match DESC;",
+            " artist_2_artist.artist1 = ? UNION "
+            "SELECT match, name FROM artist_2_artist INNER JOIN"
+            " artists ON artist_2_artist.artist1 = artists.id WHERE"
+            " artist_2_artist.artist2 = ? ORDER BY match DESC;",
             (artist_id,))
         command = self.get_sql_command(sql, priority=0)
         return command.result_queue.get()
