@@ -326,7 +326,7 @@ class AutoQueueBase(object):
             self.log('Analyzing %s' % filename)
             if self.has_mirage and self.use_mirage:
                 self.similarity.analyze_track(
-                    filename, False, excluded_filenames, 5,
+                    filename, True, excluded_filenames, 5,
                     reply_handler=NO_OP, error_handler=NO_OP, timeout=TIMEOUT)
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)

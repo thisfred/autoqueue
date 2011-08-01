@@ -369,8 +369,8 @@ class Similarity(object):
         sql = ("SELECT scms, trackid, filename FROM mirage;",)
         command = self.get_sql_command(sql, priority=priority)
         return [
-            (row[0], row[1]) for row in command.result_queue.get()
-            if row[2] not in exclude_filenames]
+            row[:-1] for row in command.result_queue.get()
+            if row[-1] not in exclude_filenames]
 
     def add_neighbours(self, trackid, scms, exclude_filenames=None,
                        neighbours=20, priority=0):
@@ -406,7 +406,7 @@ class Similarity(object):
                 self.execute_sql((
                     "INSERT INTO distance (distance, track_1, track_2) "
                     "VALUES (?, ?, ?);", best_tup), priority=priority)
-        print "added %d connections" % added
+        print "added %d connections." % added
 
     def get_neighbours(self, trackid):
         """Get neighbours for track."""

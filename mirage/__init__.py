@@ -31,8 +31,6 @@ from cStringIO import StringIO
 from ctypes import cdll, Structure, POINTER, c_float, c_int, byref
 from scipy import array, fromfile, zeros, dot, single, vectorize
 
-DEBUG = True
-
 
 class MirageAudio(Structure):
     """Mirage audio."""
@@ -191,20 +189,6 @@ def gauss_jordan(a, n, b, m):
                 a[k, indxc[l]] = temp
 
 
-def write_line(string):
-    """Write to console."""
-    if not DEBUG:
-        return
-    print string
-
-
-def write(string):
-    """Write to console."""
-    if not DEBUG:
-        return
-    print string,
-
-
 class AudioDecoder(object):
     """Audio decoder."""
 
@@ -228,8 +212,6 @@ class AudioDecoder(object):
             raise AudioDecoderCanceledException
         elif frames <= 0 or size <= 0:
             raise AudioDecoderErrorException
-
-        write_line("Mirage: decoded frames=%s,size=%s" % (frames, size))
 
         # build a list of tuples with (value, position), then sort
         # it according to value.
