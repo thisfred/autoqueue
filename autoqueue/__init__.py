@@ -326,7 +326,7 @@ class AutoQueueBase(object):
             self.log('Analyzing %s' % filename)
             if self.has_mirage and self.use_mirage:
                 self.similarity.analyze_track(
-                    filename, True, excluded_filenames, 5,
+                    filename, True, excluded_filenames, 2,
                     reply_handler=NO_OP, error_handler=NO_OP, timeout=TIMEOUT)
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
@@ -437,7 +437,7 @@ class AutoQueueBase(object):
             if self.has_mirage and self.use_mirage:
                 self.log('Analyzing: %s' % filename)
                 self.similarity.analyze_track(
-                    filename, True, excluded_filenames, 0,
+                    filename, True, excluded_filenames, 3,
                     reply_handler=self.analyzed,
                     error_handler=self.error_handler, timeout=TIMEOUT)
             else:
@@ -482,7 +482,7 @@ class AutoQueueBase(object):
             self.log('Analyzing: %s' % filename)
             if self.has_mirage and self.use_mirage:
                 self.similarity.analyze_track(
-                    filename, True, excluded_filenames, 0,
+                    filename, True, excluded_filenames, 3,
                     reply_handler=NO_OP,
                     error_handler=NO_OP, timeout=TIMEOUT)
         except UnicodeDecodeError:
@@ -595,7 +595,7 @@ class AutoQueueBase(object):
             self.log('Analyzing: %s' % filename)
             if self.has_mirage and self.use_mirage:
                 self.similarity.analyze_track(
-                    filename, True, excluded_filenames, 0,
+                    filename, True, excluded_filenames, 3,
                     reply_handler=self.analyzed,
                     error_handler=self.error_handler, timeout=TIMEOUT)
             else:

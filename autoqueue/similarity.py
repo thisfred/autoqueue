@@ -417,7 +417,7 @@ class Similarity(object):
             "distance.track_1 = mirage.trackid WHERE track_2 = ? ORDER BY "
             "distance ASC;",
             (trackid, trackid))
-        command = self.get_sql_command(sql, priority=1)
+        command = self.get_sql_command(sql, priority=4)
         return command.result_queue.get()
 
     def get_artist(self, artist_name):
@@ -730,7 +730,7 @@ class Similarity(object):
 
     def get_ordered_mirage_tracks(self, filename):
         """Get similar tracks by mirage acoustic analysis."""
-        trackid = self.get_track_id(filename, priority=0)
+        trackid = self.get_track_id(filename, priority=3)
         return self.get_neighbours(trackid)
 
     def get_ordered_similar_tracks(self, artist_name, title):

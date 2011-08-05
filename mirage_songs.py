@@ -26,7 +26,6 @@ class MirageSongsPlugin(SongsMenuPlugin):
     PLUGIN_ICON = "gtk-find-and-replace"
     PLUGIN_VERSION = "0.1"
 
-
     def __init__(self, *args):
         SongsMenuPlugin.__init__(self, *args)
         bus = dbus.SessionBus()
@@ -43,7 +42,7 @@ class MirageSongsPlugin(SongsMenuPlugin):
                 if not isinstance(filename, unicode):
                     filename = unicode(filename, 'utf-8')
                 self.similarity.analyze_track(
-                    filename, False, [filename], 5, reply_handler=NO_OP,
+                    filename, False, [filename], 10, reply_handler=NO_OP,
                     error_handler=NO_OP)
             except:
                 print "Could not decode filename: %r" % song('~filename')
