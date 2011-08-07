@@ -380,7 +380,7 @@ class Similarity(object):
         to_add = neighbours * 2
         self.execute_sql(
             ("DELETE FROM distance WHERE track_1 = ?;", (trackid,)),
-            priority=priority)
+            priority=priority - 1)
         conf = ScmsConfiguration(20)
         best = []
         for buf, otherid in self.get_tracks(
@@ -417,7 +417,7 @@ class Similarity(object):
             "distance.track_1 = mirage.trackid WHERE track_2 = ? ORDER BY "
             "distance ASC;",
             (trackid, trackid))
-        command = self.get_sql_command(sql, priority=4)
+        command = self.get_sql_command(sql, priority=3)
         return command.result_queue.get()
 
     def get_artist(self, artist_name):
@@ -673,7 +673,7 @@ class Similarity(object):
                 return
             trackid = self.get_track_id(filename, priority=priority)
         if self.has_scores(trackid, no=NEIGHBOURS,
-                                      priority=priority):
+                                      priority=priority + 1):
             return
         self.add_neighbours(
             trackid, scms, exclude_filenames=exclude_filenames,
