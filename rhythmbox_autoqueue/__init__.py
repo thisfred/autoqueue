@@ -1,6 +1,6 @@
 """Rhythmbox version of the autoqueue plugin."""
 
-# Copyright (C) 2007-2008 - Eric Casteleijn, Alexandre Rosenfeld
+# Copyright (C) 2007-20011 - Eric Casteleijn, Alexandre Rosenfeld, Graham White
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,13 +20,53 @@ import urllib
 from time import time
 import gconf
 import gobject
+import gtk
 from gtk import gdk
 import rb
 import rhythmdb
 from collections import deque
 from autoqueue import AutoQueueBase, SongBase
 
-GCONFPATH = '/apps/rhythmbox/plugins/autoqueue/'
+GCONFPATH = '/apps/rhythmbox/plugins/rhythmbox_autoqueue/'
+
+GCONF_BOOLS = {
+    'use_lastfm': {
+        'GCONF': GCONFPATH + 'use_lastfm',
+        'value': True},
+    'verbose': {
+        'GCONF': GCONFPATH + 'verbose',
+        'value': False},
+    'use_groupings': {
+        'GCONF': GCONFPATH + 'use_groupings',
+        'value': True},
+    'use_mirage': {
+        'GCONF': GCONFPATH + 'use_mirage',
+        'value': True}}
+
+GCONF_INTS = {
+    'artist_block_time': {
+        'GCONF': GCONFPATH + 'artist_block_time',
+        'value': 1,
+        'range_lo': 1,
+        'range_hi': 999},
+    'desired_queue_length': {
+        'GCONF': GCONFPATH + 'desired_queue_length',
+        'value': 600,
+        'range_lo': 1,
+        'range_hi': 1000000}}
+
+GCONF_STRINGS = {
+    'restrictions': {
+        'GCONF': GCONFPATH + 'restrictions',
+        'value': ''}}
+
+AUTOQUEUE_UI = """
+<ui>
+    <toolbar name="ToolBar">
+        <toolitem name="Autoqueue" action="ToggleAutoqueue" />
+    </toolbar>
+</ui>
+"""
 
 
 class Song(SongBase):
@@ -37,42 +77,46 @@ class Song(SongBase):
         self.db = db
 
     def get_artist(self):
-        """return lowercase UNICODE name of artist"""
+        """Get lowercase UNICODE name of artist."""
         return unicode(
             self.db.entry_get(self.song, rhythmdb.PROP_ARTIST).lower(),
             'utf-8')
 
     def get_artists(self):
+        """Get a list of all artists and performers for the song."""
         return [self.get_artist()]
 
     def get_title(self):
-        """return lowercase UNICODE title of song"""
+        """Get lowercase UNICODE title of song."""
         return unicode(
             self.db.entry_get(self.song, rhythmdb.PROP_TITLE).lower(), 'utf-8')
 
     def get_tags(self):
-        """return a list of tags for the songs"""
+        """Get a list of tags for the songs."""
         return []
 
     def get_length(self):
+        """Get length in seconds for the song."""
         return self.db.entry_get(self.song, rhythmdb.PROP_DURATION)
 
     def get_filename(self):
+        """Get the filename for the song."""
         location = self.db.entry_get(self.song, rhythmdb.PROP_LOCATION)
         if location.startswith("file://"):
             return urllib.unquote(location[7:])
         return None
 
     def get_last_started(self):
+        """Get the datetime the song was last started."""
         return self.db.entry_get(self.song, rhythmdb.PROP_LAST_PLAYED)
 
     def get_rating(self):
-        """Return the rating of the song."""
+        """Get the rating of the song."""
         rating = self.db.entry_get(self.song, rhythmdb.PROP_RATING)
         return rating / 5.0
 
     def get_playcount(self):
-        """Return the playcount of the song."""
+        """Get the playcount for the song."""
         return self.db.entry_get(self.song, rhythmdb.PROP_PLAY_COUNT)
 
 
@@ -81,8 +125,11 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
 
     def __init__(self):
         rb.Plugin.__init__(self)
-        AutoQueueBase.__init__(self)
-        self.gconfclient = gconf.client_get_default()
+        self.action_group = None
+        self.action = None
+        self.ui_id = None
+        self.builder = None
+        self.gconf = gconf.client_get_default()
         self.verbose = True
         self.by_mirage = True
         self.log("initialized")
@@ -90,21 +137,125 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         self.pec_id = None
         self.rdb = None
         self.shell = None
+        self.plugin_on = False
+        AutoQueueBase.__init__(self)
 
     def activate(self, shell):
         """Called on activation of the plugin."""
         self.shell = shell
         self.rdb = shell.get_property('db')
-        sp = shell.get_player()
-        self.pec_id = sp.connect(
-            'playing-song-changed', self.playing_entry_changed)
+
+        # Icon
+        icon_factory = gtk.IconFactory()
+        icon_factory.add(
+            "autoqueue", gtk.IconSet(gtk.gdk.pixbuf_new_from_file(
+                self.find_file("autoqueue.png"))))
+        icon_factory.add_default()
+        # Add on/off toggle button
+        self.action = gtk.ToggleAction(
+            'ToggleAutoqueue', _('Toggle Autoqueue'),
+            _('Turn auto queueing on/off'), 'autoqueue')
+        self.action.connect('activate', self.toggle_autoqueue)
+        self.action_group = gtk.ActionGroup('AutoqueuePluginActions')
+        self.action_group.add_action(self.action)
+        uim = shell.get_ui_manager()
+        uim.insert_action_group(self.action_group, 0)
+        self.ui_id = uim.add_ui_from_string(AUTOQUEUE_UI)
+        uim.ensure_update()
 
     def deactivate(self, shell):
         """Called on deactivation of the plugin."""
+
+        if self.plugin_on:
+            self.toggle_autoqueue()
+
+        # Remove on/off toggle button
+        uim = shell.get_ui_manager()
+        uim.remove_ui(self.ui_id)
+        uim.remove_action_group(self.action_group)
+
+        self.action_group = None
+        self.action = None
         self.rdb = None
         self.shell = None
-        sp = shell.get_player()
-        sp.disconnect(self.pec_id)
+
+    def toggle_autoqueue(self, action=None):
+        """Toggle the plugin on or off."""
+        sp = self.shell.get_player()
+        if self.plugin_on:
+            sp.disconnect(self.pec_id)
+            self.plugin_on = False
+        else:
+            self.pec_id = sp.connect(
+                'playing-song-changed', self.playing_entry_changed)
+            self.plugin_on = True
+
+    def create_configure_dialog(self, dialog=None):
+        """Create configuration dialog."""
+        # set up the UI
+        ui_file = self.find_file("autoqueue-config.ui")
+        self.builder = gtk.Builder()
+        self.builder.add_from_file(ui_file)
+
+        # set up the check boxes
+        for key in GCONF_BOOLS:
+            # can't use gconf.get_bool here as that function returns false
+            # if no value is set which is useless for setting up a default
+            value = self.gconf.get(GCONF_BOOLS[key]['GCONF'])
+            if value is None:
+                self.builder.get_object(key).set_active(
+                    GCONF_BOOLS[key]['value'])
+            else:
+                self.builder.get_object(key).set_active(value.get_bool())
+
+        # don't provide mirage settings if we don't have mirage
+        if not self.has_mirage:
+            self.builder.get_object('use_lastfm').set_active(True)
+            self.builder.get_object('use_lastfm').set_sensitive(False)
+            self.builder.get_object('use_mirage').set_active(False)
+            self.builder.get_object('use_mirage').set_sensitive(False)
+
+        # set up spinners
+        for key in GCONF_INTS:
+            spin = self.builder.get_object(key)
+            spin.set_range(GCONF_INTS[key]['range_lo'],
+                           GCONF_INTS[key]['range_hi'])
+            spin.set_increments(1, 10)
+            value = self.gconf.get_int(GCONF_INTS[key]['GCONF'])
+            if not value:
+                value = GCONF_INTS[key]['value']
+            spin.set_value(value)
+
+        # set up the entry box(s)
+        for key in GCONF_STRINGS:
+            value = self.gconf.get_string(GCONF_STRINGS[key]['GCONF'])
+            if not value:
+                value = GCONF_STRINGS[key]['value']
+            self.builder.get_object(key).set_text(value)
+
+        # set up and return the dialog box
+        dialog = self.builder.get_object("config_dialog")
+        dialog.connect('response', self.config_dialog_response_cb)
+        return dialog
+
+    def config_dialog_response_cb(self, dialog, response):
+        """Callback for dialog response."""
+        if response is 1:
+            for key in GCONF_BOOLS:
+                self.gconf.set_bool(GCONF_BOOLS[key]['GCONF'],
+                    self.builder.get_object(key).get_active())
+
+            for key in GCONF_INTS:
+                self.gconf.set_int(GCONF_INTS[key]['GCONF'],
+                    self.builder.get_object(key).get_value_as_int())
+
+            for key in GCONF_STRINGS:
+                self.gconf.set_string(GCONF_STRINGS[key]['GCONF'],
+                    self.builder.get_object(key).get_text())
+
+            self.player_set_variables_from_config()
+
+        dialog.hide()
 
     def _idle_callback(self):
         """Callback that performs task asynchronously."""
@@ -186,8 +337,32 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
 
     def player_set_variables_from_config(self):
         """Initialize user settings from the configuration storage"""
-        #XXX Still to do
-        pass
+        # save the boolean values
+        for key in GCONF_BOOLS:
+            value = self.gconf.get(GCONF_BOOLS[key]['GCONF'])
+            if value is None:
+                setattr(self, key, GCONF_BOOLS[key]['value'])
+            else:
+                setattr(self, key, value.get_bool())
+
+        # override settings if mirage isn't available
+        if not self.has_mirage:
+            setattr(self, 'use_lastfm', True)
+            setattr(self, 'use_mirage', False)
+
+        # save the integer values
+        for key in GCONF_INTS:
+            value = self.gconf.get_int(GCONF_INTS[key]['GCONF'])
+            if not value:
+                value = GCONF_INTS[key]['value']
+            setattr(self, key, value)
+
+        # save the text string
+        for key in GCONF_STRINGS:
+            value = self.gconf.get_string(GCONF_STRINGS[key]['GCONF'])
+        if not value:
+            value = GCONF_STRINGS[key]['value']
+        setattr(self, key, value)
 
     def player_get_queue_length(self):
         """Get the current length of the queue"""

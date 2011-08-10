@@ -136,7 +136,6 @@ class AutoQueueBase(object):
         self.use_mirage = True
         self.use_lastfm = True
         self.use_groupings = True
-        self.player_set_variables_from_config()
         self.get_blocked_artists_pickle()
         self.last_songs = []
         self.last_song = None
@@ -148,6 +147,7 @@ class AutoQueueBase(object):
         self.similarity = dbus.Interface(
             sim, dbus_interface='org.autoqueue.SimilarityInterface')
         self.has_mirage = self.similarity.has_mirage()
+        self.player_set_variables_from_config()
 
     def log(self, msg):
         """Print debug messages."""
