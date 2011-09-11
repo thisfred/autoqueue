@@ -324,7 +324,7 @@ class AutoQueueBase(object):
                 filename = unicode(filename, 'utf-8')
             excluded_filenames = excluded_filenames or [filename]
             self.log('Analyzing %s' % filename)
-            if self.has_mirage and self.use_mirage:
+            if self.has_mirage:
                 self.similarity.analyze_track(
                     filename, True, excluded_filenames, 2,
                     reply_handler=NO_OP, error_handler=NO_OP, timeout=TIMEOUT)
@@ -606,7 +606,7 @@ class AutoQueueBase(object):
     def process_results(self, results):
         """Process similarity results from dbus."""
         blocked = self.get_blocked_artists()
-        for result in results:
+        for number, result in enumerate(results):
             if not result:
                 continue
             yield
@@ -622,8 +622,8 @@ class AutoQueueBase(object):
             else:
                 self.log(repr(result))
                 look_for = unicode(result)
-            self.log('looking for: %06d %s' % (
-                result.get('score', 0), look_for))
+            self.log('%03d: %06d %s' % (
+                number + 1, result.get('score', 0), look_for))
             artist = unicode(result.get('artist', ''))
             if artist:
                 if artist in blocked:
