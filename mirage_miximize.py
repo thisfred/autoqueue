@@ -28,18 +28,19 @@ class MirageMiximizePlugin(SongsMenuPlugin):
     PLUGIN_ICON = "gtk-find-and-replace"
     PLUGIN_VERSION = "0.1"
 
-    def player_enqueue(self, filenames):
+    def player_enqueue(self, indices):
         """Put the song at the end of the queue."""
         if widgets.main is None:
             reload(widgets)
         widgets.main.playlist.enqueue(
-            (self._songs[filename] for filename in filenames))
+            (self._songs[index] for index in indices))
         self._songs = None
 
     def plugin_songs(self, songs):
         """Send songs to dbus similarity service."""
         bus = dbus.SessionBus()
-        self._songs = dict([(song('~filename'), song) for song in songs])
+        print type(songs[0]('~filename'))
+        self._songs = songs
         sim = bus.get_object(
             'org.autoqueue', '/org/autoqueue/Similarity',
             follow_name_owner_changes=True)
