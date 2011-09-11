@@ -803,7 +803,7 @@ class Similarity(object):
         clusterer.cluster()
         qsongs = []
         for cluster in clusterer.clusters:
-            qsongs.extend([song.filename for song in cluster])
+            qsongs.extend([filenames.index[song.filename] for song in cluster])
         return qsongs
 
 
