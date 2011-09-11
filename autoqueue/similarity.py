@@ -803,7 +803,7 @@ class Similarity(object):
         clusterer.cluster()
         qsongs = []
         for cluster in clusterer.clusters:
-            qsongs.extend([filenames.index[song.filename] for song in cluster])
+            qsongs.extend([filenames.index(song.filename) for song in cluster])
         return qsongs
 
 
@@ -865,7 +865,7 @@ class SimilarityService(dbus.service.Object):
         return self.similarity.get_ordered_similar_artists(
             [unicode(a) for a in artists])
 
-    @method(dbus_interface=IFACE, in_signature='as', out_signature='as')
+    @method(dbus_interface=IFACE, in_signature='as', out_signature='ai')
     def miximize(self, filenames):
         """Return ideally ordered list of filenames."""
         return self.similarity.miximize([unicode(f) for f in filenames])

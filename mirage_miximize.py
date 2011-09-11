@@ -39,7 +39,6 @@ class MirageMiximizePlugin(SongsMenuPlugin):
     def plugin_songs(self, songs):
         """Send songs to dbus similarity service."""
         bus = dbus.SessionBus()
-        print type(songs[0]('~filename'))
         self._songs = songs
         sim = bus.get_object(
             'org.autoqueue', '/org/autoqueue/Similarity',
