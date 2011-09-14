@@ -289,14 +289,11 @@ class AutoQueueBase(object):
                 return True
         return False
 
-    def on_song_started(self, song):
-        """Should be called by the plugin when a new song starts.
-
-        If the right conditions apply, we start looking for new songs
-        to queue.
-
-        """
+    def plugin_on_song_ended(self, song, skipped):
+        """Block artist if not skipped."""
         if song is None:
+            return
+        if skipped:
             return
         artist_names = song.get_artists()
         title = song.get_title()
@@ -306,6 +303,18 @@ class AutoQueueBase(object):
         # played for a determined time
         for artist_name in artist_names:
             self.block_artist(artist_name)
+
+    def on_song_started(self, song):
+        """Should be called by the plugin when a new song starts.
+
+        If the right conditions apply, we start looking for new songs
+        to queue.
+
+        """
+        if song is None:
+            return
+        # add the artist to the blocked list, so their songs won't be
+        # played for a determined time
         if self.running:
             return
         self.song = song

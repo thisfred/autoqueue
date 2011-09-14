@@ -358,7 +358,7 @@ class Similarity(object):
         command = self.get_sql_command(sql, priority=priority)
         l1 = command.result_queue.get()[0][0]
         if l1 < no:
-            print "Only %d connections found, minimum %d." % (l1, no)
+            print "%d connections found, minimum %d." % (l1, no)
             return False
         return True
 
