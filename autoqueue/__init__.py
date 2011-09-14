@@ -289,8 +289,8 @@ class AutoQueueBase(object):
                 return True
         return False
 
-    def plugin_on_song_ended(self, song, skipped):
-        """Block artist if not skipped."""
+    def on_song_ended(self, song, skipped):
+        """Should be called by the plugin when a song ends or is skipped."""
         if song is None:
             return
         if skipped:

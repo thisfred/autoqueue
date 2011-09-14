@@ -138,6 +138,7 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
         self.rdb = None
         self.shell = None
         self.plugin_on = False
+        self.entry = None
         AutoQueueBase.__init__(self)
 
     def activate(self, shell):
@@ -289,6 +290,9 @@ class AutoQueuePlugin(rb.Plugin, AutoQueueBase):
 
     def playing_entry_changed(self, sp, entry):
         """Handler for song change."""
+        if self.entry:
+            self.on_song_ended(Song(self.entry, self.rdb), False)
+        self.entry = entry
         if entry:
             self.on_song_started(Song(entry, self.rdb))
 

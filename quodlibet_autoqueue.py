@@ -154,9 +154,15 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         self.log("disabled")
         self.__enabled = False
 
+    def plugin_on_song_ended(self, song, skipped):
+        """Triggered when a song ends or is skipped."""
+        if not song:
+            return
+        ssong = Song(song)
+        self.on_song_ended(ssong, skipped)
+
     def plugin_on_song_started(self, song):
-        """Triggered when a song start. If the right conditions apply,
-        we start looking for new songs to queue."""
+        """Triggered when a song starts."""
         if not song:
             return
         ssong = Song(song)
