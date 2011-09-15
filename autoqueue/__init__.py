@@ -313,11 +313,11 @@ class AutoQueueBase(object):
         """
         if song is None:
             return
+        self.song = song
         # add the artist to the blocked list, so their songs won't be
         # played for a determined time
         if self.running:
             return
-        self.song = song
         excluded_filenames = []
         for filename in self.get_artists_track_filenames(song.get_artists()):
             if isinstance(filename, unicode):
@@ -654,7 +654,7 @@ class AutoQueueBase(object):
 
     def get_blocked_artists(self):
         """Get a list of blocked artists."""
-        blocked = []
+        blocked = [self.song]
         for song in self.player_get_songs_in_queue():
             blocked.extend(song.get_artists())
         return list(self._blocked_artists) + blocked
