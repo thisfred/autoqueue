@@ -1,7 +1,7 @@
 """AutoQueue: an automatic queueing plugin for Quod Libet.
 version 0.3
 Copyright 2007-2011 Eric Casteleijn <thisfred@gmail.com>
-
+                    Naglis Jonaitis <njonaitis@gmail.com>
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation"""
@@ -15,6 +15,7 @@ from library import library
 import config
 from collections import deque
 from quodlibet.util import copool
+from quodlibet.qltk.entry import ValidatingEntry
 
 from autoqueue import AutoQueueBase, SongBase
 
@@ -228,7 +229,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         for setting in STR_SETTINGS:
             j += 1
             label = gtk.Label('%s:' % STR_SETTINGS[setting]['label'])
-            entry = gtk.Entry()
+            entry = ValidatingEntry(Query.is_valid_color)
             table.attach(label, 0, 1, j, j + 1, xoptions=gtk.FILL | gtk.SHRINK)
             table.attach(entry, 1, 2, j, j + 1, xoptions=gtk.FILL | gtk.SHRINK)
             entry.connect('changed', str_changed, setting)
