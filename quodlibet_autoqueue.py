@@ -82,7 +82,7 @@ class Song(SongBase):
                     performers.extend(
                         [artist.lower() for artist in self.song.list(tag)])
         artists.extend(performers)
-        return set(artists)
+        return list(set(artists))
 
     def get_title(self):
         """return lowercase UNICODE title of song"""

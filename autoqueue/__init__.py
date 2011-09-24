@@ -614,7 +614,6 @@ class AutoQueueBase(object):
 
     def process_results(self, results):
         """Process similarity results from dbus."""
-        blocked = self.get_blocked_artists()
         for number, result in enumerate(results):
             if not result:
                 continue
@@ -635,7 +634,7 @@ class AutoQueueBase(object):
                 number + 1, result.get('score', 0), look_for))
             artist = unicode(result.get('artist', ''))
             if artist:
-                if artist in blocked:
+                if artist in self.get_blocked_artists():
                     continue
             filename = unicode(result.get("filename", ''))
             tags = result.get("tags")
@@ -654,7 +653,7 @@ class AutoQueueBase(object):
 
     def get_blocked_artists(self):
         """Get a list of blocked artists."""
-        blocked = [self.song]
+        blocked = self.song.get_artists()
         for song in self.player_get_songs_in_queue():
             blocked.extend(song.get_artists())
         return list(self._blocked_artists) + blocked
