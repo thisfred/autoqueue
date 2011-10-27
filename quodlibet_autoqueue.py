@@ -39,7 +39,13 @@ BOOL_SETTINGS = {
         'label': 'use last.fm similarity'},
     'use_groupings': {
         'value': True,
-        'label': 'use grouping similarity'}}
+        'label': 'use grouping similarity'},
+    'shuffle': {
+        'value': True,
+        'label': 'shuffle similar results'},
+    'whole_albums': {
+        'value': True,
+        'label': 'queue whole albums'}}
 
 STR_SETTINGS = {
     'restrictions': {
@@ -92,6 +98,21 @@ class Song(SongBase):
         if version:
             return "%s (%s)" % (title, version)
         return title
+
+    def get_album(self):
+        """return lowercase UNICODE album of song"""
+        return self.song.comma("album").lower()
+
+    def get_tracknumber(self):
+        """Get integer tracknumber."""
+        tracknumber = self.song('tracknumber')
+        if isinstance(tracknumber, int):
+            return tracknumber
+        tracknumber = tracknumber.split('/')
+        try:
+            return int(tracknumber[0])
+        except ValueError:
+            return 0
 
     def get_tags(self):
         """Get a list of tags for the song."""
@@ -254,6 +275,15 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         if 'funcid' not in kwargs:
             kwargs['funcid'] = method.__name__ + str(datetime.now())
         copool.add(method, *args, **kwargs)
+
+    def player_construct_album_search(self, album, restrictions=None):
+        """"Construct a search that looks for songs from this album."""
+        if not album:
+            return
+        search = 'album = "%s"' % album
+        if restrictions:
+            search = "&(%s, %s)" % (search, restrictions)
+        return search
 
     def player_construct_file_search(self, filename, restrictions=None):
         """Construct a search that looks for songs with this filename."""

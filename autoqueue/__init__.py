@@ -148,6 +148,8 @@ class AutoQueueBase(object):
             sim, dbus_interface='org.autoqueue.SimilarityInterface')
         self.has_mirage = self.similarity.has_mirage()
         self.player_set_variables_from_config()
+        self.whole_albums = True
+        self.shuffle = True
 
     def log(self, msg):
         """Print debug messages."""
@@ -241,10 +243,11 @@ class AutoQueueBase(object):
                 song.get_filename() for song in self.player_search(search)])
         return filenames
 
-    def player_construct_file_search(self, filename, restrictions=None):
-        """Construct a search that looks for songs with this artist and title.
+    def player_construct_album_search(self, album, restrictions=None):
+        """Construct a search that looks for songs from this album."""
 
-        """
+    def player_construct_file_search(self, filename, restrictions=None):
+        """Construct a search that looks for songs with this filename."""
 
     def player_construct_track_search(self, artist, title, restrictions=None):
         """Construct a search that looks for songs with this artist
@@ -349,8 +352,11 @@ class AutoQueueBase(object):
         return queue_length < self.desired_queue_length
 
     def construct_search(self, artist=None, title=None, tags=None,
-                         filename=None, restrictions=None):
+                         filename=None, album=None, restrictions=None):
         """Construct a search based on several criteria."""
+        if album:
+            return self.player_construct_album_search(
+                album, restrictions)
         if filename:
             return self.player_construct_file_search(
                 filename, restrictions)
@@ -614,6 +620,8 @@ class AutoQueueBase(object):
 
     def process_results(self, results):
         """Process similarity results from dbus."""
+        if self.shuffle:
+            random.shuffle(results)
         for number, result in enumerate(results):
             if not result:
                 continue
@@ -649,6 +657,17 @@ class AutoQueueBase(object):
             if self.found:
                 break
         if self.found:
+            if self.whole_albums:
+                if self.found.get_tracknumber() == 1:
+                    album = self.found.get_album()
+                    if album:
+                        search = self.player_construct_album_search(album)
+                        songs = sorted(
+                                [(song.get_tracknumber(), song)for song in 
+                                 self.player_search(search)])
+                        for _, song in songs:
+                            self.player_enqueue(song)
+                        return
             self.player_enqueue(self.found)
 
     def get_blocked_artists(self):
