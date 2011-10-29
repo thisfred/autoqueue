@@ -114,6 +114,13 @@ class Song(SongBase):
         except ValueError:
             return 0
 
+    def get_discnumber(self):
+        """Get discnumber"""
+        try:
+            return int(self.song('discnumber').split('/')[0])
+        except ValueError:
+            return 0
+
     def get_tags(self):
         """Get a list of tags for the song."""
         return self.song.list("grouping")

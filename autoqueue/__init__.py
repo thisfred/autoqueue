@@ -70,6 +70,14 @@ class SongBase(object):
         """Return lowercase UNICODE title of song."""
 
     @abstractmethod
+    def get_tracknumber(self):
+        """Return the tracknumber of the song."""
+
+    @abstractmethod
+    def get_discnumber(self):
+        """Return the discnumber of the song."""
+
+    @abstractmethod
     def get_tags(self):
         """Return a list of tags for the song."""
 
@@ -663,9 +671,10 @@ class AutoQueueBase(object):
                     if album:
                         search = self.player_construct_album_search(album)
                         songs = sorted(
-                                [(song.get_tracknumber(), song)for song in 
-                                 self.player_search(search)])
-                        for _, song in songs:
+                                [(song.get_discnumber(), 
+                                  song.get_tracknumber(), song)for song in 
+                                  self.player_search(search)])
+                        for _, _, song in songs:
                             self.player_enqueue(song)
                         return
             self.player_enqueue(self.found)
