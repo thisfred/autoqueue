@@ -119,7 +119,7 @@ class Song(SongBase):
         try:
             return int(self.song('discnumber').split('/')[0])
         except ValueError:
-            return 0
+            return 1
 
     def get_tags(self):
         """Get a list of tags for the song."""
