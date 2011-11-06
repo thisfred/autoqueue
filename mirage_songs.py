@@ -1,7 +1,7 @@
 """Mirage songs plugin."""
 
 import dbus
-from plugins.songsmenu import SongsMenuPlugin
+from quodlibet.plugins.songsmenu import SongsMenuPlugin
 from dbus.mainloop.glib import DBusGMainLoop
 DBusGMainLoop(set_as_default=True)
 

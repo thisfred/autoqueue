@@ -1,9 +1,9 @@
 """Add selected songs to the queue in ideal order based on mirage distances."""
 
 import dbus
-import widgets
+from quodlibet import widgets
 from dbus.mainloop.glib import DBusGMainLoop
-from plugins.songsmenu import SongsMenuPlugin
+from quodlibet.plugins.songsmenu import SongsMenuPlugin
 NO_OP = lambda *a, **kw: None
 
 DBusGMainLoop(set_as_default=True)
