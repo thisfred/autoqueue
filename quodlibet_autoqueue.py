@@ -8,11 +8,11 @@ published by the Free Software Foundation"""
 
 import gtk
 from datetime import datetime
-from plugins.events import EventPlugin
-from widgets import main
-from parse import Query
-from library import library
-import config
+from quodlibet.plugins.events import EventPlugin
+from quodlibet.widgets import main
+from quodlibet.parse import Query
+from quodlibet.library import library
+from quodlibet import config
 from collections import deque
 from quodlibet.util import copool
 from quodlibet.qltk.entry import ValidatingEntry
@@ -165,6 +165,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     PLUGIN_ID = "AutoQueue"
     PLUGIN_NAME = _("Auto Queue")
     PLUGIN_VERSION = "0.2"
+    PLUGIN_DESC = ("Queue similar songs.")
 
     __enabled = False
 
