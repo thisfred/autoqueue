@@ -45,6 +45,18 @@ TIMEOUT = 3000
 
 NO_OP = lambda *a, **kw: None
 
+MONTHS = [
+    'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
+    'september', 'october', 'november', 'december']
+DAYS = [
+    'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+    'sunday']
+BIRTHDAYS = [(3, 21), (6, 11)]
+EASTERS = [
+    datetime(2012, 4, 8), datetime(2013, 3, 31), datetime(2014, 4, 20),
+    datetime(2015, 4, 5), datetime(2016, 3, 27), datetime(2017, 4, 16),
+    datetime(2018, 4, 1), datetime(2019, 4, 21), datetime(2020, 4, 12),
+    datetime(2021, 4, 4), datetime(2022, 4, 17)]
 
 class SongBase(object):
     """A wrapper object around player specific song objects."""
@@ -158,6 +170,7 @@ class AutoQueueBase(object):
         self.player_set_variables_from_config()
         self.whole_albums = True
         self.shuffle = True
+        self.contextualize = True
 
     def log(self, msg):
         """Print debug messages."""
@@ -359,6 +372,137 @@ class AutoQueueBase(object):
         queue_length = self.player_get_queue_length()
         return queue_length < self.desired_queue_length
 
+    def get_context_restrictions(self):
+        """Get context filters."""
+        now = datetime.now()
+        year = now.year
+        mar_21 = datetime(year, 3, 21)
+        jun_21 = datetime(year, 6, 21)
+        sep_21 = datetime(year, 9, 21)
+        dec_21 = datetime(year, 12, 21)
+        month = now.month
+        month_name = MONTHS[month - 1]
+        weekday = now.isoweekday()
+        day_name = DAYS[weekday - 1]
+        day = now.day
+        filters = [
+            '~year=%d' % year,
+            'grouping="%d"' % year,
+            'grouping="%s"' % month_name,
+            'title=/\W%s\W/' % month_name,
+            'grouping=/^%ss?$/' % day_name,
+            'title=/\W%ss?\W/' % day_name,
+            'grouping="%d-%d-%d"' % (year, month, day),
+            'grouping="%d-%d"' % (month, day)]
+        if weekday >= 5:
+            filters.extend(['grouping=/^weekends?$/', 'title=/\Wweekends?\W/'])
+        if now <= mar_21 or now >= dec_21:
+            filters.extend(['grouping="winter"', 'title=/\Wwinters?\W/'])
+        if now >= mar_21 and now <= jun_21:
+            filters.extend(['grouping="spring"', 'title=/\Wsprings?\W/'])
+        if now >= jun_21 and now <= sep_21:
+            filters.extend(['grouping="summer"', 'title=/\Wsummers?\W/'])
+        if now >= sep_21 and now <= dec_21:
+            filters.extend([
+                'grouping="autumn"', 'title=/\Wautumns?\W/', 
+                'grouping="fall"'])
+        hour = now.hour
+        if hour <= 6 or hour >= 18:
+            filters.extend([
+                'grouping=/^nights?$/', 'title=/\Wnights?\W/'])
+        if hour >= 18 and hour < 24:
+             filters.extend([
+                'grouping=/^evenings?$/', 'title=/\Wevenings?\W/'])
+        if hour >= 6 and hour < 12:
+             filters.extend([
+                'grouping=/^mornings?$/', 'title=/\Wmornings?\W/'])
+        if hour >= 12 and hour < 18:
+             filters.extend([
+                'grouping=/^afternoons?$/', 'title=/\Wafternoons?\W/'])
+        if month == 12 and day >= 20 and day <= 27:
+            filters.extend([
+                'grouping="christmas"', 'title=/\Wchristmas\W/'])
+        if (month == 12 and day >= 26) or month == 1 and day == 1 :
+            filters.extend([
+                'grouping="kwanzaa"', 'title=/\Wkwanzaa\W/'])
+        if (month == 12 and day >= 27) or (month == 1 and day <= 7):
+            filters.extend([
+                'grouping="new year"', 'title="/\Wnew years?\W/"'])
+        if (month == 10 and day >= 27) or (month == 11 and day <= 2):
+            filters.extend([
+                'grouping="halloween"', 'title=/\Whalloween\W/',
+                'grouping="hallowe\'en"', 'title=/\Whallowe\\\'en\W/',
+                'grouping=all hallow\'s', 'title=/\Wall hallow\\\'s\W/'])
+        for easter in EASTERS:
+            delta = now - easter
+            days_after_easter = delta.days
+            if abs(days_after_easter) < 5:
+                filters.extend([
+                    'grouping="easter"', 'title=/\Weaster\W/'])
+            if days_after_easter == -47:
+                filters.extend([
+                    'grouping="shrove tuesday"', 'title=/\Wshrove tuesday\W/',
+                    'grouping="mardi gras"', 'title=/\Wmardi gras\W/'])
+            if days_after_easter == -46:
+                filters.extend([
+                    'grouping="ash wednesday"', 'title=/\Wash wednesday\W/'])
+            if days_after_easter == -7:
+                filters.extend([
+                    'grouping="palm sunday"', 'title=/\Wpalm sunday\W/'])
+            if days_after_easter == -3:
+                 filters.extend([
+                    'grouping="maundy thursday"',
+                    'title=/\Wmaundy thursday\W/'])
+            if days_after_easter == -2:
+                filters.extend([
+                    'grouping="good friday"', 'title=/\Wgood friday\W/'])
+            if days_after_easter == 39:
+                filters.extend([
+                    'grouping=ascension', 'title=/\Wascension\W/'])
+            if days_after_easter == 49:
+                filters.extend([
+                    'grouping=pentecost', 'title=/\Wpentecost\W/'])
+            if days_after_easter == 50:
+                filters.extend([
+                    'grouping="whit monday"', 'title=/\Wwhit monday\W/'])
+            if days_after_easter == 56:
+                filters.extend([
+                    'grouping=all saints', 'title=/\Wall saints\W/'])
+        if month == 11 and day == 11:
+            filters.extend([
+                'grouping="armistice day"', 'title=/\Warmistice day\W/',
+                'grouping="veterans day"', 'title=/\Wveterans?\W/',
+                'grouping="veterans"'])
+        elif month == 8 and day == 15:
+            filters.extend([
+                'grouping=assumption', 'title=/\Wassumption\W/'])
+        elif month == 7 and day == 4:
+            filters.extend([
+                'grouping="independence"', 'title=/\Windependence\W/'])
+        elif month == 2 and day == 2:
+            filters.extend([
+                'grouping="groundhog day"', 'title=/\Wgroundhog day\W/'])
+        elif month == 2 and day == 14:
+            filters.extend([
+                'grouping=valentine', 'title=valentine'])
+        elif month == 4 and day == 1:
+            filters.extend([
+                'grouping=april fool', 'title=april fool'])
+        elif month == 5 and day == 5:
+            filters.extend([
+                'grouping="cinco de mayo"', 'title=/\Wcinco de mayo\W/',
+                'grouping="mexico"', 'title=/\Wmexico\W/'])
+        elif (month == 6 or month == 12) and day == 21:
+            filters.extend([
+                'grouping=/solstices?/', 'title=/\Wsolstices?\W/'])
+        elif month == 9 and day == 11:
+            filters.extend(['grouping="9/11"', 'title="9/11"'])
+        if (month, day) in BIRTHDAYS:
+            filters.extend([
+                'grouping="birthdays", title=/\Wbirthdays?\W/'
+                ])
+        return '|(%s)' % filters.join(',')
+
     def construct_search(self, artist=None, title=None, tags=None,
                          filename=None, album=None, restrictions=None):
         """Construct a search based on several criteria."""
@@ -379,19 +523,27 @@ class AutoQueueBase(object):
                 tags, restrictions)
 
     def search_and_filter(self, artist=None, title=None, filename=None,
-                          tags=None):
+                          tags=None, context_filter=False):
         """Perform a search and filter the results."""
         if (artist, title, filename, tags) in self.cached_misses:
             self.cached_misses.remove((artist, title, filename, tags))
             self.cached_misses.append((artist, title, filename, tags))
             return None
+        restrictions = self.restrictions
+        if context_filter:
+            context_restrictions = self.get_context_restrictions()
+            if restrictions:
+                restrictions = '&(%s,%s)' % (
+                    restrictions, context_restrictions)
+            else:
+                restrictions = context_restrictions
         search = self.construct_search(
             artist=artist, title=title, filename=filename, tags=tags,
-            restrictions=self.restrictions)
+            restrictions=restrictions)
         songs = self.player_search(search)
-        if not songs:
+        if not songs and not restrictions:
             self.cached_misses.append((artist, title, filename, tags))
-            if filename and not self.restrictions:
+            if filename:
                 if not isinstance(filename, unicode):
                     try:
                         filename = filename.decode('utf-8')
@@ -402,16 +554,17 @@ class AutoQueueBase(object):
                     self.similarity.remove_track_by_filename(
                         filename, reply_handler=NO_OP,
                         error_handler=NO_OP)
-            elif (artist and title) and not self.restrictions:
+            elif (artist and title):
                 self.log('Remove %s - %s' % (artist, title))
                 self.similarity.remove_track(
                     artist, title, reply_handler=NO_OP,
                     error_handler=NO_OP)
-            elif artist and not self.restrictions:
+            elif artist:
                 self.log('Remove %s' % artist)
                 self.similarity.remove_artist(
                     artist, reply_handler=NO_OP,
                     error_handler=NO_OP)
+        if not songs:
             return
         while songs:
             song = random.choice(songs)
@@ -630,6 +783,12 @@ class AutoQueueBase(object):
         """Process similarity results from dbus."""
         if self.shuffle:
             random.shuffle(results)
+        if self.contextualize:
+            self._process_results(results, context_filter=True)
+        self._process_results(results)
+
+    def _process_results(self, results, context_filter=False):
+        """Process and possibly filter results."""
         for number, result in enumerate(results):
             if not result:
                 continue
@@ -655,13 +814,16 @@ class AutoQueueBase(object):
             filename = unicode(result.get("filename", ''))
             tags = result.get("tags")
             if filename:
-                self.found = self.search_and_filter(filename=filename)
+                self.found = self.search_and_filter(
+                    filename=filename, context_filter=context_filter)
             elif tags:
-                self.found = self.search_and_filter(tags=tags)
+                self.found = self.search_and_filter(
+                    tags=tags, context_filter=context_filter)
             else:
                 self.found = self.search_and_filter(
                     artist=unicode(result.get("artist", '')),
-                    title=unicode(result.get("title", '')))
+                    title=unicode(result.get("title", '')),
+                    context_filter=context_filter)
             if self.found:
                 break
         if self.found:
@@ -671,7 +833,7 @@ class AutoQueueBase(object):
                     if album:
                         search = self.player_construct_album_search(album)
                         songs = sorted(
-                                [(song.get_discnumber(), 
+                                [(song.get_discnumber(),
                                   song.get_tracknumber(), song)for song in 
                                   self.player_search(search)])
                         for _, _, song in songs:

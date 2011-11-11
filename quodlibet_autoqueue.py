@@ -43,6 +43,9 @@ BOOL_SETTINGS = {
     'shuffle': {
         'value': True,
         'label': 'shuffle similar results'},
+    'contextualize': {
+        'value': True,
+        'label': 'queue context appropriate tracks first.'},
     'whole_albums': {
         'value': True,
         'label': 'queue whole albums'}}
