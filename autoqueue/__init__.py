@@ -171,6 +171,8 @@ class AutoQueueBase(object):
         self.whole_albums = True
         self.shuffle = True
         self.contextualize = True
+        self.context_restrictions = None
+        self.context_hour = None
 
     def log(self, msg):
         """Print debug messages."""
@@ -375,6 +377,9 @@ class AutoQueueBase(object):
     def get_context_restrictions(self):
         """Get context filters."""
         now = datetime.now()
+        hour = now.hour
+        if self.context_restrictions is not None and self.context_hour == hour:
+            return self.context_restrictions
         year = now.year
         mar_21 = datetime(year, 3, 21)
         jun_21 = datetime(year, 6, 21)
@@ -406,7 +411,6 @@ class AutoQueueBase(object):
             filters.extend([
                 'grouping="autumn"', 'title=/\Wautumns?\W/', 
                 'grouping="fall"'])
-        hour = now.hour
         if hour <= 6 or hour >= 18:
             filters.extend([
                 'grouping=/^nights?$/', 'title=/\Wnights?\W/'])
@@ -432,7 +436,8 @@ class AutoQueueBase(object):
             filters.extend([
                 'grouping="halloween"', 'title=/\Whalloween\W/',
                 'grouping="hallowe\'en"', 'title=/\Whallowe\\\'en\W/',
-                'grouping=all hallow\'s', 'title=/\Wall hallow\\\'s\W/'])
+                'grouping=all hallow\'s', 'title=/\Wall hallow\\\'s\W/',
+                'grouping="monsters"', 'grouping="horror"'])
         for easter in EASTERS:
             delta = now - easter
             days_after_easter = delta.days
@@ -501,7 +506,9 @@ class AutoQueueBase(object):
             filters.extend([
                 'grouping="birthdays", title=/\Wbirthdays?\W/'
                 ])
-        return '|(%s)' % filters.join(',')
+        self.context_hour = hour
+        self.context_restrictions = '|(%s)' % ','.join(filters)
+        return self.context_restrictions
 
     def construct_search(self, artist=None, title=None, tags=None,
                          filename=None, album=None, restrictions=None):
@@ -525,10 +532,6 @@ class AutoQueueBase(object):
     def search_and_filter(self, artist=None, title=None, filename=None,
                           tags=None, context_filter=False):
         """Perform a search and filter the results."""
-        if (artist, title, filename, tags) in self.cached_misses:
-            self.cached_misses.remove((artist, title, filename, tags))
-            self.cached_misses.append((artist, title, filename, tags))
-            return None
         restrictions = self.restrictions
         if context_filter:
             context_restrictions = self.get_context_restrictions()
@@ -537,34 +540,39 @@ class AutoQueueBase(object):
                     restrictions, context_restrictions)
             else:
                 restrictions = context_restrictions
+        cache_key = (artist, title, filename, tags, restrictions)
+        if cache_key in self.cached_misses:
+            self.cached_misses.remove(cache_key)
+            self.cached_misses.append(cache_key)
+            return None
         search = self.construct_search(
             artist=artist, title=title, filename=filename, tags=tags,
             restrictions=restrictions)
         songs = self.player_search(search)
-        if not songs and not restrictions:
-            self.cached_misses.append((artist, title, filename, tags))
-            if filename:
-                if not isinstance(filename, unicode):
-                    try:
-                        filename = filename.decode('utf-8')
-                    except UnicodeDecodeError:
-                        self.log('failed to decode filename %r' % filename)
-                if self.has_mirage and self.use_mirage:
-                    self.log('Remove similarity for %s' % filename)
-                    self.similarity.remove_track_by_filename(
-                        filename, reply_handler=NO_OP,
-                        error_handler=NO_OP)
-            elif (artist and title):
-                self.log('Remove %s - %s' % (artist, title))
-                self.similarity.remove_track(
-                    artist, title, reply_handler=NO_OP,
-                    error_handler=NO_OP)
-            elif artist:
-                self.log('Remove %s' % artist)
-                self.similarity.remove_artist(
-                    artist, reply_handler=NO_OP,
-                    error_handler=NO_OP)
         if not songs:
+            self.cached_misses.append(cache_key)
+            if not restrictions:
+                if filename:
+                    if not isinstance(filename, unicode):
+                        try:
+                            filename = filename.decode('utf-8')
+                        except UnicodeDecodeError:
+                            self.log('failed to decode filename %r' % filename)
+                    if self.has_mirage and self.use_mirage:
+                        self.log('Remove similarity for %s' % filename)
+                        self.similarity.remove_track_by_filename(
+                            filename, reply_handler=NO_OP,
+                            error_handler=NO_OP)
+                elif (artist and title):
+                    self.log('Remove %s - %s' % (artist, title))
+                    self.similarity.remove_track(
+                        artist, title, reply_handler=NO_OP,
+                        error_handler=NO_OP)
+                elif artist:
+                    self.log('Remove %s' % artist)
+                    self.similarity.remove_artist(
+                        artist, reply_handler=NO_OP,
+                        error_handler=NO_OP)
             return
         while songs:
             song = random.choice(songs)
@@ -581,7 +589,7 @@ class AutoQueueBase(object):
                 if frequency > 0 and random.random() > rating - frequency:
                     continue
                 return song
-        self.cached_misses.append((artist, title, filename, tags))
+        self.cached_misses.append(cache_key)
         while len(self.cached_misses) > 1000:
             self.cached_misses.popleft()
 
@@ -784,8 +792,12 @@ class AutoQueueBase(object):
         if self.shuffle:
             random.shuffle(results)
         if self.contextualize:
+            self.log("Context search.")
             for result in self._process_results(results, context_filter=True):
                 yield
+            if self.found:
+                return
+            self.log("Context free search.")
         for result in self._process_results(results):
             yield
 
@@ -807,12 +819,12 @@ class AutoQueueBase(object):
             else:
                 self.log(repr(result))
                 look_for = unicode(result)
-            self.log('%03d: %06d %s' % (
-                number + 1, result.get('score', 0), look_for))
             artist = unicode(result.get('artist', ''))
             if artist:
                 if artist in self.get_blocked_artists():
                     continue
+            self.log('%03d: %06d %s' % (
+                number + 1, result.get('score', 0), look_for))
             filename = unicode(result.get("filename", ''))
             tags = result.get("tags")
             if filename:
@@ -827,7 +839,7 @@ class AutoQueueBase(object):
                     title=unicode(result.get("title", '')),
                     context_filter=context_filter)
             if self.found:
-                break
+               break
         if self.found:
             if self.whole_albums:
                 if self.found.get_tracknumber() == 1:
