@@ -784,8 +784,10 @@ class AutoQueueBase(object):
         if self.shuffle:
             random.shuffle(results)
         if self.contextualize:
-            self._process_results(results, context_filter=True)
-        self._process_results(results)
+            for result in self._process_results(results, context_filter=True):
+                yield
+        for result in self._process_results(results):
+            yield
 
     def _process_results(self, results, context_filter=False):
         """Process and possibly filter results."""
