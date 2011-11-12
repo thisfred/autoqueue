@@ -374,22 +374,26 @@ class AutoQueueBase(object):
         queue_length = self.player_get_queue_length()
         return queue_length < self.desired_queue_length
 
+    @property
+    def eoq(self):
+        return datetime.now() + timedelta(0, self.player_get_queue_length())
+
     def get_context_restrictions(self):
         """Get context filters."""
-        now = datetime.now()
-        hour = now.hour
+        eoq = self.eoq
+        hour = eoq.hour
         if self.context_restrictions is not None and self.context_hour == hour:
             return self.context_restrictions
-        year = now.year
+        year = eoq.year
         mar_21 = datetime(year, 3, 21)
         jun_21 = datetime(year, 6, 21)
         sep_21 = datetime(year, 9, 21)
         dec_21 = datetime(year, 12, 21)
-        month = now.month
+        month = eoq.month
         month_name = MONTHS[month - 1]
-        weekday = now.isoweekday()
+        weekday = eoq.isoweekday()
         day_name = DAYS[weekday - 1]
-        day = now.day
+        day = eoq.day
         filters = [
             '~year=%d' % year,
             'grouping="%d"' % year,
@@ -401,13 +405,13 @@ class AutoQueueBase(object):
             'grouping="%d-%d"' % (month, day)]
         if weekday >= 5:
             filters.extend(['grouping=/^weekends?$/', 'title=/\Wweekends?\W/'])
-        if now <= mar_21 or now >= dec_21:
+        if eoq <= mar_21 or eoq >= dec_21:
             filters.extend(['grouping="winter"', 'title=/\Wwinters?\W/'])
-        if now >= mar_21 and now <= jun_21:
+        if eoq >= mar_21 and eoq <= jun_21:
             filters.extend(['grouping="spring"', 'title=/\Wsprings?\W/'])
-        if now >= jun_21 and now <= sep_21:
+        if eoq >= jun_21 and eoq <= sep_21:
             filters.extend(['grouping="summer"', 'title=/\Wsummers?\W/'])
-        if now >= sep_21 and now <= dec_21:
+        if eoq >= sep_21 and eoq <= dec_21:
             filters.extend([
                 'grouping="autumn"', 'title=/\Wautumns?\W/', 
                 'grouping="fall"'])
@@ -439,7 +443,7 @@ class AutoQueueBase(object):
                 'grouping=all hallow\'s', 'title=/\Wall hallow\\\'s\W/',
                 'grouping="monsters"', 'grouping="horror"'])
         for easter in EASTERS:
-            delta = now - easter
+            delta = eoq - easter
             days_after_easter = delta.days
             if abs(days_after_easter) < 5:
                 filters.extend([
