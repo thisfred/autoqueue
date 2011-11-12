@@ -590,7 +590,7 @@ class AutoQueueBase(object):
                     continue
                 return song
         self.cached_misses.append(cache_key)
-        while len(self.cached_misses) > 1000:
+        while len(self.cached_misses) > 5000:
             self.cached_misses.popleft()
 
     def fill_queue(self):
