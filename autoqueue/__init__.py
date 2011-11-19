@@ -45,18 +45,23 @@ TIMEOUT = 3000
 
 NO_OP = lambda *a, **kw: None
 
+BANNED_ALBUMS = ['ep', 'greatest hits', 'demo']
+
+SEASONS = ['winter', 'spring', 'summer', 'autumn']
 MONTHS = [
     'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
     'september', 'october', 'november', 'december']
 DAYS = [
     'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
     'sunday']
+TIMES = ['night', 'morning', 'afternoon']
 BIRTHDAYS = [(3, 21), (6, 11)]
 EASTERS = [
     datetime(2012, 4, 8), datetime(2013, 3, 31), datetime(2014, 4, 20),
     datetime(2015, 4, 5), datetime(2016, 3, 27), datetime(2017, 4, 16),
     datetime(2018, 4, 1), datetime(2019, 4, 21), datetime(2020, 4, 12),
     datetime(2021, 4, 4), datetime(2022, 4, 17)]
+
 
 class SongBase(object):
     """A wrapper object around player specific song objects."""
@@ -378,6 +383,23 @@ class AutoQueueBase(object):
     def eoq(self):
         return datetime.now() + timedelta(0, self.player_get_queue_length())
 
+    def exclusive_search(self, term, terms, alt=None):
+        """Return a search that searches for term but not the other terms."""
+        search = []
+        not_search = []
+        not_terms = [t for t in terms if not t == term]
+        for nterm in not_terms:
+            not_search.extend(
+                ['!grouping=/^%ss?$/' % nterm, '!title=/\W%ss?\W/' % nterm])
+        if alt:
+            search.extend([
+                'grouping=/^%ss?$/' % term, 'title=/\W%ss?\W/' % term,
+                'grouping=/^%ss?$/' % alt, 'title=/\W%ss?\W/' % alt])
+        else:
+            search.extend([
+                'grouping=/^%ss?$/' % term, 'title=/\W%ss?\W/' % term])
+        return search, not_search
+
     def get_context_restrictions(self):
         """Get context filters."""
         eoq = self.eoq
@@ -399,37 +421,47 @@ class AutoQueueBase(object):
             'grouping="%d"' % year,
             'grouping="%s"' % month_name,
             'title=/\W%s\W/' % month_name,
-            'grouping=/^%ss?$/' % day_name,
-            'title=/\W%ss?\W/' % day_name,
             'grouping="%d-%d-%d"' % (year, month, day),
             'grouping="%d-%d"' % (month, day)]
+        not_filters = []
+        search, not_search = self.exclusive_search(day_name, DAYS)
+        filters.extend(search)
+        not_filters.extend(not_search)
         if weekday >= 5:
             filters.extend(['grouping=/^weekends?$/', 'title=/\Wweekends?\W/'])
         if eoq <= mar_21 or eoq >= dec_21:
-            filters.extend(['grouping="winter"', 'title=/\Wwinters?\W/'])
+            search, not_search = self.exclusive_search('winter', SEASONS)
+            filters.extend(search)
+            not_filters.extend(not_search)
         if eoq >= mar_21 and eoq <= jun_21:
-            filters.extend(['grouping="spring"', 'title=/\Wsprings?\W/'])
+            search, not_search = self.exclusive_search('spring', SEASONS)
+            filters.extend(search)
+            not_filters.extend(not_search)
         if eoq >= jun_21 and eoq <= sep_21:
-            filters.extend(['grouping="summer"', 'title=/\Wsummers?\W/'])
+            search, not_search = self.exclusive_search('summer', SEASONS)
+            filters.extend(search)
+            not_filters.extend(not_search)
         if eoq >= sep_21 and eoq <= dec_21:
-            filters.extend([
-                'grouping="autumn"', 'title=/\Wautumns?\W/', 
-                'grouping="fall"'])
+            search, not_search = self.exclusive_search(
+                'autumn', SEASONS, alt='fall')
+            filters.extend(search)
+            not_filters.extend(not_search)
         if hour <= 6 or hour >= 18:
-            filters.extend([
-                'grouping=/^nights?$/', 'title=/\Wnights?\W/'])
-        if hour >= 18 and hour < 24:
-             filters.extend([
-                'grouping=/^evenings?$/', 'title=/\Wevenings?\W/'])
+            search, not_search = self.exclusive_search(
+                'night', TIMES, alt='evening')
+            filters.extend(search)
+            not_filters.extend(not_search)
         if hour >= 6 and hour < 12:
-             filters.extend([
-                'grouping=/^mornings?$/', 'title=/\Wmornings?\W/'])
+            search, not_search = self.exclusive_search('morning', TIMES)
+            filters.extend(search)
+            not_filters.extend(not_search)
         if hour >= 12 and hour < 18:
-             filters.extend([
-                'grouping=/^afternoons?$/', 'title=/\Wafternoons?\W/'])
+            search, not_search = self.exclusive_search('afternoon', TIMES)
+            filters.extend(search)
+            not_filters.extend(not_search)
         if month == 12 and day >= 20 and day <= 27:
             filters.extend([
-                'grouping="christmas"', 'title=/\Wchristmas\W/'])
+               'grouping="christmas"', 'title=/\Wchristmas\W/'])
         if (month == 12 and day >= 26) or month == 1 and day == 1 :
             filters.extend([
                 'grouping="kwanzaa"', 'title=/\Wkwanzaa\W/'])
@@ -511,7 +543,8 @@ class AutoQueueBase(object):
                 'grouping="birthdays", title=/\Wbirthdays?\W/'
                 ])
         self.context_hour = hour
-        self.context_restrictions = '|(%s)' % ','.join(filters)
+        self.context_restrictions = '&(|(%s),&(%s))' % (
+            ','.join(filters), ','.join(not_filters))
         return self.context_restrictions
 
     def construct_search(self, artist=None, title=None, tags=None,
@@ -848,11 +881,11 @@ class AutoQueueBase(object):
             if self.whole_albums:
                 if self.found.get_tracknumber() == 1:
                     album = self.found.get_album()
-                    if album:
+                    if album and album.lower() not in BANNED_ALBUMS:
                         search = self.player_construct_album_search(album)
                         songs = sorted(
                                 [(song.get_discnumber(),
-                                  song.get_tracknumber(), song)for song in 
+                                  song.get_tracknumber(), song)for song in
                                   self.player_search(search)])
                         for _, _, song in songs:
                             self.player_enqueue(song)
