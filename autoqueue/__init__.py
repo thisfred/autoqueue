@@ -158,6 +158,7 @@ class AutoQueueBase(object):
         self.verbose = False
         self.song = None
         self.restrictions = None
+        self.extra_context = None
         self.use_mirage = True
         self.use_lastfm = True
         self.use_groupings = True
@@ -390,14 +391,14 @@ class AutoQueueBase(object):
         not_terms = [t for t in terms if not t == term]
         for nterm in not_terms:
             not_search.extend(
-                ['!grouping=/^%ss?$/' % nterm, '!title=/\W%ss?\W/' % nterm])
+                ['!grouping=/^%ss?$/' % nterm, '!title=/\\b%ss?\\b/' % nterm])
         if alt:
             search.extend([
-                'grouping=/^%ss?$/' % term, 'title=/\W%ss?\W/' % term,
-                'grouping=/^%ss?$/' % alt, 'title=/\W%ss?\W/' % alt])
+                'grouping=/^%ss?$/' % term, 'title=/\\b%ss?\\b/' % term,
+                'grouping=/^%ss?$/' % alt, 'title=/\\b%ss?\\b/' % alt])
         else:
             search.extend([
-                'grouping=/^%ss?$/' % term, 'title=/\W%ss?\W/' % term])
+                'grouping=/^%ss?$/' % term, 'title=/\\b%ss?\\b/' % term])
         return search, not_search
 
     def get_context_restrictions(self):
@@ -420,7 +421,7 @@ class AutoQueueBase(object):
             '~year=%d' % year,
             'grouping="%d"' % year,
             'grouping="%s"' % month_name,
-            'title=/\W%s\W/' % month_name,
+            'title=/\\b%s\\b/' % month_name,
             'grouping="%d-%d-%d"' % (year, month, day),
             'grouping="%d-%d"' % (month, day)]
         not_filters = []
@@ -428,7 +429,7 @@ class AutoQueueBase(object):
         filters.extend(search)
         not_filters.extend(not_search)
         if weekday >= 5:
-            filters.extend(['grouping=/^weekends?$/', 'title=/\Wweekends?\W/'])
+            filters.extend(['grouping=/^weekends?$/', 'title=/\\bweekends?\\b/'])
         if eoq <= mar_21 or eoq >= dec_21:
             search, not_search = self.exclusive_search('winter', SEASONS)
             filters.extend(search)
@@ -461,68 +462,68 @@ class AutoQueueBase(object):
             not_filters.extend(not_search)
         if month == 12 and day >= 20 and day <= 27:
             filters.extend([
-               'grouping="christmas"', 'title=/\Wchristmas\W/'])
+               'grouping="christmas"', 'title=/\\bchristmas\\b/'])
         if (month == 12 and day >= 26) or month == 1 and day == 1 :
             filters.extend([
-                'grouping="kwanzaa"', 'title=/\Wkwanzaa\W/'])
+                'grouping="kwanzaa"', 'title=/\\bkwanzaa\\b/'])
         if (month == 12 and day >= 27) or (month == 1 and day <= 7):
             filters.extend([
-                'grouping="new year"', 'title="/\Wnew years?\W/"'])
+                'grouping="new year"', 'title="/\\bnew years?\\b/"'])
         if (month == 10 and day >= 27) or (month == 11 and day <= 2):
             filters.extend([
-                'grouping="halloween"', 'title=/\Whalloween\W/',
-                'grouping="hallowe\'en"', 'title=/\Whallowe\\\'en\W/',
-                'grouping=all hallow\'s', 'title=/\Wall hallow\\\'s\W/',
+                'grouping="halloween"', 'title=/\\bhalloween\\b/',
+                'grouping="hallowe\'en"', 'title=/\\bhallowe\\\'en\\b/',
+                'grouping=all hallow\'s', 'title=/\\ball hallow\\\'s\\b/',
                 'grouping="monsters"', 'grouping="horror"'])
         for easter in EASTERS:
             delta = eoq - easter
             days_after_easter = delta.days
             if abs(days_after_easter) < 5:
                 filters.extend([
-                    'grouping="easter"', 'title=/\Weaster\W/'])
+                    'grouping="easter"', 'title=/\\beaster\\b/'])
             if days_after_easter == -47:
                 filters.extend([
-                    'grouping="shrove tuesday"', 'title=/\Wshrove tuesday\W/',
-                    'grouping="mardi gras"', 'title=/\Wmardi gras\W/'])
+                    'grouping="shrove tuesday"', 'title=/\\bshrove tuesday\\b/',
+                    'grouping="mardi gras"', 'title=/\\bmardi gras\\b/'])
             if days_after_easter == -46:
                 filters.extend([
-                    'grouping="ash wednesday"', 'title=/\Wash wednesday\W/'])
+                    'grouping="ash wednesday"', 'title=/\\bash wednesday\\b/'])
             if days_after_easter == -7:
                 filters.extend([
-                    'grouping="palm sunday"', 'title=/\Wpalm sunday\W/'])
+                    'grouping="palm sunday"', 'title=/\\bpalm sunday\\b/'])
             if days_after_easter == -3:
                  filters.extend([
                     'grouping="maundy thursday"',
-                    'title=/\Wmaundy thursday\W/'])
+                    'title=/\\bmaundy thursday\\b/'])
             if days_after_easter == -2:
                 filters.extend([
-                    'grouping="good friday"', 'title=/\Wgood friday\W/'])
+                    'grouping="good friday"', 'title=/\\bgood friday\\b/'])
             if days_after_easter == 39:
                 filters.extend([
-                    'grouping=ascension', 'title=/\Wascension\W/'])
+                    'grouping=ascension', 'title=/\\bascension\\b/'])
             if days_after_easter == 49:
                 filters.extend([
-                    'grouping=pentecost', 'title=/\Wpentecost\W/'])
+                    'grouping=pentecost', 'title=/\\bpentecost\\b/'])
             if days_after_easter == 50:
                 filters.extend([
-                    'grouping="whit monday"', 'title=/\Wwhit monday\W/'])
+                    'grouping="whit monday"', 'title=/\\bwhit monday\\b/'])
             if days_after_easter == 56:
                 filters.extend([
-                    'grouping=all saints', 'title=/\Wall saints\W/'])
+                    'grouping=all saints', 'title=/\\ball saints\\b/'])
         if month == 11 and day == 11:
             filters.extend([
-                'grouping="armistice day"', 'title=/\Warmistice day\W/',
-                'grouping="veterans day"', 'title=/\Wveterans?\W/',
+                'grouping="armistice day"', 'title=/\\barmistice day\\b/',
+                'grouping="veterans day"', 'title=/\\bveterans?\\b/',
                 'grouping="veterans"'])
         elif month == 8 and day == 15:
             filters.extend([
-                'grouping=assumption', 'title=/\Wassumption\W/'])
+                'grouping=assumption', 'title=/\\bassumption\\b/'])
         elif month == 7 and day == 4:
             filters.extend([
-                'grouping="independence"', 'title=/\Windependence\W/'])
+                'grouping="independence"', 'title=/\\bindependence\\b/'])
         elif month == 2 and day == 2:
             filters.extend([
-                'grouping="groundhog day"', 'title=/\Wgroundhog day\W/'])
+                'grouping="groundhog day"', 'title=/\\bgroundhog day\\b/'])
         elif month == 2 and day == 14:
             filters.extend([
                 'grouping=valentine', 'title=valentine'])
@@ -531,17 +532,21 @@ class AutoQueueBase(object):
                 'grouping=april fool', 'title=april fool'])
         elif month == 5 and day == 5:
             filters.extend([
-                'grouping="cinco de mayo"', 'title=/\Wcinco de mayo\W/',
-                'grouping="mexico"', 'title=/\Wmexico\W/'])
+                'grouping="cinco de mayo"', 'title=/\\bcinco de mayo\\b/',
+                'grouping="mexico"', 'title=/\\bmexico\\b/'])
         elif (month == 6 or month == 12) and day == 21:
             filters.extend([
-                'grouping=/solstices?/', 'title=/\Wsolstices?\W/'])
+                'grouping=/solstices?/', 'title=/\\bsolstices?\\b/'])
         elif month == 9 and day == 11:
             filters.extend(['grouping="9/11"', 'title="9/11"'])
         if (month, day) in BIRTHDAYS:
             filters.extend([
-                'grouping="birthdays", title=/\Wbirthdays?\W/'
+                'grouping="birthdays", title=/\\bbirthdays?\\b/'
                 ])
+        for term in self.extra_context.split(','):
+            if term:
+                filters.extend([
+                    'grouping=/^%s$/' % term, 'title=/\\b%s\\b/' % term])
         self.context_hour = hour
         self.context_restrictions = '&(|(%s),&(%s))' % (
             ','.join(filters), ','.join(not_filters))

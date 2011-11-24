@@ -53,7 +53,10 @@ BOOL_SETTINGS = {
 STR_SETTINGS = {
     'restrictions': {
         'value': '',
-        'label': 'restrict'}}
+        'label': 'restrict'},
+    'extra_context': {
+        'value': '',
+        'label': 'extra context'}}
 
 NO_OP = lambda *a, **kw: None
 
