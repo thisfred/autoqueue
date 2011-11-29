@@ -413,23 +413,25 @@ class AutoQueueBase(object):
         sep_21 = datetime(year, 9, 21)
         dec_21 = datetime(year, 12, 21)
         month = eoq.month
-        month_name = MONTHS[month - 1]
         weekday = eoq.isoweekday()
         day_name = DAYS[weekday - 1]
         day = eoq.day
         filters = [
             '~year=%d' % year,
             'grouping="%d"' % year,
-            'grouping="%s"' % month_name,
-            'title=/\\b%s\\b/' % month_name,
             'grouping="%d-%d-%d"' % (year, month, day),
             'grouping="%d-%d"' % (month, day)]
         not_filters = []
         search, not_search = self.exclusive_search(day_name, DAYS)
         filters.extend(search)
         not_filters.extend(not_search)
+        month_name = MONTHS[month - 1]
+        search, not_search = self.exclusive_search(month_name, MONTHS)
+        filters.extend(search)
+        not_filters.extend(not_search)
         if weekday >= 5:
-            filters.extend(['grouping=/^weekends?$/', 'title=/\\bweekends?\\b/'])
+            filters.extend(
+                ['grouping=/^weekends?$/', 'title=/\\bweekends?\\b/'])
         if eoq <= mar_21 or eoq >= dec_21:
             search, not_search = self.exclusive_search('winter', SEASONS)
             filters.extend(search)
@@ -463,7 +465,7 @@ class AutoQueueBase(object):
         if month == 12 and day >= 20 and day <= 27:
             filters.extend([
                'grouping="christmas"', 'title=/\\bchristmas\\b/'])
-        if (month == 12 and day >= 26) or month == 1 and day == 1 :
+        if (month == 12 and day >= 26) or month == 1 and day == 1:
             filters.extend([
                 'grouping="kwanzaa"', 'title=/\\bkwanzaa\\b/'])
         if (month == 12 and day >= 27) or (month == 1 and day <= 7):
@@ -483,21 +485,16 @@ class AutoQueueBase(object):
                     'grouping="easter"', 'title=/\\beaster\\b/'])
             if days_after_easter == -47:
                 filters.extend([
-                    'grouping="shrove tuesday"', 'title=/\\bshrove tuesday\\b/',
+                    'grouping="shrove tuesday"',
                     'grouping="mardi gras"', 'title=/\\bmardi gras\\b/'])
             if days_after_easter == -46:
-                filters.extend([
-                    'grouping="ash wednesday"', 'title=/\\bash wednesday\\b/'])
+                filters.extend(['grouping="ash wednesday"'])
             if days_after_easter == -7:
-                filters.extend([
-                    'grouping="palm sunday"', 'title=/\\bpalm sunday\\b/'])
+                filters.extend(['grouping="palm sunday"'])
             if days_after_easter == -3:
-                 filters.extend([
-                    'grouping="maundy thursday"',
-                    'title=/\\bmaundy thursday\\b/'])
+                filters.extend(['grouping="maundy thursday"'])
             if days_after_easter == -2:
-                filters.extend([
-                    'grouping="good friday"', 'title=/\\bgood friday\\b/'])
+                filters.extend(['grouping="good friday"'])
             if days_after_easter == 39:
                 filters.extend([
                     'grouping=ascension', 'title=/\\bascension\\b/'])
@@ -505,8 +502,7 @@ class AutoQueueBase(object):
                 filters.extend([
                     'grouping=pentecost', 'title=/\\bpentecost\\b/'])
             if days_after_easter == 50:
-                filters.extend([
-                    'grouping="whit monday"', 'title=/\\bwhit monday\\b/'])
+                filters.extend(['grouping="whit monday"'])
             if days_after_easter == 56:
                 filters.extend([
                     'grouping=all saints', 'title=/\\ball saints\\b/'])
@@ -543,10 +539,7 @@ class AutoQueueBase(object):
             filters.extend([
                 'grouping="birthdays", title=/\\bbirthdays?\\b/'
                 ])
-        for term in self.extra_context.split(','):
-            if term:
-                filters.extend([
-                    'grouping=/^%s$/' % term, 'title=/\\b%s\\b/' % term])
+        filters.append(self.extra_context)
         self.context_hour = hour
         self.context_restrictions = '&(|(%s),&(%s))' % (
             ','.join(filters), ','.join(not_filters))
@@ -881,7 +874,7 @@ class AutoQueueBase(object):
                     title=unicode(result.get("title", '')),
                     context_filter=context_filter)
             if self.found:
-               break
+                break
         if self.found:
             if self.whole_albums:
                 if self.found.get_tracknumber() == 1:
