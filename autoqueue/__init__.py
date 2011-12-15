@@ -160,6 +160,10 @@ class AutoQueueBase(object):
         self.restrictions = None
         self.extra_context = None
         self.use_mirage = True
+        self.whole_albums = True
+        self.shuffle = True
+        self.contextualize = True
+        self.southern_hemisphere = False
         self.use_lastfm = True
         self.use_groupings = True
         self.get_blocked_artists_pickle()
@@ -174,11 +178,6 @@ class AutoQueueBase(object):
             sim, dbus_interface='org.autoqueue.SimilarityInterface')
         self.has_mirage = self.similarity.has_mirage()
         self.player_set_variables_from_config()
-        self.whole_albums = True
-        self.shuffle = True
-        self.contextualize = True
-        self.context_restrictions = None
-        self.context_hour = None
 
     def log(self, msg):
         """Print debug messages."""
@@ -319,6 +318,9 @@ class AutoQueueBase(object):
         for artist in song.get_artists():
             if artist in self.get_blocked_artists():
                 return True
+        for qsong in self.player_get_songs_in_queue():
+            if qsong.get_filename() == song.get_filename():
+                return True
         return False
 
     def on_song_ended(self, song, skipped):
@@ -346,8 +348,6 @@ class AutoQueueBase(object):
         if song is None:
             return
         self.song = song
-        # add the artist to the blocked list, so their songs won't be
-        # played for a determined time
         if self.running:
             return
         excluded_filenames = []
@@ -405,8 +405,6 @@ class AutoQueueBase(object):
         """Get context filters."""
         eoq = self.eoq
         hour = eoq.hour
-        if self.context_restrictions is not None and self.context_hour == hour:
-            return self.context_restrictions
         year = eoq.year
         mar_21 = datetime(year, 3, 21)
         jun_21 = datetime(year, 6, 21)
@@ -417,7 +415,6 @@ class AutoQueueBase(object):
         day_name = DAYS[weekday - 1]
         day = eoq.day
         filters = [
-            '~year=%d' % year,
             'grouping="%d"' % year,
             'grouping="%d-%d-%d"' % (year, month, day),
             'grouping="%d-%d"' % (month, day)]
@@ -433,20 +430,37 @@ class AutoQueueBase(object):
             filters.extend(
                 ['grouping=/^weekends?$/', 'title=/\\bweekends?\\b/'])
         if eoq <= mar_21 or eoq >= dec_21:
-            search, not_search = self.exclusive_search('winter', SEASONS)
+            if self.southern_hemisphere:
+                season = 'summer'
+            else:
+                season = 'winter'
+            search, not_search = self.exclusive_search(season, SEASONS)
             filters.extend(search)
             not_filters.extend(not_search)
         if eoq >= mar_21 and eoq <= jun_21:
-            search, not_search = self.exclusive_search('spring', SEASONS)
+            if self.southern_hemisphere:
+                season = 'autumn'
+            else:
+                season = 'spring'
+            search, not_search = self.exclusive_search(season, SEASONS)
+            filters.extend(search)
+            not_filters.extend(not_search)
             filters.extend(search)
             not_filters.extend(not_search)
         if eoq >= jun_21 and eoq <= sep_21:
-            search, not_search = self.exclusive_search('summer', SEASONS)
+            if self.southern_hemisphere:
+                season = 'winter'
+            else:
+                season = 'summer'
+            search, not_search = self.exclusive_search(season, SEASONS)
             filters.extend(search)
             not_filters.extend(not_search)
         if eoq >= sep_21 and eoq <= dec_21:
-            search, not_search = self.exclusive_search(
-                'autumn', SEASONS, alt='fall')
+            if self.southern_hemisphere:
+                season = 'spring'
+            else:
+                season = 'autumn'
+            search, not_search = self.exclusive_search(season, SEASONS)
             filters.extend(search)
             not_filters.extend(not_search)
         if hour <= 6 or hour >= 18:
@@ -539,11 +553,14 @@ class AutoQueueBase(object):
             filters.extend([
                 'grouping="birthdays", title=/\\bbirthdays?\\b/'
                 ])
-        filters.append(self.extra_context)
-        self.context_hour = hour
-        self.context_restrictions = '&(|(%s),&(%s))' % (
+        if self.extra_context:
+            filters.append(self.extra_context)
+        for tag in self.song.get_tags():
+            tag = tag.split(':')[-1]
+            filters.append('grouping=/^(\.*:)?%s$/' % tag)
+        context_restrictions = '&(|(%s),&(%s))' % (
             ','.join(filters), ','.join(not_filters))
-        return self.context_restrictions
+        return context_restrictions
 
     def construct_search(self, artist=None, title=None, tags=None,
                          filename=None, album=None, restrictions=None):

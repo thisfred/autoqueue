@@ -46,6 +46,9 @@ BOOL_SETTINGS = {
     'contextualize': {
         'value': True,
         'label': 'queue context appropriate tracks first.'},
+    'southern_hemisphere': {
+        'value': False,
+        'label': 'Are you below the equator.'},
     'whole_albums': {
         'value': True,
         'label': 'queue whole albums'}}
