@@ -555,7 +555,8 @@ class AutoQueueBase(object):
                 ])
         if self.extra_context:
             filters.append(self.extra_context)
-        for tag in self.song.get_tags():
+        last_song = self.get_last_songs()[-1]
+        for tag in last_song.get_tags():
             tag = tag.split(':')[-1]
             filters.append('grouping=/^(\.*:)?%s$/' % tag)
         context_restrictions = '&(|(%s),&(%s))' % (
