@@ -418,6 +418,9 @@ class AutoQueueBase(object):
             'grouping="%d"' % year,
             'grouping="%d-%d-%d"' % (year, month, day),
             'grouping="%d-%d"' % (month, day)]
+        if month == 12:
+            # December is for retrospection
+            filters.append('~year=%d' % year)
         not_filters = []
         search, not_search = self.exclusive_search(day_name, DAYS)
         filters.extend(search)
