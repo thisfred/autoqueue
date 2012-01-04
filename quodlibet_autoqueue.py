@@ -112,6 +112,10 @@ class Song(SongBase):
         """return lowercase UNICODE album of song"""
         return self.song.comma("album").lower()
 
+    def get_album_artist(self):
+        """return lowercase UNICODE album of song"""
+        return self.song.comma("albumartist").lower()
+
     def get_tracknumber(self):
         """Get integer tracknumber."""
         tracknumber = self.song('tracknumber')
@@ -293,11 +297,14 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             kwargs['funcid'] = method.__name__ + str(datetime.now())
         copool.add(method, *args, **kwargs)
 
-    def player_construct_album_search(self, album, restrictions=None):
+    def player_construct_album_search(self, album, album_artist=None,
+                                      restrictions=None):
         """"Construct a search that looks for songs from this album."""
         if not album:
             return
         search = 'album = "%s"' % album
+        if album_artist:
+            search += ',albumartist="%s"' % album_artist
         if restrictions:
             search = "&(%s, %s)" % (search, restrictions)
         return search

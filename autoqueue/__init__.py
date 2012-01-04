@@ -45,7 +45,8 @@ TIMEOUT = 3000
 
 NO_OP = lambda *a, **kw: None
 
-BANNED_ALBUMS = ['ep', 'greatest hits', 'demo']
+BANNED_ALBUMS = [
+    'ep', 'greatest hits', 'demo', 'the best of', 'the very best of']
 
 SEASONS = ['winter', 'spring', 'summer', 'autumn']
 MONTHS = [
@@ -61,6 +62,21 @@ EASTERS = [
     datetime(2015, 4, 5), datetime(2016, 3, 27), datetime(2017, 4, 16),
     datetime(2018, 4, 1), datetime(2019, 4, 21), datetime(2020, 4, 12),
     datetime(2021, 4, 4), datetime(2022, 4, 17)]
+
+
+def get_stripped_tags(last_song):
+    """Return a set of stripped tags."""
+    tags = last_song.get_tags()
+    if not tags:
+        return []
+    tagset = set([])
+    for tag in tags:
+        if tag.startswith("artist:") or tag.startswith("album:"):
+            stripped = ":".join(tag.split(":")[1:])
+        else:
+            stripped = tag
+        tagset.add(stripped)
+    return tagset
 
 
 class SongBase(object):
@@ -89,6 +105,14 @@ class SongBase(object):
     @abstractmethod
     def get_tracknumber(self):
         """Return the tracknumber of the song."""
+
+    @abstractmethod
+    def get_album(self):
+        """Return the album of the song."""
+
+    @abstractmethod
+    def get_album_artist(self):
+        """Return the album of the song."""
 
     @abstractmethod
     def get_discnumber(self):
@@ -131,17 +155,12 @@ class SongBase(object):
 
 def tag_score(song, tags):
     """Calculate similarity score by tags."""
-    song_tags = song.get_tags()
     if not tags:
         return 0
-    tagset = set([])
-    for tag in song_tags:
-        if tag.startswith("artist:") or tag.startswith("album:"):
-            stripped = ":".join(tag.split(":")[1:])
-        else:
-            stripped = tag
-        tagset.add(stripped)
-    return len(tagset & tags)
+    song_tags = get_stripped_tags(song)
+    if not song_tags:
+        return 0
+    return len(song_tags & tags)
 
 
 class AutoQueueBase(object):
@@ -271,7 +290,8 @@ class AutoQueueBase(object):
                 song.get_filename() for song in self.player_search(search)])
         return filenames
 
-    def player_construct_album_search(self, album, restrictions=None):
+    def player_construct_album_search(self, album, album_artist=None, 
+                                      restrictions=None):
         """Construct a search that looks for songs from this album."""
 
     def player_construct_file_search(self, filename, restrictions=None):
@@ -482,6 +502,9 @@ class AutoQueueBase(object):
         if month == 12 and day >= 20 and day <= 27:
             filters.extend([
                'grouping="christmas"', 'title=/\\bchristmas\\b/'])
+        else:
+            not_filters.extend([
+               '!grouping="christmas"', '!title=/\\bchristmas\\b/'])
         if (month == 12 and day >= 26) or month == 1 and day == 1:
             filters.extend([
                 'grouping="kwanzaa"', 'title=/\\bkwanzaa\\b/'])
@@ -558,10 +581,9 @@ class AutoQueueBase(object):
                 ])
         if self.extra_context:
             filters.append(self.extra_context)
-        last_song = self.get_last_songs()[-1]
-        for tag in last_song.get_tags():
-            tag = tag.split(':')[-1]
-            filters.append('grouping=/^(\.*:)?%s$/' % tag)
+        last_song = self.last_song
+        for tag in get_stripped_tags(last_song):
+            filters.append('grouping=/^(.*:)?%s$/' % tag)
         context_restrictions = '&(|(%s),&(%s))' % (
             ','.join(filters), ','.join(not_filters))
         return context_restrictions
@@ -569,9 +591,6 @@ class AutoQueueBase(object):
     def construct_search(self, artist=None, title=None, tags=None,
                          filename=None, album=None, restrictions=None):
         """Construct a search based on several criteria."""
-        if album:
-            return self.player_construct_album_search(
-                album, restrictions)
         if filename:
             return self.player_construct_file_search(
                 filename, restrictions)
@@ -631,6 +650,7 @@ class AutoQueueBase(object):
                         error_handler=NO_OP)
             return
         while songs:
+            tag_set = get_stripped_tags(self.last_song)
             song = random.choice(songs)
             songs.remove(song)
             if not self.disallowed(song):
@@ -638,6 +658,9 @@ class AutoQueueBase(object):
                 if rating is NotImplemented:
                     rating = THRESHOLD
                 frequency = song.get_play_frequency()
+                score = tag_score(song, tag_set)
+                if score > 1:
+                    frequency += (score - 1) * ((1 - rating) / score)
                 if frequency is NotImplemented:
                     frequency = 0
                 self.log("rating: %.5f, play frequency %.5f" % (
@@ -704,7 +727,7 @@ class AutoQueueBase(object):
 
     def done(self):
         """Analyze the last song and stop."""
-        song = self.found
+        song = self.get_last_songs()[-1]
         excluded_filenames = []
         for filename in self.get_artists_track_filenames(song.get_artists()):
             if isinstance(filename, unicode):
@@ -900,8 +923,10 @@ class AutoQueueBase(object):
             if self.whole_albums:
                 if self.found.get_tracknumber() == 1:
                     album = self.found.get_album()
+                    album_artist = self.found.get_album_artist()
                     if album and album.lower() not in BANNED_ALBUMS:
-                        search = self.player_construct_album_search(album)
+                        search = self.player_construct_album_search(
+                            album=album, album_artist=album_artist)
                         songs = sorted(
                                 [(song.get_discnumber(),
                                   song.get_tracknumber(), song)for song in
@@ -925,16 +950,7 @@ class AutoQueueBase(object):
 
     def get_ordered_similar_by_tag(self, last_song):
         """Get similar tracks by tag."""
-        tags = last_song.get_tags()
-        if not tags:
-            return []
-        tagset = set([])
-        for tag in tags:
-            if tag.startswith("artist:") or tag.startswith("album:"):
-                stripped = ":".join(tag.split(":")[1:])
-            else:
-                stripped = tag
-            tagset.add(stripped)
+        tag_set = get_stripped_tags(last_song)
         search = self.construct_search(
             tags=list(tagset), restrictions=self.restrictions)
         songs = sorted(
