@@ -302,9 +302,9 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         """"Construct a search that looks for songs from this album."""
         if not album:
             return
-        search = 'album = "%s"' % album
+        search = 'album="%s"' % escape(album)
         if album_artist:
-            search += ',albumartist="%s"' % album_artist
+            search = '&(%s, albumartist="%s")' % (search, escape(album_artist))
         if restrictions:
             search = "&(%s, %s)" % (search, restrictions)
         return search

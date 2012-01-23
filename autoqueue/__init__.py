@@ -46,7 +46,8 @@ TIMEOUT = 3000
 NO_OP = lambda *a, **kw: None
 
 BANNED_ALBUMS = [
-    'ep', 'greatest hits', 'demo', 'the best of', 'the very best of']
+    'ep', 'greatest hits', 'demo', 'the best of', 'the very best of', 'live',
+    'demos', 'self titled']
 
 SEASONS = ['winter', 'spring', 'summer', 'autumn']
 MONTHS = [
@@ -290,7 +291,7 @@ class AutoQueueBase(object):
                 song.get_filename() for song in self.player_search(search)])
         return filenames
 
-    def player_construct_album_search(self, album, album_artist=None, 
+    def player_construct_album_search(self, album, album_artist=None,
                                       restrictions=None):
         """Construct a search that looks for songs from this album."""
 
@@ -338,7 +339,7 @@ class AutoQueueBase(object):
         for artist in song.get_artists():
             if artist in self.get_blocked_artists():
                 return True
-        for qsong in self.player_get_songs_in_queue():
+        for qsong in self.get_last_songs():
             if qsong.get_filename() == song.get_filename():
                 return True
         return False
@@ -357,19 +358,6 @@ class AutoQueueBase(object):
         # played for a determined time
         for artist_name in artist_names:
             self.block_artist(artist_name)
-
-    def on_song_started(self, song):
-        """Should be called by the plugin when a new song starts.
-
-        If the right conditions apply, we start looking for new songs
-        to queue.
-
-        """
-        if song is None:
-            return
-        self.song = song
-        if self.running:
-            return
         excluded_filenames = []
         for filename in self.get_artists_track_filenames(song.get_artists()):
             if isinstance(filename, unicode):
@@ -391,6 +379,19 @@ class AutoQueueBase(object):
                     reply_handler=NO_OP, error_handler=NO_OP, timeout=TIMEOUT)
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
+
+    def on_song_started(self, song):
+        """Should be called by the plugin when a new song starts.
+
+        If the right conditions apply, we start looking for new songs
+        to queue.
+
+        """
+        if song is None:
+            return
+        self.song = song
+        if self.running:
+            return
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             self.fill_queue()
         self.unblock_artists()
@@ -491,14 +492,29 @@ class AutoQueueBase(object):
                 'night', TIMES, alt='evening')
             filters.extend(search)
             not_filters.extend(not_search)
+            if hour >= 18 and hour < 22:
+                not_filters.extend(['!title=/\\blate\\b/', '!grouping="late"'])
+            else:
+                not_filters.extend(
+                    ['!title=/\\bearly\\b/', '!grouping="early"'])
         if hour >= 6 and hour < 12:
             search, not_search = self.exclusive_search('morning', TIMES)
             filters.extend(search)
             not_filters.extend(not_search)
+            if hour < 10:
+                not_filters.extend(['!title=/\\blate\\b/', '!grouping="late"'])
+            else:
+                not_filters.extend([
+                    '!title=/\\bearly\\b/', '!grouping="early"'])
         if hour >= 12 and hour < 18:
             search, not_search = self.exclusive_search('afternoon', TIMES)
             filters.extend(search)
             not_filters.extend(not_search)
+            if hour < 16:
+                not_filters.extend(['!title=/\\blate\\b/', '!grouping="late"'])
+            else:
+                not_filters.extend([
+                    '!title=/\\bearly\\b/', '!grouping="early"'])
         if month == 12 and day >= 20 and day <= 27:
             filters.extend([
                'grouping="christmas"', 'title=/\\bchristmas\\b/'])
@@ -589,7 +605,7 @@ class AutoQueueBase(object):
         return context_restrictions
 
     def construct_search(self, artist=None, title=None, tags=None,
-                         filename=None, album=None, restrictions=None):
+                         filename=None, restrictions=None):
         """Construct a search based on several criteria."""
         if filename:
             return self.player_construct_file_search(
@@ -660,7 +676,7 @@ class AutoQueueBase(object):
                 frequency = song.get_play_frequency()
                 score = tag_score(song, tag_set)
                 if score > 1:
-                    frequency += (score - 1) * ((1 - rating) / score)
+                    rating += (score - 1) * ((1 - rating) / score)
                 if frequency is NotImplemented:
                     frequency = 0
                 self.log("rating: %.5f, play frequency %.5f" % (
@@ -868,21 +884,25 @@ class AutoQueueBase(object):
 
     def process_results(self, results):
         """Process similarity results from dbus."""
-        if self.shuffle:
-            random.shuffle(results)
         if self.contextualize:
+            if self.shuffle:
+                random.shuffle(results)
             self.log("Context search.")
             for result in self._process_results(results, context_filter=True):
                 yield
             if self.found:
                 return
             self.log("Context free search.")
+        if self.shuffle:
+            random.shuffle(results)
         for result in self._process_results(results):
             yield
 
     def _process_results(self, results, context_filter=False):
         """Process and possibly filter results."""
         for number, result in enumerate(results):
+            if self.shuffle and number >= 40:
+                break
             if not result:
                 continue
             yield
@@ -898,12 +918,12 @@ class AutoQueueBase(object):
             else:
                 self.log(repr(result))
                 look_for = unicode(result)
+            self.log('%03d: %06d %s' % (
+                number + 1, result.get('score', 0), look_for))
             artist = unicode(result.get('artist', ''))
             if artist:
                 if artist in self.get_blocked_artists():
                     continue
-            self.log('%03d: %06d %s' % (
-                number + 1, result.get('score', 0), look_for))
             filename = unicode(result.get("filename", ''))
             tags = result.get("tags")
             if filename:
@@ -931,15 +951,18 @@ class AutoQueueBase(object):
                                 [(song.get_discnumber(),
                                   song.get_tracknumber(), song)for song in
                                   self.player_search(search)])
-                        for _, _, song in songs:
-                            self.player_enqueue(song)
-                        return
+                        if songs:
+                            for _, _, song in songs:
+                                self.player_enqueue(song)
+                            return
+                        else:
+                            print search
             self.player_enqueue(self.found)
 
     def get_blocked_artists(self):
         """Get a list of blocked artists."""
         blocked = self.song.get_artists()
-        for song in self.player_get_songs_in_queue():
+        for song in self.get_last_songs():
             blocked.extend(song.get_artists())
         return list(self._blocked_artists) + blocked
 
@@ -952,9 +975,9 @@ class AutoQueueBase(object):
         """Get similar tracks by tag."""
         tag_set = get_stripped_tags(last_song)
         search = self.construct_search(
-            tags=list(tagset), restrictions=self.restrictions)
+            tags=list(tag_set), restrictions=self.restrictions)
         songs = sorted(
-            [(tag_score(song, tagset), song) for song in
+            [(tag_score(song, tag_set), song) for song in
              self.player_search(search)], reverse=True)
         return [
             {'score': score, 'filename': song.get_filename()} for
