@@ -48,7 +48,7 @@ BOOL_SETTINGS = {
         'label': 'queue context appropriate tracks first.'},
     'southern_hemisphere': {
         'value': False,
-        'label': 'Are you below the equator.'},
+        'label': 'southern hemisphere'},
     'whole_albums': {
         'value': True,
         'label': 'queue whole albums'}}
@@ -57,6 +57,9 @@ STR_SETTINGS = {
     'restrictions': {
         'value': '',
         'label': 'restrict'},
+    'birthdays': {
+        'value': '',
+        'label': 'birthdays, comma separated list of name:mm/dd values'},
     'extra_context': {
         'value': '',
         'label': 'extra context'}}

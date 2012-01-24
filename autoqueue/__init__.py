@@ -57,7 +57,6 @@ DAYS = [
     'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
     'sunday']
 TIMES = ['night', 'morning', 'afternoon']
-BIRTHDAYS = [(3, 21), (6, 11)]
 EASTERS = [
     datetime(2012, 4, 8), datetime(2013, 3, 31), datetime(2014, 4, 20),
     datetime(2015, 4, 5), datetime(2016, 3, 27), datetime(2017, 4, 16),
@@ -190,6 +189,7 @@ class AutoQueueBase(object):
         self.last_songs = []
         self.last_song = None
         self.found = None
+        self.birthdays = ''
         bus = dbus.SessionBus()
         sim = bus.get_object(
             'org.autoqueue', '/org/autoqueue/Similarity',
@@ -591,10 +591,13 @@ class AutoQueueBase(object):
                 'grouping=/solstices?/', 'title=/\\bsolstices?\\b/'])
         elif month == 9 and day == 11:
             filters.extend(['grouping="9/11"', 'title="9/11"'])
-        if (month, day) in BIRTHDAYS:
-            filters.extend([
-                'grouping="birthdays", title=/\\bbirthdays?\\b/'
-                ])
+        for name_date in self.birthdays.split(','):
+            name, date = name_date.strip().split(':')
+            if date.strip() == '%02d/%02d' % (month, day):
+                filters.extend([
+                    'grouping="birthdays"', 'title=/\\bbirthdays?\\b/',
+                    'grouping="%s"' % name.strip(), 'title=/\\b%s\\b/' %
+                    name.strip()])
         if self.extra_context:
             filters.append(self.extra_context)
         last_song = self.last_song
