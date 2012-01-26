@@ -31,6 +31,12 @@ from collections import deque
 from datetime import datetime, timedelta
 from cPickle import Pickler, Unpickler
 
+try:
+    import pywapi
+    WEATHER = True
+except ImportError:
+    WEATHER = False
+
 DBusGMainLoop(set_as_default=True)
 
 try:
@@ -42,6 +48,7 @@ except ImportError:
 THRESHOLD = .5
 
 TIMEOUT = 3000
+HOUR = timedelta(0, 3600)
 
 NO_OP = lambda *a, **kw: None
 
@@ -189,6 +196,9 @@ class AutoQueueBase(object):
         self.last_songs = []
         self.last_song = None
         self.found = None
+        self.location = ''
+        self.cached_weather_tags = None
+        self.cached_weather_tags_at = None
         self.birthdays = ''
         bus = dbus.SessionBus()
         sim = bus.get_object(
@@ -598,6 +608,21 @@ class AutoQueueBase(object):
                     'grouping="birthdays"', 'title=/\\bbirthdays?\\b/',
                     'grouping="%s"' % name.strip(), 'title=/\\b%s\\b/' %
                     name.strip()])
+        if self.location:
+            city, state_country = self.location.split(',')
+            city = city.strip().lower()
+            state_country = state_country.strip().lower()
+            filters.extend([
+                'grouping="%s"' % city, 'title=/\\b%s\\b/' % city,
+                'grouping="%s"' % state_country, 'title=/\\b%s\\b/' %
+                state_country])
+            if WEATHER:
+                weather_tags = self.get_weather_tags()
+                for condition in weather_tags:
+                    if condition:
+                        filters.extend([
+                            'grouping=/\\b%s\\b/' % condition,
+                            'title=/\\b%s\\b/' % condition])
         if self.extra_context:
             filters.append(self.extra_context)
         last_song = self.last_song
@@ -606,6 +631,85 @@ class AutoQueueBase(object):
         context_restrictions = '&(|(%s),&(%s))' % (
             ','.join(filters), ','.join(not_filters))
         return context_restrictions
+
+    def get_weather_tags(self):
+        if self.cached_weather_tags and (datetime.now() <
+                                         self.cached_weather_tags_at + HOUR):
+            return self.cached_weather_tags
+        try:
+            weather = pywapi.get_weather_from_google(
+                'weather=%s' % self.location)
+        except Exception, e:
+            self.log(e)
+            return []
+        condition = weather['current_conditions']['condition']
+        if condition:
+            conditions = [condition]
+            unmodified = condition.split()[-1]
+            if unmodified not in conditions:
+                conditions.append(unmodified)
+            if unmodified[-1] == 'y':
+                if unmodified[-2] == unmodified[-3]:
+                    conditions.append(unmodified[:-2])
+                else:
+                    conditions.append(unmodified[:-1])
+        else:
+            conditions = []
+        temperature = weather['current_conditions']['temp_c']
+        temperature_tags = []
+        if temperature:
+            degrees_c = int(temperature)
+            if degrees_c <= 0:
+                temperature_tags.extend(['freezing', 'frozen', 'ice'])
+            if degrees_c <= 10:
+                temperature_tags.extend(['cold'])
+            if degrees_c >= 30:
+                temperature_tags.extend(['hot', 'heat'])
+        wind = weather['current_conditions']['wind_condition']
+        if wind:
+            direction = wind.split()[1]
+            if direction[-1] == 'N':
+                wind_direction = 'northerly'
+            elif direction[-1] == 'E':
+                wind_direction = 'easterly'
+            elif direction[-1] == 'S':
+                wind_direction = 'southerly'
+            else:
+                wind_direction = 'westerly'
+            prefix = ''
+            for i in range(len(direction) - 1):
+                if direction[i] == 'N':
+                    prefix += 'north\W*'
+                elif direction[i] == 'E':
+                    prefix += 'east\W*'
+                elif direction[i] == 'S':
+                    prefix += 'south\W*'
+                elif direction[i] == 'W':
+                    prefix += 'west\W*'
+            wind_direction = prefix + wind_direction
+            speed = int(wind.split()[-2])
+            if speed < 1:
+                wind_direction = ''
+                wind_conditions = ['calms?']
+            elif speed <= 30:
+                wind_conditions = ['breezes?', 'breezy']
+            elif speed <= 38:
+                wind_conditions = ['winds?', 'windy']
+            elif speed <= 54:
+                wind_conditions = ['winds?', 'windy', 'gales?']
+            elif speed <= 72:
+                wind_conditions = [
+                    'winds?', 'windy', 'storms?', 'stormy']
+            else:
+                wind_conditions = [
+                    'winds?', 'windy', 'storms?', 'hurricanes?']
+        else:
+            wind_conditions = []
+            wind_direction = ''
+        self.cached_weather_tags = (
+            conditions + wind_conditions + temperature_tags + [wind_direction])
+        self.cached_weather_tags_at = datetime.now()
+        return self.cached_weather_tags
 
     def construct_search(self, artist=None, title=None, tags=None,
                          filename=None, restrictions=None):

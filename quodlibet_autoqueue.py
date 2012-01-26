@@ -60,6 +60,9 @@ STR_SETTINGS = {
     'birthdays': {
         'value': '',
         'label': 'birthdays, comma separated list of name:mm/dd values'},
+    'location': {
+        'value': '',
+        'label': 'location ([City], [State] or [City], [Country])'},
     'extra_context': {
         'value': '',
         'label': 'extra context'}}
