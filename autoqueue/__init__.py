@@ -613,8 +613,8 @@ class AutoQueueBase(object):
             city = city.strip().lower()
             state_country = state_country.strip().lower()
             filters.extend([
-                'grouping="%s"' % city, 'title=/\\b%s\\b/' % city,
-                'grouping="%s"' % state_country, 'title=/\\b%s\\b/' %
+                'grouping=/(artist:)?%s/' % city, 'title=/\\b%s\\b/' % city,
+                'grouping=/(artist:)?%s/' % state_country, 'title=/\\b%s\\b/' %
                 state_country])
             if WEATHER:
                 weather_tags = self.get_weather_tags()
