@@ -167,7 +167,7 @@ def tag_score(song, tags):
     song_tags = get_stripped_tags(song)
     if not song_tags:
         return 0
-    return len(song_tags & tags)
+    return len(song_tags & tags) / float(len(song_tags | tags))
 
 
 class AutoQueueBase(object):
@@ -613,8 +613,8 @@ class AutoQueueBase(object):
             city = city.strip().lower()
             state_country = state_country.strip().lower()
             filters.extend([
-                'grouping=/(artist:)?%s/' % city, 'title=/\\b%s\\b/' % city,
-                'grouping=/(artist:)?%s/' % state_country, 'title=/\\b%s\\b/' %
+                'grouping=/^(.*:)?%s$/' % city, 'title=/\\b%s\\b/' % city,
+                'grouping=/^(.*:)?%s$/' % state_country, 'title=/\\b%s\\b/' %
                 state_country])
             if WEATHER:
                 weather_tags = self.get_weather_tags()
@@ -782,8 +782,8 @@ class AutoQueueBase(object):
                     rating = THRESHOLD
                 frequency = song.get_play_frequency()
                 score = tag_score(song, tag_set)
-                if score > 1:
-                    rating += (score - 1) * ((1 - rating) / score)
+                if score:
+                    rating += (1 - rating) * score
                 if frequency is NotImplemented:
                     frequency = 0
                 self.log("rating: %.5f, play frequency %.5f" % (
