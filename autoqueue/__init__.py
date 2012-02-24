@@ -48,13 +48,13 @@ except ImportError:
 THRESHOLD = .5
 
 TIMEOUT = 3000
-HOUR = timedelta(0, 3600)
+FIVE_MINUTES = timedelta(0, 300)
 
 NO_OP = lambda *a, **kw: None
 
 BANNED_ALBUMS = [
     'ep', 'greatest hits', 'demo', 'the best of', 'the very best of', 'live',
-    'demos', 'self titled']
+    'demos', 'self titled', 'untitled album', '[non-album tracks]']
 
 SEASONS = ['winter', 'spring', 'summer', 'autumn']
 MONTHS = [
@@ -167,7 +167,9 @@ def tag_score(song, tags):
     song_tags = get_stripped_tags(song)
     if not song_tags:
         return 0
-    return len(song_tags & tags) / float(len(song_tags | tags))
+    return (
+        max(0, len(song_tags & tags) - 1)) / float(
+            max(1, len(song_tags | tags) - 1))
 
 
 class AutoQueueBase(object):
@@ -634,7 +636,8 @@ class AutoQueueBase(object):
 
     def get_weather_tags(self):
         if self.cached_weather_tags and (datetime.now() <
-                                         self.cached_weather_tags_at + HOUR):
+                                         self.cached_weather_tags_at +
+                                         FIVE_MINUTES):
             return self.cached_weather_tags
         try:
             weather = pywapi.get_weather_from_google(
@@ -642,7 +645,8 @@ class AutoQueueBase(object):
         except Exception, e:
             self.log(e)
             return []
-        condition = weather['current_conditions']['condition']
+        condition = weather.get(
+            'current_conditions', {}).get('condition', '').lower()
         if condition:
             conditions = [condition]
             unmodified = condition.split()[-1]
@@ -650,12 +654,12 @@ class AutoQueueBase(object):
                 conditions.append(unmodified)
             if unmodified[-1] == 'y':
                 if unmodified[-2] == unmodified[-3]:
-                    conditions.append(unmodified[:-2])
+                    conditions.append(unmodified[:-2] + 's?')
                 else:
-                    conditions.append(unmodified[:-1])
+                    conditions.append(unmodified[:-1] + 's?')
         else:
             conditions = []
-        temperature = weather['current_conditions']['temp_c']
+        temperature = weather.get('current_conditions', {}).get('temp_c', '')
         temperature_tags = []
         if temperature:
             degrees_c = int(temperature)
@@ -665,7 +669,7 @@ class AutoQueueBase(object):
                 temperature_tags.extend(['cold'])
             if degrees_c >= 30:
                 temperature_tags.extend(['hot', 'heat'])
-        wind = weather['current_conditions']['wind_condition']
+        wind = weather.get('current_conditions', {}).get('wind_condition', '')
         if wind:
             direction = wind.split()[1]
             if direction[-1] == 'N':
@@ -686,7 +690,7 @@ class AutoQueueBase(object):
                     prefix += 'south\W*'
                 elif direction[i] == 'W':
                     prefix += 'west\W*'
-            wind_direction = prefix + wind_direction
+            wind_direction = prefix + wind_direction + ' winds?'
             speed = int(wind.split()[-2])
             if speed < 1:
                 wind_direction = ''
@@ -709,6 +713,7 @@ class AutoQueueBase(object):
         self.cached_weather_tags = (
             conditions + wind_conditions + temperature_tags + [wind_direction])
         self.cached_weather_tags_at = datetime.now()
+        print self.cached_weather_tags
         return self.cached_weather_tags
 
     def construct_search(self, artist=None, title=None, tags=None,
@@ -1058,7 +1063,8 @@ class AutoQueueBase(object):
                                 [(song.get_discnumber(),
                                   song.get_tracknumber(), song)for song in
                                   self.player_search(search)])
-                        if songs:
+                        if songs and not any([self.disallowed(song[2]) for song
+                                              in songs]):
                             for _, _, song in songs:
                                 self.player_enqueue(song)
                             return
