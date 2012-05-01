@@ -54,7 +54,8 @@ NO_OP = lambda *a, **kw: None
 
 BANNED_ALBUMS = [
     'ep', 'greatest hits', 'demo', 'the best of', 'the very best of', 'live',
-    'demos', 'self titled', 'untitled album', '[non-album tracks]']
+    'demos', 'self titled', 'untitled album', '[non-album tracks]', 'single',
+    '7"', 'covers']
 
 SEASONS = ['winter', 'spring', 'summer', 'autumn']
 MONTHS = [
@@ -169,7 +170,7 @@ def tag_score(song, tags):
         return 0
     return (
         max(0, len(song_tags & tags) - 1)) / float(
-            max(1, len(song_tags | tags) - 1))
+            max(1, len(song_tags | tags)))
 
 
 class AutoQueueBase(object):
@@ -449,8 +450,8 @@ class AutoQueueBase(object):
         day = eoq.day
         filters = [
             'grouping="%d"' % year,
-            'grouping="%d-%d-%d"' % (year, month, day),
-            'grouping="%d-%d"' % (month, day)]
+            'grouping="%d-%02d-%02d"' % (year, month, day),
+            'grouping="%02d-%02d"' % (month, day)]
         if month == 12:
             # December is for retrospection
             filters.append('~year=%d' % year)
