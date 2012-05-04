@@ -63,6 +63,9 @@ STR_SETTINGS = {
     'location': {
         'value': '',
         'label': 'location ([City], [State] or [City], [Country])'},
+    'geohash': {
+        'value': '',
+        'label': 'geohash (see geohash.org)'},
     'extra_context': {
         'value': '',
         'label': 'extra context'}}
