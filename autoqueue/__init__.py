@@ -161,6 +161,40 @@ class SongBase(object):
         return 1.0 / days
 
 
+def geo_score(song, tags):
+    if not tags:
+        return 0
+    song_tags = get_stripped_tags(song)
+    if not song_tags:
+        return 0
+    geohashes = [t.split(':')[1] for t in tags if t.startswith('geohash:')]
+    other_geohashes = [
+        t.split(':')[1] for t in song_tags if t.startswith('geohash:')]
+    if not (geohashes and other_geohashes):
+        return 0
+    dividend = 0
+    divisor = -1
+    for geohash in geohashes:
+        if divisor == -1:
+            divisor = len(geohash)
+        for other in other_geohashes:
+            if geohash[0] != other[0]:
+                continue
+            shortest = min(len(geohash), len(other))
+            i = 0
+            while (geohash[i] == other[i] and i < shortest):
+                i += 1
+            if i == dividend:
+                if shortest < divisor:
+                    divisor = shortest
+            if i > dividend:
+                dividend = i
+                divisor = shortest
+    if divisor < 1:
+        return 0
+    return float(dividend) / divisor
+
+
 def tag_score(song, tags):
     """Calculate similarity score by tags."""
     if not tags:
@@ -168,49 +202,14 @@ def tag_score(song, tags):
     song_tags = get_stripped_tags(song)
     if not song_tags:
         return 0
-    geohashes = []
-    other_geohashes = []
-    for tag in tags:
-        if tag.startswith('geohash:'):
-            geohashes.append(tag.split(':')[1])
-    for song_tag in song_tags:
-        if song_tag.startswith('geohash:'):
-            other_geohashes = song_tag.split(':')[1]
-    if not (geohashes and other_geohashes):
-        dividend = 0
-        divisor = len(geohashes) + len(other_geohashes)
-    else:
-        dividend = 0
-        divisor = -1
-        for geohash in geohashes:
-            if divisor == -1:
-                divisor = len(geohash)
-            for other in other_geohashes:
-                if geohash[0] != other[0]:
-                    continue
-                shortest = min(len(geohash), len(other))
-                i = 0
-                while (geohash[i] == other[i] and i < shortest):
-                    i += 1
-                if i == dividend:
-                    if shortest < divisor:
-                        divisor = shortest
-                if i > dividend:
-                    dividend = i
-                    divisor = shortest
-    if divisor:
-        geoscore = float(dividend) / divisor
-    else:
-        geoscore = 0
     ng_tags = {t for t in tags if not t.startswith('geohash:')}
     ng_song_tags = {t for t in song_tags if not t.startswith('geohash:')}
     if ng_song_tags or ng_song_tags:
         score = (
             max(0, (len(ng_song_tags & ng_tags)) - 1) /
             float(max(1, len(ng_song_tags | ng_tags))))
-    if score and geoscore:
-        return score + geoscore / 2.0
-    return score or geoscore
+        return score
+    return 0
 
 
 class AutoQueueBase(object):
@@ -833,6 +832,9 @@ class AutoQueueBase(object):
                 score = tag_score(song, tag_set)
                 if score:
                     rating += (1 - rating) * score
+                score2 = geo_score(song, tag_set)
+                if score2:
+                    rating += (1 - rating) * score2
                 if frequency is NotImplemented:
                     frequency = 0
                 self.log("rating: %.5f, play frequency %.5f" % (
