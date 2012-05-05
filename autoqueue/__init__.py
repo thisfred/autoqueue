@@ -192,7 +192,7 @@ def geo_score(song, tags):
                 divisor = shortest
     if divisor < 1:
         return 0
-    return float(dividend) / divisor
+    return float(max(0, dividend - 1)) / divisor
 
 
 def tag_score(song, tags):
