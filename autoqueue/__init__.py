@@ -190,9 +190,7 @@ def geo_score(song, tags):
             if i > dividend:
                 dividend = i
                 divisor = shortest
-    if divisor < 1:
-        return 0
-    return float(max(0, dividend - 1)) / divisor
+    return float(dividend) / divisor + 1
 
 
 def tag_score(song, tags):
@@ -206,8 +204,8 @@ def tag_score(song, tags):
     ng_song_tags = {t for t in song_tags if not t.startswith('geohash:')}
     if ng_song_tags or ng_song_tags:
         score = (
-            max(0, (len(ng_song_tags & ng_tags)) - 1) /
-            float(max(1, len(ng_song_tags | ng_tags))))
+            len(ng_song_tags & ng_tags) /
+            float(len(ng_song_tags | ng_tags) + 1))
         return score
     return 0
 
