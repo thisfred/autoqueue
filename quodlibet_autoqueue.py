@@ -125,6 +125,10 @@ class Song(SongBase):
         """return lowercase UNICODE album of song"""
         return self.song.comma("albumartist").lower()
 
+    def get_musicbrainz_albumid(self):
+        """Return musicbrainz album_id if any."""
+        return self.song.comma('musicbrainz_albumid')
+
     def get_tracknumber(self):
         """Get integer tracknumber."""
         tracknumber = self.song('tracknumber')
@@ -307,13 +311,17 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         copool.add(method, *args, **kwargs)
 
     def player_construct_album_search(self, album, album_artist=None,
-                                      restrictions=None):
+                                      album_id=None, restrictions=None):
         """"Construct a search that looks for songs from this album."""
         if not album:
             return
         search = 'album="%s"' % escape(album)
         if album_artist:
             search = '&(%s, albumartist="%s")' % (search, escape(album_artist))
+        if album_id:
+            search = (
+                '&(%s, |(musicbrainz_albumid="%s", musicbrainz_albumid="")' %
+                (search, album_id))
         if restrictions:
             search = "&(%s, %s)" % (search, restrictions)
         return search

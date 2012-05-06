@@ -123,6 +123,10 @@ class SongBase(object):
         """Return the album of the song."""
 
     @abstractmethod
+    def get_musicbrainz_albumid(self):
+        """Return the musicbrainz album id, if any."""
+
+    @abstractmethod
     def get_discnumber(self):
         """Return the discnumber of the song."""
 
@@ -343,7 +347,7 @@ class AutoQueueBase(object):
         return filenames
 
     def player_construct_album_search(self, album, album_artist=None,
-                                      restrictions=None):
+                                      album_id=None, restrictions=None):
         """Construct a search that looks for songs from this album."""
 
     def player_construct_file_search(self, filename, restrictions=None):
@@ -1100,9 +1104,11 @@ class AutoQueueBase(object):
                 if self.found.get_tracknumber() == 1:
                     album = self.found.get_album()
                     album_artist = self.found.get_album_artist()
+                    album_id = self.found.get_musicbrainz_albumid()
                     if album and album.lower() not in BANNED_ALBUMS:
                         search = self.player_construct_album_search(
-                            album=album, album_artist=album_artist)
+                            album=album, album_artist=album_artist,
+                            album_id=album_id)
                         songs = sorted(
                                 [(song.get_discnumber(),
                                   song.get_tracknumber(), song)for song in
