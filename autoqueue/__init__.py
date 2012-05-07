@@ -176,11 +176,8 @@ def geo_score(song, tags):
         t.split(':')[1] for t in song_tags if t.startswith('geohash:')]
     if not (geohashes and other_geohashes):
         return 0
-    dividend = 0
-    divisor = -1
+    longest_common = 0
     for geohash in geohashes:
-        if divisor == -1:
-            divisor = len(geohash)
         for other in other_geohashes:
             if geohash[0] != other[0]:
                 continue
@@ -188,13 +185,9 @@ def geo_score(song, tags):
             i = 0
             while (geohash[i] == other[i] and i < shortest):
                 i += 1
-            if i == dividend:
-                if shortest < divisor:
-                    divisor = shortest
-            if i > dividend:
-                dividend = i
-                divisor = shortest
-    return float(dividend) / divisor + 1
+            if i > longest_common:
+                longest_common = i
+    return 1 - (1.0 / (2 ** longest_common))
 
 
 def tag_score(song, tags):
