@@ -180,12 +180,12 @@ def geo_score(song, tags):
     geohashes = [t.split(':')[1] for t in tags if t.startswith('geohash:')]
     if GEOHASH:
         for h in geohashes[:]:
-            geohashes.expand(geohash.neighbours(h))
+            geohashes.extend(geohash.neighbours(h))
     other_geohashes = [
         t.split(':')[1] for t in song_tags if t.startswith('geohash:')]
     if GEOHASH:
         for h in other_geohashes[:]:
-            other_geohashes.expand(geohash.neighbours(h))
+            other_geohashes.extend(geohash.neighbours(h))
     if not (geohashes and other_geohashes):
         return 0
     longest_common = 0
