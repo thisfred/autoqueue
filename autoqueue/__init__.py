@@ -37,6 +37,12 @@ try:
 except ImportError:
     WEATHER = False
 
+try:
+    import geohash
+    GEOHASH = True
+except:
+    GEOHASH = False
+
 DBusGMainLoop(set_as_default=True)
 
 try:
@@ -172,18 +178,24 @@ def geo_score(song, tags):
     if not song_tags:
         return 0
     geohashes = [t.split(':')[1] for t in tags if t.startswith('geohash:')]
+    if GEOHASH:
+        for h in geohashes[:]:
+            geohashes.expand(geohash.neighbours(h))
     other_geohashes = [
         t.split(':')[1] for t in song_tags if t.startswith('geohash:')]
+    if GEOHASH:
+        for h in other_geohashes[:]:
+            other_geohashes.expand(geohash.neighbours(h))
     if not (geohashes and other_geohashes):
         return 0
     longest_common = 0
-    for geohash in geohashes:
+    for ghash in geohashes:
         for other in other_geohashes:
-            if geohash[0] != other[0]:
+            if ghash[0] != other[0]:
                 continue
-            shortest = min(len(geohash), len(other))
+            shortest = min(len(ghash), len(other))
             i = 0
-            while (geohash[i] == other[i] and i < shortest):
+            while (ghash[i] == other[i] and i < shortest):
                 i += 1
             if i > longest_common:
                 longest_common = i
@@ -197,8 +209,11 @@ def tag_score(song, tags):
     song_tags = get_stripped_tags(song)
     if not song_tags:
         return 0
-    ng_tags = {t for t in tags if not t.startswith('geohash:')}
-    ng_song_tags = {t for t in song_tags if not t.startswith('geohash:')}
+    ng_tags = {
+        t for t in tags if not (t.startswith('geohash:') or t == 'geotagged')}
+    ng_song_tags = {
+        t for t in song_tags if not
+        (t.startswith('geohash:') or t == 'geotagged')}
     if ng_song_tags or ng_song_tags:
         score = (
             len(ng_song_tags & ng_tags) /
