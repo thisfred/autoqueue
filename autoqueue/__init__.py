@@ -654,13 +654,14 @@ class AutoQueueBase(object):
                 'grouping=/solstices?/', 'title=/\\bsolstices?\\b/'])
         elif month == 9 and day == 11:
             filters.extend(['grouping="9/11"', 'title="9/11"'])
-        for name_date in self.birthdays.split(','):
-            name, date = name_date.strip().split(':')
-            if date.strip() == '%02d/%02d' % (month, day):
-                filters.extend([
-                    'grouping="birthdays"', 'title=/\\bbirthdays?\\b/',
-                    'grouping="%s"' % name.strip(), 'title=/\\b%s\\b/' %
-                    name.strip()])
+        if self.birthdays:
+            for name_date in self.birthdays.split(','):
+                name, date = name_date.strip().split(':')
+                if date.strip() == '%02d/%02d' % (month, day):
+                    filters.extend([
+                        'grouping="birthdays"', 'title=/\\bbirthdays?\\b/',
+                        'grouping="%s"' % name.strip(), 'title=/\\b%s\\b/' %
+                        name.strip()])
         if self.location:
             city, state_country = self.location.split(',')
             city = city.strip().lower()
@@ -1149,7 +1150,7 @@ class AutoQueueBase(object):
             tags=list(tag_set), restrictions=self.restrictions)
         songs = sorted(
             [(tag_score(song, tag_set), song) for song in
-             self.player_search(search)], reverse=True)
+             self.player_search(search) if search], reverse=True)
         return [
             {'score': score, 'filename': song.get_filename()} for
             score, song in songs]
