@@ -195,7 +195,7 @@ def geo_score(song, tags):
                 continue
             shortest = min(len(ghash), len(other))
             i = 0
-            while (ghash[i] == other[i] and i < shortest):
+            while (i < shortest and ghash[i] == other[i]):
                 i += 1
             if i > longest_common:
                 longest_common = i
