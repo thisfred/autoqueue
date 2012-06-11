@@ -1126,8 +1126,6 @@ class AutoQueueBase(object):
                             for _, _, song in songs:
                                 self.player_enqueue(song)
                             return
-                        else:
-                            print search
             self.player_enqueue(self.found)
 
     def get_blocked_artists(self):
