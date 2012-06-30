@@ -721,20 +721,21 @@ class AutoQueueBase(object):
         else:
             return []
         conditions = []
+        eoq = self.eoq
         sunset = weather.get('astronomy', {}).get('sunset', '')
         sunrise = weather.get('astronomy', {}).get('sunrise', '')
         if sunrise and sunset:
             sunrise = self.string_to_datetime(sunrise)
             sunset = self.string_to_datetime(sunset)
-            if abs(sunrise - now) < THIRTY_MINUTES:
+            if abs(sunrise - eoq) < THIRTY_MINUTES:
                 conditions.extend([
                     'sunrises?', 'dawns?', 'aurora', 'break of day', 'dawning',
                     'daybreak', 'sunup'])
-            elif abs(sunset - now) < THIRTY_MINUTES:
+            elif abs(sunset - eoq) < THIRTY_MINUTES:
                 conditions.extend([
                     'sunsets?', 'dusks?', 'gloaming', 'nightfalls?',
                     'sundowns?', 'twilight', 'eventides?', 'close of day'])
-            if now > sunrise and now < sunset:
+            if eoq > sunrise and eoq < sunset:
                 conditions.extend(['daylight', 'sunlight', 'light'])
             else:
                 conditions.extend(['dark', 'darkness', 'night'])
