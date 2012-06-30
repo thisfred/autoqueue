@@ -708,16 +708,17 @@ class AutoQueueBase(object):
         return datetime.combine(date.today(), time(hour + delta, minute))
 
     def get_weather_tags(self):
-        # 'astronomy': {'sunset': u'8:34 pm', 'sunrise': u'5:42 am'},
         now = datetime.now()
         if self.cached_weather_tags and (now < self.cached_weather_tags_at +
                                          FIVE_MINUTES):
             return self.cached_weather_tags
-        try:
-            weather = pywapi.get_weather_from_yahoo(
-                'weather=%s' % self.location)
-        except Exception, e:
-            self.log(e)
+        if self.zipcode:
+            try:
+                weather = pywapi.get_weather_from_yahoo(self.zipcode)
+            except Exception, e:
+                self.log(repr(e))
+                return []
+        else:
             return []
         conditions = []
         sunset = weather.get('astronomy', {}).get('sunset', '')
