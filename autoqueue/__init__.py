@@ -778,7 +778,6 @@ class AutoQueueBase(object):
             wind_direction = 'west(erly)?'
         elif (direction >= 292.5 and direction <= 337.5):
             wind_direction = 'northwest(erly)?'
-        wind_direction = wind_direction + ' winds?'
         speed = float(weather.get('wind', {}).get('speed', '0'))
         if speed < 1:
             wind_direction = ''
