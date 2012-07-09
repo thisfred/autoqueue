@@ -419,8 +419,9 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         try:
             myfilter = Query(search).search
             songs = filter(myfilter, library.itervalues())
-        except (Query.error, RuntimeError):
+        except (Query.error, RuntimeError, AttributeError):
             self.log("error in: %s" % search)
+            print "err"
             return []
         return [Song(song) for song in songs]
 

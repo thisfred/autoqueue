@@ -1150,7 +1150,7 @@ class AutoQueueBase(object):
             tags=list(tag_set), restrictions=self.restrictions)
         songs = sorted(
             [(tag_score(song, tag_set), song) for song in
-             self.player_search(search) if search], reverse=True)
+             self.player_search(search)], reverse=True)
         return [
             {'score': score, 'filename': song.get_filename()} for
             score, song in songs]
