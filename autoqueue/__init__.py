@@ -654,7 +654,7 @@ class AutoQueueBase(object):
             filters.extend([
                 'grouping=/solstices?/', 'title=/\\bsolstices?\\b/'])
         elif month == 9 and day == 11:
-            filters.extend(['grouping="9/11"', 'title="9/11"'])
+            filters.extend(['grouping="09-11"', 'title="9/11"'])
         for name_date in self.birthdays.split(','):
             name, bdate = name_date.strip().split(':')
             if bdate.strip() == '%02d/%02d' % (month, day):
@@ -736,7 +736,7 @@ class AutoQueueBase(object):
                     'sunsets?', 'dusks?', 'gloaming', 'nightfalls?',
                     'sundowns?', 'twilight', 'eventides?', 'close of day'])
             if eoq > sunrise and eoq < sunset:
-                conditions.extend(['daylight', 'sunlight', 'light'])
+                conditions.extend(['daylight', 'light'])
             else:
                 conditions.extend(['dark', 'darkness', 'night'])
         condition = weather.get('condition', {}).get('text', '').lower()
