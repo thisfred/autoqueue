@@ -420,6 +420,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     def player_search(self, search):
         """Perform a player search."""
         try:
+            if search is None: search = ""
             myfilter = Query(search).search
             songs = filter(myfilter, library.itervalues())
         except (Query.error, RuntimeError, AttributeError):
