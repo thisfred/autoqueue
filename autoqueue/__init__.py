@@ -28,7 +28,7 @@ import random
 from abc import ABCMeta, abstractmethod
 from dbus.mainloop.glib import DBusGMainLoop
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import date, time, datetime, timedelta
 from cPickle import Pickler, Unpickler
 
 try:
@@ -55,6 +55,7 @@ THRESHOLD = .5
 
 TIMEOUT = 3000
 FIVE_MINUTES = timedelta(0, 300)
+THIRTY_MINUTES = timedelta(0, 1800)
 
 NO_OP = lambda *a, **kw: None
 
@@ -195,7 +196,7 @@ def geo_score(song, tags):
                 continue
             shortest = min(len(ghash), len(other))
             i = 0
-            while (ghash[i] == other[i] and i < shortest):
+            while (i < shortest and ghash[i] == other[i]):
                 i += 1
             if i > longest_common:
                 longest_common = i
@@ -654,14 +655,13 @@ class AutoQueueBase(object):
                 'grouping=/solstices?/', 'title=/\\bsolstices?\\b/'])
         elif month == 9 and day == 11:
             filters.extend(['grouping="9/11"', 'title="9/11"'])
-        if self.birthdays:
-            for name_date in self.birthdays.split(','):
-                name, date = name_date.strip().split(':')
-                if date.strip() == '%02d/%02d' % (month, day):
-                    filters.extend([
-                        'grouping="birthdays"', 'title=/\\bbirthdays?\\b/',
-                        'grouping="%s"' % name.strip(), 'title=/\\b%s\\b/' %
-                        name.strip()])
+        for name_date in self.birthdays.split(','):
+            name, bdate = name_date.strip().split(':')
+            if bdate.strip() == '%02d/%02d' % (month, day):
+                filters.extend([
+                    'grouping="birthdays"', 'title=/\\bbirthdays?\\b/',
+                    'grouping="%s"' % name.strip(), 'title=/\\b%s\\b/' %
+                    name.strip()])
         if self.location:
             city, state_country = self.location.split(',')
             city = city.strip().lower()
@@ -682,27 +682,66 @@ class AutoQueueBase(object):
         if self.extra_context:
             filters.append(self.extra_context)
         last_song = self.last_song
-        for tag in get_stripped_tags(last_song):
+        for tag in [t for t in get_stripped_tags(last_song) if not t ==
+                    'geotagged']:
             filters.append('grouping=/^(.*:)?%s$/' % tag)
         context_restrictions = '&(|(%s),&(%s))' % (
             ','.join(filters), ','.join(not_filters))
         return context_restrictions
 
+    @staticmethod
+    def string_to_datetime(time_string):
+        time_string, ampm = time_string.split()
+        hour, minute = time_string.split(':')
+        hour = int(hour)
+        minute = int(minute)
+        if ampm == 'am':
+            if hour == 12:
+                delta = -12
+            else:
+                delta = 0
+        else:
+            if hour == 12:
+                delta = 0
+            else:
+                delta = 12
+        return datetime.combine(date.today(), time(hour + delta, minute))
+
     def get_weather_tags(self):
-        if self.cached_weather_tags and (datetime.now() <
-                                         self.cached_weather_tags_at +
+        now = datetime.now()
+        if self.cached_weather_tags and (now < self.cached_weather_tags_at +
                                          FIVE_MINUTES):
             return self.cached_weather_tags
-        try:
-            weather = pywapi.get_weather_from_google(
-                'weather=%s' % self.location)
-        except Exception, e:
-            self.log(e)
+        if self.zipcode:
+            try:
+                weather = pywapi.get_weather_from_yahoo(self.zipcode)
+            except Exception, e:
+                self.log(repr(e))
+                return []
+        else:
             return []
-        condition = weather.get(
-            'current_conditions', {}).get('condition', '').lower()
+        conditions = []
+        eoq = self.eoq
+        sunset = weather.get('astronomy', {}).get('sunset', '')
+        sunrise = weather.get('astronomy', {}).get('sunrise', '')
+        if sunrise and sunset:
+            sunrise = self.string_to_datetime(sunrise)
+            sunset = self.string_to_datetime(sunset)
+            if abs(sunrise - eoq) < THIRTY_MINUTES:
+                conditions.extend([
+                    'sunrises?', 'dawns?', 'aurora', 'break of day', 'dawning',
+                    'daybreak', 'sunup'])
+            elif abs(sunset - eoq) < THIRTY_MINUTES:
+                conditions.extend([
+                    'sunsets?', 'dusks?', 'gloaming', 'nightfalls?',
+                    'sundowns?', 'twilight', 'eventides?', 'close of day'])
+            if eoq > sunrise and eoq < sunset:
+                conditions.extend(['daylight', 'sunlight', 'light'])
+            else:
+                conditions.extend(['dark', 'darkness', 'night'])
+        condition = weather.get('condition', {}).get('text', '').lower()
         if condition:
-            conditions = [condition]
+            conditions.append(condition)
             unmodified = condition.split()[-1]
             if unmodified not in conditions:
                 conditions.append(unmodified)
@@ -711,9 +750,7 @@ class AutoQueueBase(object):
                     conditions.append(unmodified[:-2] + 's?')
                 else:
                     conditions.append(unmodified[:-1] + 's?')
-        else:
-            conditions = []
-        temperature = weather.get('current_conditions', {}).get('temp_c', '')
+        temperature = weather.get('condition', {}).get('temp', '')
         temperature_tags = []
         if temperature:
             degrees_c = int(temperature)
@@ -723,47 +760,46 @@ class AutoQueueBase(object):
                 temperature_tags.extend(['cold'])
             if degrees_c >= 30:
                 temperature_tags.extend(['hot', 'heat'])
-        wind = weather.get('current_conditions', {}).get('wind_condition', '')
-        if wind:
-            direction = wind.split()[1]
-            if direction[-1] == 'N':
-                wind_direction = 'northerly'
-            elif direction[-1] == 'E':
-                wind_direction = 'easterly'
-            elif direction[-1] == 'S':
-                wind_direction = 'southerly'
-            else:
-                wind_direction = 'westerly'
-            prefix = ''
-            for i in range(len(direction) - 1):
-                if direction[i] == 'N':
-                    prefix += 'north\W*'
-                elif direction[i] == 'E':
-                    prefix += 'east\W*'
-                elif direction[i] == 'S':
-                    prefix += 'south\W*'
-                elif direction[i] == 'W':
-                    prefix += 'west\W*'
-            wind_direction = prefix + wind_direction + ' winds?'
-            speed = int(wind.split()[-2])
-            if speed < 1:
-                wind_direction = ''
-                wind_conditions = ['calms?']
-            elif speed <= 30:
-                wind_conditions = ['breezes?', 'breezy']
-            elif speed <= 38:
-                wind_conditions = ['winds?', 'windy']
-            elif speed <= 54:
-                wind_conditions = ['winds?', 'windy', 'gales?']
-            elif speed <= 72:
-                wind_conditions = [
-                    'winds?', 'windy', 'storms?', 'stormy']
-            else:
-                wind_conditions = [
-                    'winds?', 'windy', 'storms?', 'hurricanes?']
-        else:
-            wind_conditions = []
+        direction = float(weather.get('wind', {}).get('direction', '0'))
+        if (direction >= 0 and direction <= 22.5) or (direction >= 337.5 and
+                                                      direction <= 360):
+            wind_direction = 'north(erly)?'
+        elif (direction >= 22.5 and direction <= 67.5):
+            wind_direction = 'northeast(erly)?'
+        elif (direction >= 67.5 and direction <= 112.5):
+            wind_direction = 'east(erly)?'
+        elif (direction >= 112.5 and direction <= 157.5):
+            wind_direction = 'southeast(erly)?'
+        elif (direction >= 157.5 and direction <= 202.5):
+            wind_direction = 'south(erly)?'
+        elif (direction >= 202.5 and direction <= 247.5):
+            wind_direction = 'southwest(erly)?'
+        elif (direction >= 247.5 and direction <= 292.5):
+            wind_direction = 'west(erly)?'
+        elif (direction >= 292.5 and direction <= 337.5):
+            wind_direction = 'northwest(erly)?'
+        speed = float(weather.get('wind', {}).get('speed', '0'))
+        if speed < 1:
             wind_direction = ''
+            wind_conditions = ['calms?']
+        elif speed <= 30:
+            wind_conditions = ['breezes?', 'breezy']
+        elif speed <= 38:
+            wind_conditions = ['winds?', 'windy']
+        elif speed <= 54:
+            wind_conditions = ['winds?', 'windy', 'gales?']
+        elif speed <= 72:
+            wind_conditions = [
+                'winds?', 'windy', 'storms?', 'stormy']
+        else:
+            wind_conditions = [
+                'winds?', 'windy', 'storms?', 'hurricanes?']
+        humidity = float(weather.get('atmosphere', {}).get('humidity', '0'))
+        if humidity > 65:
+            if 'hot' in temperature_tags:
+                conditions.extend(['muggy', 'oppressive'])
+            conditions.append('humid(ity)?')
+
         self.cached_weather_tags = (
             conditions + wind_conditions + temperature_tags + [wind_direction])
         self.cached_weather_tags_at = datetime.now()
@@ -1127,8 +1163,6 @@ class AutoQueueBase(object):
                             for _, _, song in songs:
                                 self.player_enqueue(song)
                             return
-                        else:
-                            print search
             self.player_enqueue(self.found)
 
     def get_blocked_artists(self):

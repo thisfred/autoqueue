@@ -63,6 +63,9 @@ STR_SETTINGS = {
     'location': {
         'value': '',
         'label': 'location ([City], [State] or [City], [Country])'},
+    'zipcode': {
+        'value': '',
+        'label': 'zipcode'},
     'geohash': {
         'value': '',
         'label': 'geohash (see geohash.org)'},
@@ -320,7 +323,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             search = '&(%s, albumartist="%s")' % (search, escape(album_artist))
         if album_id:
             search = (
-                '&(%s, |(musicbrainz_albumid="%s", musicbrainz_albumid="")' %
+                '&(%s, |(musicbrainz_albumid="%s", musicbrainz_albumid=""))' %
                 (search, album_id))
         if restrictions:
             search = "&(%s, %s)" % (search, restrictions)
