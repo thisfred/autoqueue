@@ -1,10 +1,11 @@
 """AutoQueue: an automatic queueing plugin library.
 version 0.3
 
-Copyright 2007-2011 Eric Casteleijn <thisfred@gmail.com>,
+Copyright 2007-2012 Eric Casteleijn <thisfred@gmail.com>,
                     Daniel Nouri <daniel.nouri@gmail.com>
                     Jasper OpdeCoul <jasper.opdecoul@gmail.com>
                     Graham White
+                    Naglis Jonaitis <njonaitis@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -655,13 +656,14 @@ class AutoQueueBase(object):
                 'grouping=/solstices?/', 'title=/\\bsolstices?\\b/'])
         elif month == 9 and day == 11:
             filters.extend(['grouping="09-11"', 'title="9/11"'])
-        for name_date in self.birthdays.split(','):
-            name, bdate = name_date.strip().split(':')
-            if bdate.strip() == '%02d/%02d' % (month, day):
-                filters.extend([
-                    'grouping="birthdays"', 'title=/\\bbirthdays?\\b/',
-                    'grouping="%s"' % name.strip(), 'title=/\\b%s\\b/' %
-                    name.strip()])
+        if ':' in self.birthdays:
+            for name_date in self.birthdays.split(','):
+                name, bdate = name_date.strip().split(':')
+                if bdate.strip() == '%02d/%02d' % (month, day):
+                    filters.extend([
+                        'grouping="birthdays"', 'title=/\\bbirthdays?\\b/',
+                        'grouping="%s"' % name.strip(), 'title=/\\b%s\\b/' %
+                        name.strip()])
         if self.location:
             city, state_country = self.location.split(',')
             city = city.strip().lower()

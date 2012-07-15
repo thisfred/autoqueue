@@ -1,6 +1,6 @@
 """AutoQueue: an automatic queueing plugin for Quod Libet.
 version 0.3
-Copyright 2007-2011 Eric Casteleijn <thisfred@gmail.com>
+Copyright 2007-2012 Eric Casteleijn <thisfred@gmail.com>
                     Naglis Jonaitis <njonaitis@gmail.com>
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
@@ -192,7 +192,7 @@ class Song(SongBase):
 class AutoQueue(EventPlugin, AutoQueueBase):
     """The actual plugin class"""
     PLUGIN_ID = "AutoQueue"
-    PLUGIN_NAME = _("Auto Queue")
+    PLUGIN_NAME = _("Auto Queue")  # noqa
     PLUGIN_VERSION = "0.2"
     PLUGIN_DESC = ("Queue similar songs.")
 
@@ -420,10 +420,13 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     def player_search(self, search):
         """Perform a player search."""
         try:
+            if search is None:
+                search = ""
             myfilter = Query(search).search
             songs = filter(myfilter, library.itervalues())
-        except (Query.error, RuntimeError):
+        except (Query.error, RuntimeError, AttributeError):
             self.log("error in: %s" % search)
+            print "err"
             return []
         return [Song(song) for song in songs]
 
