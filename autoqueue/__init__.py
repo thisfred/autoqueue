@@ -740,7 +740,7 @@ class AutoQueueBase(object):
             if eoq > sunrise and eoq < sunset:
                 conditions.extend(['daylight', 'light'])
             else:
-                conditions.extend(['dark', 'darkness', 'night'])
+                conditions.extend(['dark', 'darkness', 'night', 'nocturn'])
         condition = weather.get('condition', {}).get('text', '').lower()
         if condition:
             conditions.append(condition)
