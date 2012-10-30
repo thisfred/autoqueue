@@ -1,7 +1,7 @@
 """Autoqueue similarity service.
 
-Copyright 2011 Eric Casteleijn <thisfred@gmail.com>,
-               Graham White
+Copyright 2011-2012 Eric Casteleijn <thisfred@gmail.com>,
+                    Graham White
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -63,9 +63,6 @@ DBUS_PATH = '/org/autoqueue/Similarity'
 # get and use your own (free) last.fm api key from here:
 # http://www.last.fm/api/account
 API_KEY = "09d0975a99a4cab235b731d31abf0057"
-
-# TODO make configurable
-NEIGHBOURS = 20
 
 
 def cluster_match(cluster1, cluster2):
@@ -334,14 +331,14 @@ class Similarity(object):
                 ('DELETE FROM tracks WHERE tracks.artist = ?;', (artist_id,)),
                 priority=10)
 
-    def get_track_from_filename(self, filename, priority):
+    def get_scms_from_filename(self, filename, priority=10):
         """Get track from database."""
         sql = (
-            "SELECT trackid, scms FROM mirage WHERE filename = ?;",
+            "SELECT scms FROM mirage WHERE filename = ?;",
             (filename,))
         command = self.get_sql_command(sql, priority=priority)
         for row in command.result_queue.get():
-            return (row[0], instance_from_picklestring(row[1]))
+            return instance_from_picklestring(row[0])
         return None
 
     def get_track_id(self, filename, priority):
@@ -368,59 +365,41 @@ class Similarity(object):
         """Get tracks from database."""
         if not exclude_filenames:
             exclude_filenames = []
-        sql = ("SELECT scms, trackid, filename FROM mirage;",)
+        sql = ("SELECT scms, filename FROM mirage;",)
         command = self.get_sql_command(sql, priority=priority)
         return [
-            row[:-1] for row in command.result_queue.get()
-            if row[-1] not in exclude_filenames]
+            row for row in command.result_queue.get() if row[-1] not in
+            exclude_filenames]
 
-    def add_neighbours(self, trackid, scms, exclude_filenames=None,
-                       neighbours=20, priority=0):
-        """Add best similarity scores to db."""
-        if not exclude_filenames:
-            exclude_filenames = []
-        to_add = neighbours * 2
-        self.execute_sql(
-            ("DELETE FROM distance WHERE track_1 = ?;", (trackid,)),
-            priority=priority - 1)
+    def get_ordered_mirage_tracks(self, filename, excluded_filenames):
+        """Get neighbours for track."""
+        if not excluded_filenames:
+            excluded_filenames = []
         conf = ScmsConfiguration(20)
         best = []
-        for buf, otherid in self.get_tracks(
-                exclude_filenames=exclude_filenames, priority=priority):
-            if trackid == otherid:
+        to_add = 40
+        scms = self.get_scms_from_filename(filename)
+        if scms is None:
+            try:
+                scms = self.mir.analyze(filename)
+            except:
+                return []
+            self.add_track(filename, scms, priority=1)
+        for buf, other_filename in self.get_tracks(excluded_filenames):
+            if filename == other_filename:
                 continue
             other = instance_from_picklestring(buf)
             dist = int(distance(scms, other, conf) * 1000)
             if dist < 0:
                 continue
-            if len(best) > to_add - 1:
+            if len(best) >= to_add:
                 if dist > best[-1][0]:
                     continue
-            best.append((dist, trackid, otherid))
+            best.append((dist, other_filename))
             best.sort()
             while len(best) > to_add:
                 best.pop()
-        added = 0
-        if best:
-            while best:
-                added += 1
-                best_tup = best.pop()
-                self.execute_sql((
-                    "INSERT INTO distance (distance, track_1, track_2) "
-                    "VALUES (?, ?, ?);", best_tup), priority=priority)
-        print "added %d connections." % added
-
-    def get_neighbours(self, trackid):
-        """Get neighbours for track."""
-        sql = (
-            "SELECT distance, filename FROM distance INNER JOIN mirage ON "
-            "distance.track_2 = mirage.trackid WHERE track_1 = ? UNION "
-            "SELECT distance, filename FROM distance INNER JOIN mirage ON "
-            "distance.track_1 = mirage.trackid WHERE track_2 = ? ORDER BY "
-            "distance ASC;",
-            (trackid, trackid))
-        command = self.get_sql_command(sql, priority=3)
-        return command.result_queue.get()
+        return best
 
     def get_artist(self, artist_name):
         """Get artist information from the database."""
@@ -651,17 +630,13 @@ class Similarity(object):
             except:
                 return
 
-    def analyze_track(self, filename, add_neighbours, exclude_filenames,
-                      priority):
+    def analyze_track(self, filename, priority):
         """Perform mirage analysis of a track."""
         if not filename:
             return
-        trackid_scms = self.get_track_from_filename(
-            filename, priority=priority)
-        if trackid_scms:
-            if not add_neighbours:
-                return
-            trackid, scms = trackid_scms
+        scms = self.get_scms_from_filename(filename, priority=priority)
+        if scms:
+            return
         else:
             self.log("no mirage data found for %s, analyzing track" % filename)
             try:
@@ -671,15 +646,6 @@ class Similarity(object):
                 self.log(repr(e))
                 return
             self.add_track(filename, scms, priority=priority - 1)
-            if not add_neighbours:
-                return
-            trackid = self.get_track_id(filename, priority=priority)
-        if self.has_scores(trackid, no=NEIGHBOURS,
-                                      priority=priority + 1):
-            return
-        self.add_neighbours(
-            trackid, scms, exclude_filenames=exclude_filenames,
-            neighbours=NEIGHBOURS, priority=priority)
 
     def get_similar_tracks_from_lastfm(self, artist_name, title, track_id):
         """Get similar tracks."""
@@ -729,11 +695,6 @@ class Similarity(object):
             return []
         self.update_similar_artists(artists_to_update)
         return results
-
-    def get_ordered_mirage_tracks(self, filename):
-        """Get similar tracks by mirage acoustic analysis."""
-        trackid = self.get_track_id(filename, priority=3)
-        return self.get_neighbours(trackid)
 
     def get_ordered_similar_tracks(self, artist_name, title):
         """Get similar tracks from last.fm/the database.
@@ -788,15 +749,13 @@ class Similarity(object):
         songs = []
         Song = namedtuple('Song', 'filename scms')
         for filename in filenames:
-            trackid_scms = self.get_track_from_filename(filename, priority=10)
-            if not trackid_scms:
+            scms = self.get_scms_from_filename(filename, priority=10)
+            if not scms:
                 try:
                     scms = self.mir.analyze(filename)
                 except:
                     continue
                 self.add_track(filename, scms, priority=10)
-            else:
-                _, scms = trackid_scms
             songs.append(Song(filename, scms))
         self.log("clustering")
         conf = ScmsConfiguration(20)
@@ -834,18 +793,16 @@ class SimilarityService(dbus.service.Object):
         """Remove tracks from database."""
         self.similarity.remove_artist(unicode(artist))
 
-    @method(dbus_interface=IFACE, in_signature='sbasi')
-    def analyze_track(self, filename, add_neighbours, exclude_filenames,
-                      priority):
+    @method(dbus_interface=IFACE, in_signature='si')
+    def analyze_track(self, filename, priority):
         """Perform mirage analysis of a track."""
-        self.similarity.analyze_track(
-            unicode(filename), add_neighbours,
-            [unicode(e) for e in exclude_filenames], priority)
+        self.similarity.analyze_track(unicode(filename), priority)
 
-    @method(dbus_interface=IFACE, in_signature='s', out_signature='a(is)')
-    def get_ordered_mirage_tracks(self, filename):
+    @method(dbus_interface=IFACE, in_signature='sas', out_signature='a(is)')
+    def get_ordered_mirage_tracks(self, filename, exclude_filenames):
         """Get similar tracks by mirage acoustic analysis."""
-        return self.similarity.get_ordered_mirage_tracks(unicode(filename))
+        return self.similarity.get_ordered_mirage_tracks(
+            unicode(filename), [unicode(e) for e in exclude_filenames])
 
     @method(dbus_interface=IFACE, in_signature='ss', out_signature='a(iss)')
     def get_ordered_similar_tracks(self, artist_name, title):

@@ -1,7 +1,7 @@
 """Mirage integration for autoqueue.
 version 0.3
 
-Copyright 2007-2010 Eric Casteleijn <thisfred@gmail.com>,
+Copyright 2007-2012 Eric Casteleijn <thisfred@gmail.com>,
                     Paolo Tranquilli <redsun82@gmail.com>
 
 
@@ -36,12 +36,11 @@ class MirageAudio(Structure):
     """Mirage audio."""
     pass
 
-# pylint: disable=C0103
 
 try:
     libmirageaudio = cdll.LoadLibrary(
         "/usr/lib/banshee/Extensions/libmirageaudio.so")
-except:  # pylint: disable=W0702
+except:
     libmirageaudio = cdll.LoadLibrary(
         "/usr/lib/banshee-1/Extensions/libmirageaudio.so")
 
@@ -351,9 +350,7 @@ class Mfcc(object):
 
         mel = Matrix(self.filterweights.rows, m.columns)
         try:
-            # pylint: disable=E0602
             mel.d = mel.d + dot(self.filterweights.d, m.d)
-            # pylint: enable=E0602
         except ValueError:
             raise MfccFailedException
         mel.d = vf(mel.d)
@@ -384,8 +381,8 @@ class ScmsConfiguration(object):
     def __init__(self, dimension):
         self.dim = dimension
         self.covlen = (self.dim * self.dim + self.dim) / 2
-        self.mdiff = zeros([self.dim])  # pylint: disable=E0602
-        self.aicov = zeros([self.covlen])  # pylint: disable=E0602
+        self.mdiff = zeros([self.dim])
+        self.aicov = zeros([self.covlen])
 
     def get_dimension(self):
         """Return dimension."""
