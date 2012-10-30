@@ -552,34 +552,35 @@ class AutoQueueBase(object):
             search, not_search = self.exclusive_search(season, SEASONS)
             filters.extend(search)
             not_filters.extend(not_search)
-        if hour <= 6 or hour >= 18:
+        weather_tags = []
+        if self.location:
+            city, state_country = self.location.split(',')
+            city = city.strip().lower()
+            state_country = state_country.strip().lower()
+            filters.extend([
+                'grouping=/^(.*:)?%s$/' % city, 'title=/\\b%s\\b/' % city,
+                'grouping=/^(.*:)?%s$/' % state_country, 'title=/\\b%s\\b/' %
+                state_country])
+            if WEATHER:
+                weather_tags = self.get_weather_tags()
+                for condition in weather_tags:
+                    if condition:
+                        filters.extend([
+                            'grouping=/\\b%s\\b/' % condition,
+                            'title=/\\b%s\\b/' % condition])
+        if 'night' in weather_tags or hour <= 6 or hour >= 18:
             search, not_search = self.exclusive_search(
                 'night', TIMES, alt='evening')
             filters.extend(search)
             not_filters.extend(not_search)
-            if hour >= 18 and hour < 22:
-                not_filters.extend(['!title=/\\blate\\b/', '!grouping="late"'])
-            else:
-                not_filters.extend(
-                    ['!title=/\\bearly\\b/', '!grouping="early"'])
         if hour >= 6 and hour < 12:
             search, not_search = self.exclusive_search('morning', TIMES)
             filters.extend(search)
             not_filters.extend(not_search)
-            if hour < 10:
-                not_filters.extend(['!title=/\\blate\\b/', '!grouping="late"'])
-            else:
-                not_filters.extend([
-                    '!title=/\\bearly\\b/', '!grouping="early"'])
         if hour >= 12 and hour < 18:
             search, not_search = self.exclusive_search('afternoon', TIMES)
             filters.extend(search)
             not_filters.extend(not_search)
-            if hour < 16:
-                not_filters.extend(['!title=/\\blate\\b/', '!grouping="late"'])
-            else:
-                not_filters.extend([
-                    '!title=/\\bearly\\b/', '!grouping="early"'])
         if month == 12 and day >= 20 and day <= 27:
             filters.extend([
                'grouping="christmas"', 'title=/\\bchristmas\\b/'])
@@ -664,21 +665,6 @@ class AutoQueueBase(object):
                         'grouping="birthdays"', 'title=/\\bbirthdays?\\b/',
                         'grouping="%s"' % name.strip(), 'title=/\\b%s\\b/' %
                         name.strip()])
-        if self.location:
-            city, state_country = self.location.split(',')
-            city = city.strip().lower()
-            state_country = state_country.strip().lower()
-            filters.extend([
-                'grouping=/^(.*:)?%s$/' % city, 'title=/\\b%s\\b/' % city,
-                'grouping=/^(.*:)?%s$/' % state_country, 'title=/\\b%s\\b/' %
-                state_country])
-            if WEATHER:
-                weather_tags = self.get_weather_tags()
-                for condition in weather_tags:
-                    if condition:
-                        filters.extend([
-                            'grouping=/\\b%s\\b/' % condition,
-                            'title=/\\b%s\\b/' % condition])
         if self.geohash:
             filters.append('grouping=/^geohash:%s/' % (self.geohash[:2],))
         if self.extra_context:
@@ -738,20 +724,26 @@ class AutoQueueBase(object):
                     'sunsets?', 'dusks?', 'gloaming', 'nightfalls?',
                     'sundowns?', 'twilight', 'eventides?', 'close of day'])
             if eoq > sunrise and eoq < sunset:
-                conditions.extend(['daylight', 'light'])
+                conditions.extend(['daylight', 'day'])
             else:
-                conditions.extend(['dark', 'darkness', 'night', 'nocturn'])
-        condition = weather.get('condition', {}).get('text', '').lower()
-        if condition:
-            conditions.append(condition)
-            unmodified = condition.split()[-1]
-            if unmodified not in conditions:
-                conditions.append(unmodified)
-            if unmodified[-1] == 'y':
-                if unmodified[-2] == unmodified[-3]:
-                    conditions.append(unmodified[:-2] + 's?')
-                else:
-                    conditions.append(unmodified[:-1] + 's?')
+                conditions.extend([
+                    'dark', 'darkness', 'night', 'nocturn[a-z]*'])
+        cs = weather.get(
+            'condition', {}).get('text', '').lower().strip().split('/')
+        for condition in cs:
+            condition = condition.strip()
+            if condition:
+                conditions.append(condition)
+                unmodified = condition.split()[-1]
+                if unmodified not in conditions:
+                    conditions.append(unmodified)
+                if unmodified[-1] == 'y':
+                    if unmodified[-2] == unmodified[-3]:
+                        conditions.append(unmodified[:-2] + 's?')
+                    else:
+                        conditions.append(unmodified[:-1] + 's?')
+                if eoq > sunrise and eoq < sunset and condition == 'fair':
+                    conditions.extend(['sun', 'sunny', 'sunlight'])
         temperature = weather.get('condition', {}).get('temp', '')
         temperature_tags = []
         if temperature:
@@ -762,27 +754,8 @@ class AutoQueueBase(object):
                 temperature_tags.extend(['cold'])
             if degrees_c >= 30:
                 temperature_tags.extend(['hot', 'heat'])
-        direction = float(weather.get('wind', {}).get('direction', '0'))
-        if (direction >= 0 and direction <= 22.5) or (direction >= 337.5 and
-                                                      direction <= 360):
-            wind_direction = 'north(erly)?'
-        elif (direction >= 22.5 and direction <= 67.5):
-            wind_direction = 'northeast(erly)?'
-        elif (direction >= 67.5 and direction <= 112.5):
-            wind_direction = 'east(erly)?'
-        elif (direction >= 112.5 and direction <= 157.5):
-            wind_direction = 'southeast(erly)?'
-        elif (direction >= 157.5 and direction <= 202.5):
-            wind_direction = 'south(erly)?'
-        elif (direction >= 202.5 and direction <= 247.5):
-            wind_direction = 'southwest(erly)?'
-        elif (direction >= 247.5 and direction <= 292.5):
-            wind_direction = 'west(erly)?'
-        elif (direction >= 292.5 and direction <= 337.5):
-            wind_direction = 'northwest(erly)?'
-        speed = float(weather.get('wind', {}).get('speed', '0'))
+        speed = float(weather.get('wind', {}).get('speed', '0') or '0')
         if speed < 1:
-            wind_direction = ''
             wind_conditions = ['calms?']
         elif speed <= 30:
             wind_conditions = ['breezes?', 'breezy']
@@ -796,16 +769,15 @@ class AutoQueueBase(object):
         else:
             wind_conditions = [
                 'winds?', 'windy', 'storms?', 'hurricanes?']
-        humidity = float(weather.get('atmosphere', {}).get('humidity', '0'))
+        humidity = float(
+            weather.get('atmosphere', {}).get('humidity', '0') or '0')
         if humidity > 65:
             if 'hot' in temperature_tags:
                 conditions.extend(['muggy', 'oppressive'])
             conditions.append('humid(ity)?')
-
         self.cached_weather_tags = (
-            conditions + wind_conditions + temperature_tags + [wind_direction])
+            conditions + wind_conditions + temperature_tags)
         self.cached_weather_tags_at = datetime.now()
-        print self.cached_weather_tags
         return self.cached_weather_tags
 
     def construct_search(self, artist=None, title=None, tags=None,

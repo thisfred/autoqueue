@@ -9,7 +9,7 @@ published by the Free Software Foundation"""
 import gtk
 from datetime import datetime
 from quodlibet.plugins.events import EventPlugin
-from quodlibet.widgets import main
+from quodlibet import app
 from quodlibet.parse import Query
 from quodlibet.library import library
 from quodlibet import config
@@ -97,10 +97,9 @@ class Song(SongBase):
     def get_artists(self):
         """return lowercase UNICODE name of artists and performers."""
         artists = [artist.lower() for artist in self.song.list("artist")]
-        performers = [remove_role(artist.lower()) for artist in self.song.list(
-            "performer")]
+        performers = [artist.lower() for artist in self.song.list("performer")]
         if hasattr(self.song, '_song'):
-            for tag in self.song._song:  # pylint: disable=W0212
+            for tag in self.song._song:
                 if tag.startswith('performer:'):
                     performers.extend(
                         [artist.lower() for artist in self.song.list(tag)])
@@ -109,7 +108,7 @@ class Song(SongBase):
                 if tag.startswith('performer:'):
                     performers.extend(
                         [artist.lower() for artist in self.song.list(tag)])
-        artists.extend(performers)
+        artists.extend([remove_role(p) for p in performers])
         return list(set(artists))
 
     def get_title(self):
@@ -411,11 +410,14 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def player_get_queue_length(self):
         """Get the current length of the queue."""
-        return sum([row.get("~#length", 0) for row in main.playlist.q.get()])
+        if app.window is None:
+            return 0
+        return sum(
+            [row.get("~#length", 0) for row in app.window.playlist.q.get()])
 
     def player_enqueue(self, song):
         """Put the song at the end of the queue."""
-        main.playlist.enqueue([song.song])
+        app.window.playlist.enqueue([song.song])
 
     def player_search(self, search):
         """Perform a player search."""
@@ -432,4 +434,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def player_get_songs_in_queue(self):
         """Return (wrapped) song objects for the songs in the queue."""
-        return [Song(song) for song in main.playlist.q.get()]
+        if app.window is None:
+            return []
+        return [Song(song) for song in app.window.playlist.q.get()]
