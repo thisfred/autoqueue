@@ -349,18 +349,6 @@ class Similarity(object):
             return row[0]
         return None
 
-    def has_scores(self, trackid, no=20, priority=0):
-        """Check if the track has sufficient neighbours."""
-        sql = (
-            'SELECT COUNT(*) FROM distance WHERE track_1 = ?;',
-            (trackid,))
-        command = self.get_sql_command(sql, priority=priority)
-        l1 = command.result_queue.get()[0][0]
-        if l1 < no:
-            print "%d connections found, minimum %d." % (l1, no)
-            return False
-        return True
-
     def get_tracks(self, exclude_filenames=None, priority=0):
         """Get tracks from database."""
         if not exclude_filenames:
@@ -772,7 +760,7 @@ class SimilarityService(dbus.service.Object):
     """Service that can be queried for similar songs."""
 
     def __init__(self, bus_name, object_path):
-        import gst
+        import gst  # noqa
         self.similarity = Similarity()
         super(SimilarityService, self).__init__(
             bus_name=bus_name, object_path=object_path)
