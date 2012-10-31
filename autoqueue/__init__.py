@@ -588,7 +588,8 @@ class AutoQueueBase(object):
                 'grouping="halloween"', 'title=/\\bhalloween\\b/',
                 'grouping="hallowe\'en"', 'title=/\\bhallowe\\\'en\\b/',
                 'grouping=all hallow\'s', 'title=/\\ball hallow\\\'s\\b/',
-                'grouping="monsters"', 'grouping="horror"'])
+                'title=/\\bhaunt/', 'title=ghost', 'grouping="monsters"',
+                'grouping="horror"'])
         for easter in EASTERS:
             delta = eoq - easter
             days_after_easter = delta.days
