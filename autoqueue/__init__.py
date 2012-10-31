@@ -885,16 +885,16 @@ class AutoQueueBase(object):
     def analyzed(self):
         """Handler for analyzed track."""
         song = self.last_song
-        filename = song.get_filename()
         excluded_filenames = []
-        for filename in self.get_artists_track_filenames(song.get_artists()):
-            if isinstance(filename, unicode):
-                excluded_filenames.append(filename)
+        for other in self.get_artists_track_filenames(song.get_artists()):
+            if isinstance(other, unicode):
+                excluded_filenames.append(other)
             else:
                 try:
-                    excluded_filenames.append(unicode(filename, 'utf-8'))
+                    excluded_filenames.append(unicode(other, 'utf-8'))
                 except UnicodeDecodeError:
-                    self.log('Could not decode filename: %r' % filename)
+                    self.log('Could not decode filename: %r' % other)
+        filename = song.get_filename()
         try:
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')

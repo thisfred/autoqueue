@@ -296,9 +296,6 @@ class Similarity(object):
         for row in command.result_queue.get():
             track_id = row[0]
             self.execute_sql((
-                'DELETE FROM distance WHERE track_1 = ? OR track_2 = ?;',
-            (track_id, track_id)), priority=10)
-            self.execute_sql((
                 "DELETE FROM mirage WHERE trackid = ?;",
                 (track_id,)), priority=10)
 
@@ -355,9 +352,9 @@ class Similarity(object):
             exclude_filenames = []
         sql = ("SELECT scms, filename FROM mirage;",)
         command = self.get_sql_command(sql, priority=priority)
-        return [
-            row for row in command.result_queue.get() if row[-1] not in
-            exclude_filenames]
+        for row in command.result_queue.get():
+            if row[-1] not in exclude_filenames:
+                yield row
 
     def get_ordered_mirage_tracks(self, filename, excluded_filenames):
         """Get neighbours for track."""
@@ -372,7 +369,7 @@ class Similarity(object):
                 scms = self.mir.analyze(filename)
             except:
                 return []
-            self.add_track(filename, scms, priority=1)
+            self.add_track(filename, scms, priority=11)
         for buf, other_filename in self.get_tracks(excluded_filenames):
             if filename == other_filename:
                 continue
@@ -567,10 +564,6 @@ class Similarity(object):
             'filename VARCHAR(300), scms BLOB, UNIQUE(filename));',),
                          priority=0)
         self.execute_sql((
-            "CREATE TABLE IF NOT EXISTS distance (track_1 INTEGER, track_2 "
-            "INTEGER, distance INTEGER, UNIQUE(track_1, track_2));",),
-                         priority=0)
-        self.execute_sql((
             "CREATE INDEX IF NOT EXISTS a2aa1x ON artist_2_artist "
             "(artist1);",), priority=0)
         self.execute_sql((
@@ -584,12 +577,6 @@ class Similarity(object):
             priority=0)
         self.execute_sql(
             ("CREATE INDEX IF NOT EXISTS mfnx ON mirage (filename);",),
-            priority=0)
-        self.execute_sql(
-            ("CREATE INDEX IF NOT EXISTS dtrack1x ON distance (track_1);",),
-            priority=0)
-        self.execute_sql(
-            ("CREATE INDEX IF NOT EXISTS dtrack2x ON distance (track_2);",),
             priority=0)
 
     def delete_orphan_artist(self, artist):
