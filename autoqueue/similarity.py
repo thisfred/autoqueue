@@ -24,6 +24,7 @@ import dbus
 import dbus.service
 import gobject
 import os
+import random
 
 from threading import Thread
 from Queue import Queue, PriorityQueue
@@ -352,9 +353,7 @@ class Similarity(object):
             exclude_filenames = []
         sql = ("SELECT scms, filename FROM mirage;",)
         command = self.get_sql_command(sql, priority=priority)
-        for row in command.result_queue.get():
-            if row[-1] not in exclude_filenames:
-                yield row
+        return command.result_queue.get()
 
     def get_ordered_mirage_tracks(self, filename, excluded_filenames):
         """Get neighbours for track."""
@@ -370,7 +369,15 @@ class Similarity(object):
             except:
                 return []
             self.add_track(filename, scms, priority=11)
-        for buf, other_filename in self.get_tracks(excluded_filenames):
+        tries = 0
+        tracks = self.get_tracks(excluded_filenames)
+        total = len(tracks)
+        tried = []
+        while tracks:
+            entry = random.randrange(0, total)
+            while entry in tried:
+                entry = random.randrange(0, total)
+            buf, other_filename = tracks[entry]
             if filename == other_filename:
                 continue
             other = instance_from_picklestring(buf)
@@ -378,6 +385,9 @@ class Similarity(object):
             if dist < 0:
                 continue
             if len(best) >= to_add:
+                tries += 1
+                if float(tries) / total > 0.1:
+                    break
                 if dist > best[-1][0]:
                     continue
             best.append((dist, other_filename))

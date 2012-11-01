@@ -832,10 +832,8 @@ class AutoQueueBase(object):
                         artist, reply_handler=NO_OP,
                         error_handler=NO_OP)
             return
-        while songs:
+        for song in songs:
             tag_set = get_stripped_tags(self.last_song)
-            song = random.choice(songs)
-            songs.remove(song)
             if not self.disallowed(song):
                 rating = song.get_rating()
                 if rating is NotImplemented:
