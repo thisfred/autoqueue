@@ -373,7 +373,7 @@ class Similarity(object):
         tracks = self.get_tracks(excluded_filenames)
         total = len(tracks)
         tried = []
-        while tracks:
+        while True:
             entry = random.randrange(0, total)
             while entry in tried:
                 entry = random.randrange(0, total)
