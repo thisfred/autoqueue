@@ -372,11 +372,13 @@ class Similarity(object):
         tries = 0
         tracks = self.get_tracks(excluded_filenames)
         total = len(tracks)
+        target = total / 10
         tried = []
         while True:
             entry = random.randrange(0, total)
             while entry in tried:
                 entry = random.randrange(0, total)
+            tried.append(entry)
             buf, other_filename = tracks[entry]
             if filename == other_filename:
                 continue
@@ -386,7 +388,7 @@ class Similarity(object):
                 continue
             if len(best) >= to_add:
                 tries += 1
-                if float(tries) / total > 0.1:
+                if tries > target:
                     break
                 if dist > best[-1][0]:
                     continue
