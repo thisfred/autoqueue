@@ -241,7 +241,6 @@ class AutoQueueBase(object):
         self.extra_context = None
         self.use_mirage = True
         self.whole_albums = True
-        self.shuffle = True
         self.contextualize = True
         self.southern_hemisphere = False
         self.use_lastfm = True
@@ -832,8 +831,10 @@ class AutoQueueBase(object):
                         artist, reply_handler=NO_OP,
                         error_handler=NO_OP)
             return
-        for song in songs:
+        while songs:
             tag_set = get_stripped_tags(self.last_song)
+            song = random.choice(songs)
+            songs.remove(song)
             if not self.disallowed(song):
                 rating = song.get_rating()
                 if rating is NotImplemented:
@@ -1030,24 +1031,18 @@ class AutoQueueBase(object):
     def process_results(self, results):
         """Process similarity results from dbus."""
         if self.contextualize:
-            if self.shuffle:
-                random.shuffle(results)
             self.log("Context search.")
             for result in self._process_results(results, context_filter=True):
                 yield
             if self.found:
                 return
             self.log("Context free search.")
-        if self.shuffle:
-            random.shuffle(results)
         for result in self._process_results(results):
             yield
 
     def _process_results(self, results, context_filter=False):
         """Process and possibly filter results."""
         for number, result in enumerate(results):
-            if self.shuffle and number >= 40:
-                break
             if not result:
                 continue
             yield

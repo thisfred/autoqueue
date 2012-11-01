@@ -40,9 +40,6 @@ BOOL_SETTINGS = {
     'use_groupings': {
         'value': True,
         'label': 'use grouping similarity'},
-    'shuffle': {
-        'value': True,
-        'label': 'shuffle similar results'},
     'contextualize': {
         'value': True,
         'label': 'queue context appropriate tracks first.'},
