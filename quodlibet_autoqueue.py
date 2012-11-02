@@ -40,9 +40,6 @@ BOOL_SETTINGS = {
     'use_groupings': {
         'value': True,
         'label': 'use grouping similarity'},
-    'shuffle': {
-        'value': True,
-        'label': 'shuffle similar results'},
     'contextualize': {
         'value': True,
         'label': 'queue context appropriate tracks first.'},
@@ -225,13 +222,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             return
         ssong = Song(song)
         self.on_song_started(ssong)
-
-    def plugin_on_removed(self, songs):
-        """Handle song(s) removed event."""
-        for song in songs:
-            self.similarity.remove_track_by_filename(
-                song('~filename'), reply_handler=NO_OP,
-                error_handler=self.error_handler)
 
     def PluginPreferences(self, parent):  # pylint: disable=C0103
         """Set and unset preferences from gui or config file."""

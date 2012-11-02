@@ -241,7 +241,6 @@ class AutoQueueBase(object):
         self.extra_context = None
         self.use_mirage = True
         self.whole_albums = True
-        self.shuffle = True
         self.contextualize = True
         self.southern_hemisphere = False
         self.use_lastfm = True
@@ -423,25 +422,15 @@ class AutoQueueBase(object):
         # played for a determined time
         for artist_name in artist_names:
             self.block_artist(artist_name)
-        excluded_filenames = []
-        for filename in self.get_artists_track_filenames(song.get_artists()):
-            if isinstance(filename, unicode):
-                excluded_filenames.append(filename)
-            else:
-                try:
-                    excluded_filenames.append(unicode(filename, 'utf-8'))
-                except UnicodeDecodeError:
-                    self.log('Could not decode filename: %r' % filename)
         filename = song.get_filename()
         try:
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
-            excluded_filenames = excluded_filenames or [filename]
             self.log('Analyzing %s' % filename)
             if self.has_mirage:
                 self.similarity.analyze_track(
-                    filename, True, excluded_filenames, 2,
-                    reply_handler=NO_OP, error_handler=NO_OP, timeout=TIMEOUT)
+                    filename, 2, reply_handler=NO_OP, error_handler=NO_OP,
+                    timeout=TIMEOUT)
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
 
@@ -593,12 +582,13 @@ class AutoQueueBase(object):
         if (month == 12 and day >= 27) or (month == 1 and day <= 7):
             filters.extend([
                 'grouping="new year"', 'title="/\\bnew years?\\b/"'])
-        if (month == 10 and day >= 27) or (month == 11 and day <= 2):
+        if (month == 10 and day >= 25) or (month == 11 and day < 2):
             filters.extend([
                 'grouping="halloween"', 'title=/\\bhalloween\\b/',
                 'grouping="hallowe\'en"', 'title=/\\bhallowe\\\'en\\b/',
                 'grouping=all hallow\'s', 'title=/\\ball hallow\\\'s\\b/',
-                'grouping="monsters"', 'grouping="horror"'])
+                'title=/\\bhaunt/', 'title=ghost', 'grouping="monsters"',
+                'grouping="horror"'])
         for easter in EASTERS:
             delta = eoq - easter
             days_after_easter = delta.days
@@ -878,25 +868,14 @@ class AutoQueueBase(object):
         self.found = None
         self.last_songs = self.get_last_songs()
         song = self.last_song = self.last_songs.pop()
-        excluded_filenames = []
-        for filename in self.get_artists_track_filenames(song.get_artists()):
-            if isinstance(filename, unicode):
-                excluded_filenames.append(filename)
-            else:
-                try:
-                    excluded_filenames.append(unicode(filename, 'utf-8'))
-                except UnicodeDecodeError:
-                    self.log('Could not decode filename: %r' % filename)
         filename = song.get_filename()
         try:
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
-            excluded_filenames = excluded_filenames or [filename]
             if self.has_mirage and self.use_mirage:
                 self.log('Analyzing: %s' % filename)
                 self.similarity.analyze_track(
-                    filename, True, excluded_filenames, 3,
-                    reply_handler=self.analyzed,
+                    filename, 3, reply_handler=self.analyzed,
                     error_handler=self.error_handler, timeout=TIMEOUT)
             else:
                 self.mirage_reply_handler([])
@@ -905,14 +884,24 @@ class AutoQueueBase(object):
 
     def analyzed(self):
         """Handler for analyzed track."""
-        filename = self.last_song.get_filename()
+        song = self.last_song
+        excluded_filenames = []
+        for other in self.get_artists_track_filenames(song.get_artists()):
+            if isinstance(other, unicode):
+                excluded_filenames.append(other)
+            else:
+                try:
+                    excluded_filenames.append(unicode(other, 'utf-8'))
+                except UnicodeDecodeError:
+                    self.log('Could not decode filename: %r' % other)
+        filename = song.get_filename()
         try:
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
             if self.has_mirage and self.use_mirage:
                 self.log('Get similar tracks for: %s' % filename)
                 self.similarity.get_ordered_mirage_tracks(
-                    filename,
+                    filename, excluded_filenames,
                     reply_handler=self.mirage_reply_handler,
                     error_handler=self.error_handler, timeout=TIMEOUT)
             else:
@@ -923,26 +912,15 @@ class AutoQueueBase(object):
     def done(self):
         """Analyze the last song and stop."""
         song = self.get_last_songs()[-1]
-        excluded_filenames = []
-        for filename in self.get_artists_track_filenames(song.get_artists()):
-            if isinstance(filename, unicode):
-                excluded_filenames.append(filename)
-            else:
-                try:
-                    excluded_filenames.append(unicode(filename, 'utf-8'))
-                except UnicodeDecodeError:
-                    self.log('Could not decode filename: %r' % filename)
         filename = song.get_filename()
         try:
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
-            excluded_filenames = excluded_filenames or [filename]
             self.log('Analyzing: %s' % filename)
             if self.has_mirage and self.use_mirage:
                 self.similarity.analyze_track(
-                    filename, True, excluded_filenames, 3,
-                    reply_handler=NO_OP,
-                    error_handler=NO_OP, timeout=TIMEOUT)
+                    filename, 3, reply_handler=NO_OP, error_handler=NO_OP,
+                    timeout=TIMEOUT)
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
         self.running = False
@@ -1036,25 +1014,14 @@ class AutoQueueBase(object):
             self.running = False
             return
         song = self.last_song = self.last_songs.pop()
-        excluded_filenames = []
-        for filename in self.get_artists_track_filenames(song.get_artists()):
-            if isinstance(filename, unicode):
-                excluded_filenames.append(filename)
-            else:
-                try:
-                    excluded_filenames.append(unicode(filename, 'utf-8'))
-                except UnicodeDecodeError:
-                    self.log('Could not decode filename: %r' % filename)
         filename = song.get_filename()
         try:
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
-            excluded_filenames = excluded_filenames or [filename]
             self.log('Analyzing: %s' % filename)
             if self.has_mirage and self.use_mirage:
                 self.similarity.analyze_track(
-                    filename, True, excluded_filenames, 3,
-                    reply_handler=self.analyzed,
+                    filename, 3, reply_handler=self.analyzed,
                     error_handler=self.error_handler, timeout=TIMEOUT)
             else:
                 self.mirage_reply_handler([])
@@ -1064,24 +1031,18 @@ class AutoQueueBase(object):
     def process_results(self, results):
         """Process similarity results from dbus."""
         if self.contextualize:
-            if self.shuffle:
-                random.shuffle(results)
             self.log("Context search.")
             for result in self._process_results(results, context_filter=True):
                 yield
             if self.found:
                 return
             self.log("Context free search.")
-        if self.shuffle:
-            random.shuffle(results)
         for result in self._process_results(results):
             yield
 
     def _process_results(self, results, context_filter=False):
         """Process and possibly filter results."""
         for number, result in enumerate(results):
-            if self.shuffle and number >= 40:
-                break
             if not result:
                 continue
             yield
