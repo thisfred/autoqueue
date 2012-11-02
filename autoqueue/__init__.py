@@ -582,7 +582,7 @@ class AutoQueueBase(object):
         if (month == 12 and day >= 27) or (month == 1 and day <= 7):
             filters.extend([
                 'grouping="new year"', 'title="/\\bnew years?\\b/"'])
-        if (month == 10 and day >= 27) or (month == 11 and day <= 2):
+        if (month == 10 and day >= 25) or (month == 11 and day < 2):
             filters.extend([
                 'grouping="halloween"', 'title=/\\bhalloween\\b/',
                 'grouping="hallowe\'en"', 'title=/\\bhallowe\\\'en\\b/',
