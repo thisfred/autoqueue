@@ -371,14 +371,14 @@ class Similarity(object):
         tries = 0
         tracks = self.get_tracks()
         total = len(tracks)
-        tried = []
+        tried = set([])
         misses = 0
         miss_target = total / 200
         while True:
             entry = random.randrange(0, total)
             while entry in tried:
                 entry = random.randrange(0, total)
-            tried.append(entry)
+            tried.add(entry)
             buf, other_filename = tracks[entry]
             if other_filename in excluded_filenames:
                 continue
