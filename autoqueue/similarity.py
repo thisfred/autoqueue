@@ -347,10 +347,8 @@ class Similarity(object):
             return row[0]
         return None
 
-    def get_tracks(self, exclude_filenames=None, priority=0):
+    def get_tracks(self, priority=0):
         """Get tracks from database."""
-        if not exclude_filenames:
-            exclude_filenames = []
         sql = ("SELECT scms, filename FROM mirage;",)
         command = self.get_sql_command(sql, priority=priority)
         return command.result_queue.get()
@@ -370,7 +368,7 @@ class Similarity(object):
                 return []
             self.add_track(filename, scms, priority=11)
         tries = 0
-        tracks = self.get_tracks(excluded_filenames)
+        tracks = self.get_tracks()
         total = len(tracks)
         target = total / 10
         tried = []
@@ -380,6 +378,8 @@ class Similarity(object):
                 entry = random.randrange(0, total)
             tried.append(entry)
             buf, other_filename = tracks[entry]
+            if other_filename in excluded_filenames:
+                continue
             if filename == other_filename:
                 continue
             other = instance_from_picklestring(buf)
