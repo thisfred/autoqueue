@@ -28,7 +28,7 @@ import random
 
 from threading import Thread
 from Queue import Queue, PriorityQueue
-from time import strptime
+from time import strptime, time
 from datetime import datetime, timedelta
 from collections import namedtuple
 from dbus.mainloop.glib import DBusGMainLoop
@@ -355,6 +355,7 @@ class Similarity(object):
 
     def get_ordered_mirage_tracks(self, filename, excluded_filenames):
         """Get neighbours for track."""
+        start_time = time()
         if not excluded_filenames:
             excluded_filenames = []
         conf = ScmsConfiguration(20)
@@ -370,8 +371,9 @@ class Similarity(object):
         tries = 0
         tracks = self.get_tracks()
         total = len(tracks)
-        target = total / 10
         tried = []
+        misses = 0
+        miss_target = total / 200
         while True:
             entry = random.randrange(0, total)
             while entry in tried:
@@ -388,14 +390,17 @@ class Similarity(object):
                 continue
             if len(best) >= to_add:
                 tries += 1
-                if tries > target:
-                    break
                 if dist > best[-1][0]:
+                    misses += 1
+                    if misses > miss_target:
+                        break
                     continue
+                misses = 0
             best.append((dist, other_filename))
             best.sort()
             while len(best) > to_add:
                 best.pop()
+        print "%d tries in %f s" % (tries, time() - start_time)
         return best
 
     def get_artist(self, artist_name):

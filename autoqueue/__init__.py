@@ -714,7 +714,7 @@ class AutoQueueBase(object):
                     'sunsets?', 'dusks?', 'gloaming', 'nightfalls?',
                     'sundowns?', 'twilight', 'eventides?', 'close of day'])
             if eoq > sunrise and eoq < sunset:
-                conditions.extend(['daylight', 'day'])
+                conditions.extend(['daylight'])
             else:
                 conditions.extend([
                     'dark', 'darkness', 'night', 'nocturn[a-z]*'])
