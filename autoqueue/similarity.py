@@ -292,13 +292,9 @@ class Similarity(object):
 
     def remove_track_by_filename(self, filename):
         """Remove tracks from database."""
-        sql = ('SELECT trackid FROM mirage WHERE filename = ?', (filename,))
-        command = self.get_sql_command(sql, priority=10)
-        for row in command.result_queue.get():
-            track_id = row[0]
-            self.execute_sql((
-                "DELETE FROM mirage WHERE trackid = ?;",
-                (track_id,)), priority=10)
+        self.execute_sql(
+            ('DELETE FROM mirage WHERE filename = ?', (filename,)),
+            priority=10)
 
     def remove_track(self, artist, title):
         """Delete missing track."""
@@ -353,14 +349,13 @@ class Similarity(object):
         command = self.get_sql_command(sql, priority=priority)
         return command.result_queue.get()
 
-    def get_ordered_mirage_tracks(self, filename, excluded_filenames):
+    def get_ordered_mirage_tracks(self, filename, excluded_filenames, number):
         """Get neighbours for track."""
         start_time = time()
         if not excluded_filenames:
             excluded_filenames = []
         conf = ScmsConfiguration(20)
         best = []
-        to_add = 40
         scms = self.get_scms_from_filename(filename)
         if scms is None:
             try:
@@ -388,7 +383,7 @@ class Similarity(object):
             dist = int(distance(scms, other, conf) * 1000)
             if dist < 0:
                 continue
-            if len(best) >= to_add:
+            if len(best) >= number:
                 tries += 1
                 if dist > best[-1][0]:
                     misses += 1
@@ -398,7 +393,7 @@ class Similarity(object):
                 misses = 0
             best.append((dist, other_filename))
             best.sort()
-            while len(best) > to_add:
+            while len(best) > number:
                 best.pop()
         print "%d tries in %f s" % (tries, time() - start_time)
         return best
@@ -790,11 +785,11 @@ class SimilarityService(dbus.service.Object):
         """Perform mirage analysis of a track."""
         self.similarity.analyze_track(unicode(filename), priority)
 
-    @method(dbus_interface=IFACE, in_signature='sas', out_signature='a(is)')
-    def get_ordered_mirage_tracks(self, filename, exclude_filenames):
+    @method(dbus_interface=IFACE, in_signature='sasi', out_signature='a(is)')
+    def get_ordered_mirage_tracks(self, filename, exclude_filenames, number):
         """Get similar tracks by mirage acoustic analysis."""
         return self.similarity.get_ordered_mirage_tracks(
-            unicode(filename), [unicode(e) for e in exclude_filenames])
+            unicode(filename), [unicode(e) for e in exclude_filenames], number)
 
     @method(dbus_interface=IFACE, in_signature='ss', out_signature='a(iss)')
     def get_ordered_similar_tracks(self, artist_name, title):

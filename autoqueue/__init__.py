@@ -237,6 +237,7 @@ class AutoQueueBase(object):
         self.running = False
         self.verbose = False
         self.song = None
+        self.number = 40
         self.restrictions = None
         self.extra_context = None
         self.use_mirage = True
@@ -449,6 +450,17 @@ class AutoQueueBase(object):
         if self.desired_queue_length == 0 or self.queue_needs_songs():
             self.fill_queue()
         self.unblock_artists()
+
+    def on_removed(self, songs):
+        if not self.has_mirage and self.use_mirage:
+            print "hmmm"
+            return
+        for song in songs:
+            filename = song.get_filename()
+            self.log('Remove similarity for %s' % filename)
+            self.similarity.remove_track_by_filename(
+                filename, reply_handler=NO_OP,
+                error_handler=NO_OP)
 
     def queue_needs_songs(self):
         """Determine whether the queue needs more songs added."""
@@ -901,7 +913,7 @@ class AutoQueueBase(object):
             if self.has_mirage and self.use_mirage:
                 self.log('Get similar tracks for: %s' % filename)
                 self.similarity.get_ordered_mirage_tracks(
-                    filename, excluded_filenames,
+                    filename, excluded_filenames, self.number,
                     reply_handler=self.mirage_reply_handler,
                     error_handler=self.error_handler, timeout=TIMEOUT)
             else:

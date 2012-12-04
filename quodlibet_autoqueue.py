@@ -25,7 +25,10 @@ INT_SETTINGS = {
         'label': 'block artist (days)'},
     'desired_queue_length': {
         'value': 4440,
-        'label': 'queue (seconds)'}}
+        'label': 'queue (seconds)'},
+    'number': {
+        'value': 40,
+        'label': 'number of tracks to look up'}}
 
 BOOL_SETTINGS = {
     'verbose': {
@@ -222,6 +225,10 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             return
         ssong = Song(song)
         self.on_song_started(ssong)
+
+    def plugin_on_removed(self, songs):
+        """Triggered when songs are removed from the library."""
+        self.on_removed([Song(s) for s in songs])
 
     def PluginPreferences(self, parent):  # pylint: disable=C0103
         """Set and unset preferences from gui or config file."""
