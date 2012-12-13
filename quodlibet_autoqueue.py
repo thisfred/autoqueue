@@ -19,12 +19,12 @@ from quodlibet.qltk.entry import ValidatingEntry
 from autoqueue import AutoQueueBase, SongBase
 
 # for backwards compatibility with QL revisions prior to 0d807ac2a1f9
-NEW_QL = False
 try:
-    from quodlibet.widgets import main
-except ImportError:
     from quodlibet import app
     NEW_QL = True
+except ImportError:
+    from quodlibet.widgets import main
+    NEW_QL = False
 
 INT_SETTINGS = {
     'artist_block_time': {
@@ -414,9 +414,12 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def player_get_queue_length(self):
         """Get the current length of the queue."""
-        playlist = NEW_QL and app.window.playlist or main.playlist
-        if NEW_QL and app.window is None:
-            return 0
+        if NEW_QL:
+            if app.window is None:
+                return 0
+            playlist = app.window.playlist
+        else:
+            playlist = main.playlist
         return sum(
             [row.get("~#length", 0) for row in playlist.q.get()])
 
