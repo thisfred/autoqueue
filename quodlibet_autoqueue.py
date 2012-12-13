@@ -9,7 +9,6 @@ published by the Free Software Foundation"""
 import gtk
 from datetime import datetime
 from quodlibet.plugins.events import EventPlugin
-from quodlibet import app
 from quodlibet.parse import Query
 from quodlibet.library import library
 from quodlibet import config
@@ -18,6 +17,14 @@ from quodlibet.util import copool
 from quodlibet.qltk.entry import ValidatingEntry
 
 from autoqueue import AutoQueueBase, SongBase
+
+# for backwards compatibility with QL revisions prior to 0d807ac2a1f9
+NEW_QL = False
+try:
+    from quodlibet.widgets import main
+except ImportError:
+    from quodlibet import app
+    NEW_QL = True
 
 INT_SETTINGS = {
     'artist_block_time': {
@@ -407,14 +414,16 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def player_get_queue_length(self):
         """Get the current length of the queue."""
-        if app.window is None:
+        playlist = NEW_QL and app.window.playlist or main.playlist
+        if NEW_QL and app.window is None:
             return 0
         return sum(
-            [row.get("~#length", 0) for row in app.window.playlist.q.get()])
+            [row.get("~#length", 0) for row in playlist.q.get()])
 
     def player_enqueue(self, song):
         """Put the song at the end of the queue."""
-        app.window.playlist.enqueue([song.song])
+        playlist = NEW_QL and app.window.playlist or main.playlist
+        playlist.enqueue([song.song])
 
     def player_search(self, search):
         """Perform a player search."""
@@ -431,6 +440,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def player_get_songs_in_queue(self):
         """Return (wrapped) song objects for the songs in the queue."""
-        if app.window is None:
+        playlist = NEW_QL and app.window.playlist or main.playlist
+        if NEW_QL and app.window is None:
             return []
-        return [Song(song) for song in app.window.playlist.q.get()]
+        return [Song(song) for song in playlist.q.get()]
