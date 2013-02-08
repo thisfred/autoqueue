@@ -76,6 +76,9 @@ STR_SETTINGS = {
     'geohash': {
         'value': '',
         'label': 'geohash (see geohash.org)'},
+    'present': {
+        'value': '',
+        'label': 'who is here'},
     'extra_context': {
         'value': '',
         'label': 'extra context'}}

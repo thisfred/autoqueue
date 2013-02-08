@@ -22,9 +22,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 
 import dbus
 import dbus.service
+import functools
 import gobject
 import os
 import random
+import json
 
 from threading import Thread
 from Queue import Queue, PriorityQueue
@@ -64,6 +66,28 @@ DBUS_PATH = '/org/autoqueue/Similarity'
 # get and use your own (free) last.fm api key from here:
 # http://www.last.fm/api/account
 API_KEY = "09d0975a99a4cab235b731d31abf0057"
+FIFTEEN_MINUTES = timedelta(minutes=15)
+
+Track = namedtuple('Track', 'id filename loved hated artist title')
+
+DEFAULT_TRACK = Track(
+    id=None,
+    filename=None,
+    loved=False,
+    hated=False,
+    artist=None,
+    title=None)
+
+
+def memoize(f):
+    cache = {}
+
+    @functools.wraps(f)
+    def memoizer(*args):
+        if args not in cache:
+            cache[args] = f(*args)
+        return cache[args]
+    return memoizer
 
 
 def cluster_match(cluster1, cluster2):
@@ -255,6 +279,143 @@ class Similarity(object):
             self.mir = Mir()
         self.network = LastFMNetwork(api_key=API_KEY)
         self.cache_time = 90
+        self.users = {}
+        self.last_seen = {}
+        self.history = []
+        self.now_playing = None
+        self.song_queue = []
+
+    def join(self, name):
+        user_id = self.get_user_id(name)
+        self.users[user_id] = {}
+        self.last_seen[user_id] = datetime.utcnow()
+        return user_id
+
+    @memoize
+    def get_user_id(self, name):
+        sql = ("SELECT users.id FROM users WHERE users.name = ?;", (name,),)
+        command = self.get_sql_command(sql, priority=1)
+        for row in command.result_queue.get():
+            return str(row[0])
+        self.execute_sql(
+            ("INSERT INTO users (name) VALUES (?);", (name,)), priority=0)
+        command = self.get_sql_command(sql, priority=1)
+        for row in command.result_queue.get():
+            return str(row[0])
+
+    def get_lovers_and_haters(self, track_id):
+        sql = ("SELECT user, loved FROM users_2_tracks WHERE track = ?;", (
+            track_id,))
+        command = self.get_sql_command(sql, priority=0)
+        lovers = set([])
+        haters = set([])
+        for row in command.result_queue.get():
+            if row[1]:
+                lovers.add(row[0])
+            else:
+                haters.add(row[0])
+        return lovers, haters
+
+    def get_user_tracks(self, user_id):
+        sql = (
+            "SELECT mirage.trackid, mirage.filename, users_2_tracks.loved "
+            "FROM users_2_tracks INNER JOIN mirage ON users_2_tracks.track = "
+            "mirage.trackid WHERE users_2_tracks.user = ?;", (int(user_id),))
+        command = self.get_sql_command(sql, priority=0)
+        for row in command.result_queue.get():
+            if row[2]:
+                yield DEFAULT_TRACK._replace(
+                    id=row[0],
+                    filename=row[1],
+                    loved=True)
+            else:
+                yield DEFAULT_TRACK._replace(
+                    id=row[0],
+                    filename=row[1],
+                    hated=True)
+
+    def get_player_info(self):
+        return {
+            'history': [t._asdict() for t in self.history],
+            'now_playing': self.now_playing and self.now_playing._asdict(),
+            'queue': [t._asdict() for t in self.song_queue],
+            'requests': list(self.get_requests())}
+
+    def get_user_info(self, user_id):
+        user = self.users[user_id]
+        self.last_seen[user_id] = datetime.utcnow()
+        if 'loved' not in user:
+            for track in self.get_user_tracks(user_id):
+                if track.loved:
+                    user.setdefault('loved', {})[
+                        track.filename] = track._asdict()
+                elif track.hated:
+                    user.setdefault('hated', {})[
+                        track.filename] = track._asdict()
+        return user
+
+    def love(self, user_id, track_id):
+        user = self.users[user_id]
+        self.last_seen[user_id] = datetime.utcnow()
+        self.execute_sql(
+            ("INSERT INTO users_2_tracks (user, track, loved) VALUES "
+             "(?, ?, ?);", (user_id, track_id, False)))
+        filename = self.get_filename(track_id)
+        user.setdefault('loved', {})[
+
+    def hate(self, user_id, track_id):
+        self.execute_sql(
+            ("INSERT INTO users_2_tracks (user, track, loved) VALUES "
+             "(?, ?, ?);", (user_id, track_id, False)))
+
+    def meh(self, user_id, track_id):
+        self.execute_sql(
+            ("DELETE FROM users_2_tracks WHERE users_2_tracks.user = ? AND "
+             "users_2_tracks.track = ?", (user_id, track_id)))
+
+    def add_request(self, user_id, filename):
+        scms = self.get_scms_from_filename(filename)
+        if scms is None:
+            try:
+                scms = self.mir.analyze(filename)
+            except:
+                return []
+            self.add_track(filename, scms, priority=10)
+        self.users[user_id].setdefault('requests', []).append(filename)
+
+    def start_song(self, filename, artist, title):
+        self.remove_request(filename)
+        if self.now_playing:
+            self.history.append(self.now_playing)
+            self.history = self.history[-10:]
+        if self.song_queue and self.song_queue[0].filename == filename:
+            (self.now_playing, self.song_queue) = (
+                self.song_queue[0], self.song_queue[1:])
+        else:
+            self.now_playing = DEFAULT_TRACK._replace(
+                id=self.get_track_id(filename),
+                filename=filename,
+                artist=artist,
+                title=title)
+
+    def queue_song(self, filename, artist, title):
+        self.song_queue.append(
+            DEFAULT_TRACK._replace(
+                id=self.get_track_id(filename),
+                filename=filename,
+                artist=artist,
+                title=title))
+
+    def remove_request(self, filename):
+        for user in self.users.values():
+            requests = user.get('requests', [])
+            if filename in requests:
+                requests.remove(filename)
+
+    @property
+    def present(self):
+        cutoff = datetime.utcnow() - FIFTEEN_MINUTES
+        return set([u for u, v in self.last_seen.items() if v < cutoff])
 
     def execute_sql(self, sql=None, priority=1, command=None):
         """Put sql command on the queue to be executed."""
@@ -292,6 +453,7 @@ class Similarity(object):
 
     def remove_track_by_filename(self, filename):
         """Remove tracks from database."""
+        # TODO: remove likes/dislikes from users_2_tracks
         self.execute_sql(
             ('DELETE FROM mirage WHERE filename = ?', (filename,)),
             priority=10)
@@ -335,17 +497,22 @@ class Similarity(object):
             return instance_from_picklestring(row[0])
         return None
 
-    def get_track_id(self, filename, priority):
+    @memoize
+    def get_track_id(self, filename):
         """Get track id from database."""
         sql = ("SELECT trackid FROM mirage WHERE filename = ?;", (filename,))
-        command = self.get_sql_command(sql, priority=priority)
+        command = self.get_sql_command(sql, priority=0)
         for row in command.result_queue.get():
             return row[0]
-        return None
+        self.analyze_track(filename, priority=0)
+        sql = ("SELECT trackid FROM mirage WHERE filename = ?;", (filename,))
+        command = self.get_sql_command(sql, priority=0)
+        for row in command.result_queue.get():
+            return row[0]
 
     def get_tracks(self, priority=0):
         """Get tracks from database."""
-        sql = ("SELECT scms, filename FROM mirage;",)
+        sql = ("SELECT trackid, scms, filename FROM mirage;",)
         command = self.get_sql_command(sql, priority=priority)
         return command.result_queue.get()
 
@@ -374,7 +541,7 @@ class Similarity(object):
             while entry in tried:
                 entry = random.randrange(0, total)
             tried.add(entry)
-            buf, other_filename = tracks[entry]
+            track_id, buf, other_filename = tracks[entry]
             if other_filename in excluded_filenames:
                 continue
             if filename == other_filename:
@@ -391,12 +558,25 @@ class Similarity(object):
                         break
                     continue
                 misses = 0
-            best.append((dist, other_filename))
+            lovers, haters = self.get_lovers_and_haters(track_id)
+            if self.present & haters:
+                continue
+            best.append((dist, other_filename, len(self.present & lovers)))
             best.sort()
             while len(best) > number:
                 best.pop()
+        for filename in self.get_requests():
+            other = self.get_scms_from_filename(filename, priority=0)
+            dist = int(distance(scms, other, conf) * 1000)
+            best.append((dist, filename, 1))
+        best.sort()
         print "%d tries in %f s" % (tries, time() - start_time)
         return best
+
+    def get_requests(self):
+        for user_id in self.present:
+            for filename in self.users[user_id].get('requests', []):
+                yield filename
 
     def get_artist(self, artist_name):
         """Get artist information from the database."""
@@ -557,6 +737,12 @@ class Similarity(object):
 
     def create_db(self):
         """Set up a database for the artist and track similarity scores."""
+        self.execute_sql((
+            'CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name'
+            ' VARCHAR(100), UNIQUE(name));',), priority=0)
+        self.execute_sql((
+            'CREATE TABLE IF NOT EXISTS users_2_tracks (user INTEGER, track'
+            ' INTEGER, loved BOOLEAN);',), priority=0)
         self.execute_sql((
             'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name'
             ' VARCHAR(100), updated DATE, UNIQUE(name));',), priority=0)
@@ -765,6 +951,52 @@ class SimilarityService(dbus.service.Object):
             bus_name=bus_name, object_path=object_path)
         self.loop = gobject.MainLoop()
 
+    @method(dbus_interface=IFACE, in_signature='s', out_signature='s')
+    def join(self, name):
+        return self.similarity.join(unicode(name))
+
+    @method(dbus_interface=IFACE, in_signature='s')
+    def leave(self, name):
+        self.similarity.leave(unicode(name))
+
+    @method(dbus_interface=IFACE, in_signature='ss')
+    def add_request(self, name, filename):
+        self.similarity.add_request(unicode(name), unicode(filename))
+
+    @method(dbus_interface=IFACE, in_signature='s')
+    def end_song(self, filename):
+        self.similarity.end_song(unicode(filename))
+
+    @method(dbus_interface=IFACE, in_signature='sss')
+    def start_song(self, filename, artist, title):
+        self.similarity.start_song(
+            unicode(filename), unicode(artist), unicode(title))
+
+    @method(dbus_interface=IFACE, in_signature='sss')
+    def queue_song(self, filename, artist, title):
+        self.similarity.queue_song(
+            unicode(filename), unicode(artist), unicode(title))
+
+    @method(dbus_interface=IFACE, in_signature='ss')
+    def love(self, user_id, track_id):
+        self.similarity.love(int(user_id), int(track_id))
+
+    @method(dbus_interface=IFACE, in_signature='ss')
+    def hate(self, user_id, track_id):
+        self.similarity.hate(int(user_id), int(track_id))
+
+    @method(dbus_interface=IFACE, in_signature='ss')
+    def meh(self, user_id, track_id):
+        self.similarity.meh(int(user_id), int(track_id))
+
+    @method(dbus_interface=IFACE, in_signature='s', out_signature='s')
+    def get_user_info(self, user_id):
+        return json.dumps(self.similarity.get_user_info(user_id))
+
+    @method(dbus_interface=IFACE, out_signature='s')
+    def get_player_info(self):
+        return json.dumps(self.similarity.get_player_info())
+
     @method(dbus_interface=IFACE, in_signature='s')
     def remove_track_by_filename(self, filename):
         """Remove tracks from database."""
@@ -785,7 +1017,7 @@ class SimilarityService(dbus.service.Object):
         """Perform mirage analysis of a track."""
         self.similarity.analyze_track(unicode(filename), priority)
 
-    @method(dbus_interface=IFACE, in_signature='sasi', out_signature='a(is)')
+    @method(dbus_interface=IFACE, in_signature='sasi', out_signature='a(isi)')
     def get_ordered_mirage_tracks(self, filename, exclude_filenames, number):
         """Get similar tracks by mirage acoustic analysis."""
         return self.similarity.get_ordered_mirage_tracks(

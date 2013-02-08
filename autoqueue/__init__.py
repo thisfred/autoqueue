@@ -63,7 +63,7 @@ NO_OP = lambda *a, **kw: None
 BANNED_ALBUMS = [
     'ep', 'greatest hits', 'demo', 'the best of', 'the very best of', 'live',
     'demos', 'self titled', 'untitled album', '[non-album tracks]', 'single',
-    '7"', 'covers']
+    'singles', '7"', 'covers']
 
 SEASONS = ['winter', 'spring', 'summer', 'autumn']
 MONTHS = [
@@ -240,6 +240,7 @@ class AutoQueueBase(object):
         self.number = 40
         self.restrictions = None
         self.extra_context = None
+        self.present = []
         self.use_mirage = True
         self.whole_albums = True
         self.contextualize = True
@@ -263,6 +264,11 @@ class AutoQueueBase(object):
             sim, dbus_interface='org.autoqueue.SimilarityInterface')
         self.has_mirage = self.similarity.has_mirage()
         self.player_set_variables_from_config()
+        self.set_presence()
+
+    def set_presence(self):
+        for user in self.present.split(','):
+            self.similarity.join(user.strip())
 
     def log(self, msg):
         """Print debug messages."""
@@ -445,6 +451,9 @@ class AutoQueueBase(object):
         if song is None:
             return
         self.song = song
+        if self.has_mirage and self.use_mirage:
+            self.similarity.start_song(
+                song.get_filename(), song.get_artists()[0], song.get_title())
         if self.running:
             return
         if self.desired_queue_length == 0 or self.queue_needs_songs():
@@ -453,7 +462,6 @@ class AutoQueueBase(object):
 
     def on_removed(self, songs):
         if not self.has_mirage and self.use_mirage:
-            print "hmmm"
             return
         for song in songs:
             filename = song.get_filename()
@@ -662,7 +670,17 @@ class AutoQueueBase(object):
         if ':' in self.birthdays:
             for name_date in self.birthdays.split(','):
                 name, bdate = name_date.strip().split(':')
-                if bdate.strip() == '%02d/%02d' % (month, day):
+                bdate = bdate.strip()
+                if '-' in bdate:
+                    bdate = [int(i) for i in bdate.split('-')]
+                else:
+                    bdate = [int(i) for i in bdate.split('/')]
+                if month == bdate[-2] and day == bdate[-1]:
+                    if len(bdate) == 3:
+                        filters.extend([
+                            'grouping=%s' % bdate[0],
+                            'grouping="%s"' % (year - bdate[0]),
+                            '~year=%d' % bdate[0]])
                     filters.extend([
                         'grouping="birthdays"', 'title=/\\bbirthdays?\\b/',
                         'grouping="%s"' % name.strip(), 'title=/\\b%s\\b/' %
@@ -860,7 +878,7 @@ class AutoQueueBase(object):
                     rating += (1 - rating) * score2
                 if frequency is NotImplemented:
                     frequency = 0
-                self.log("rating: %.5f, play frequency %.5f" % (
+                self.log("score: %.5f, play frequency %.5f" % (
                     rating, frequency))
                 if frequency > 0 and random.random() > rating - frequency:
                     continue
@@ -945,9 +963,11 @@ class AutoQueueBase(object):
     def _mirage_reply_handler(self, results=None):
         """Exexute processing asynchronous."""
         if results:
-            for _ in self.process_results([
-                    {'score': match, 'filename': filename} for match, filename
-                    in results]):
+            for _ in self.process_results([{'score': match,
+                                            'filename': filename,
+                                            'loved': l}
+                                           for match, filename, l in
+                                           results]):
                 yield
         if self.found:
             if not self.queue_needs_songs():
@@ -1078,17 +1098,22 @@ class AutoQueueBase(object):
                     continue
             filename = unicode(result.get("filename", ''))
             tags = result.get("tags")
+            if result.get('loved', 0):
+                # loved tracks are always in context
+                cf = False
+            else:
+                cf = context_filter
             if filename:
                 self.found = self.search_and_filter(
-                    filename=filename, context_filter=context_filter)
+                    filename=filename, context_filter=cf)
             elif tags:
                 self.found = self.search_and_filter(
-                    tags=tags, context_filter=context_filter)
+                    tags=tags, context_filter=cf)
             else:
                 self.found = self.search_and_filter(
                     artist=unicode(result.get("artist", '')),
                     title=unicode(result.get("title", '')),
-                    context_filter=context_filter)
+                    context_filter=cf)
             if self.found:
                 break
         if self.found:
@@ -1109,8 +1134,17 @@ class AutoQueueBase(object):
                                               in songs]):
                             for _, _, song in songs:
                                 self.player_enqueue(song)
+                                if self.has_mirage and self.use_mirage:
+                                    self.similarity.queue_song(
+                                        song.get_filename(),
+                                        song.get_artists()[0],
+                                        song.get_title())
                             return
             self.player_enqueue(self.found)
+            if self.has_mirage and self.use_mirage:
+                self.similarity.queue_song(
+                    self.found.get_filename(), self.found.get_artists()[0],
+                    self.found.get_title())
 
     def get_blocked_artists(self):
         """Get a list of blocked artists."""
