@@ -355,13 +355,13 @@ class Similarity(object):
         return user
 
     def love(self, user_id, track_id):
-        user = self.users[user_id]
+        # user = self.users[user_id]
         self.last_seen[user_id] = datetime.utcnow()
         self.execute_sql(
             ("INSERT INTO users_2_tracks (user, track, loved) VALUES "
              "(?, ?, ?);", (user_id, track_id, False)))
-        filename = self.get_filename(track_id)
-        user.setdefault('loved', {})[
+        # filename = self.get_filename(track_id)
+        # user.setdefault('loved', {})[filename] =
 
     def hate(self, user_id, track_id):
         self.execute_sql(
