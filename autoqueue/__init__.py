@@ -453,7 +453,7 @@ class AutoQueueBase(object):
         self.song = song
         if self.has_mirage and self.use_mirage:
             self.similarity.start_song(
-                song.get_filename(), song.get_artists()[0], song.get_title())
+                song.get_filename(), song.get_artists()[:1], song.get_title())
         if self.running:
             return
         if self.desired_queue_length == 0 or self.queue_needs_songs():
