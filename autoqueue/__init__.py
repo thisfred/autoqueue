@@ -233,7 +233,6 @@ class AutoQueueBase(object):
         self._blocked_artists_times = deque([])
         self._cache_dir = None
         self.desired_queue_length = 15 * 60
-        self.cached_misses = deque([])
         self.running = False
         self.verbose = False
         self.song = None
@@ -268,7 +267,7 @@ class AutoQueueBase(object):
 
     def set_presence(self):
         for user in self.present.split(','):
-            self.similarity.join(user.strip())
+            self.similarity.join(user.strip(), timeout=TIMEOUT)
 
     def log(self, msg):
         """Print debug messages."""
@@ -429,17 +428,6 @@ class AutoQueueBase(object):
         # played for a determined time
         for artist_name in artist_names:
             self.block_artist(artist_name)
-        filename = song.get_filename()
-        try:
-            if not isinstance(filename, unicode):
-                filename = unicode(filename, 'utf-8')
-            self.log('Analyzing %s' % filename)
-            if self.has_mirage:
-                self.similarity.analyze_track(
-                    filename, 2, reply_handler=NO_OP, error_handler=NO_OP,
-                    timeout=TIMEOUT)
-        except UnicodeDecodeError:
-            self.log('Could not decode filename: %r' % filename)
 
     def on_song_started(self, song):
         """Should be called by the plugin when a new song starts.
@@ -452,10 +440,9 @@ class AutoQueueBase(object):
             return
         self.song = song
         if self.has_mirage and self.use_mirage:
-            artists = song.get_artists()
-            artist = artists[0] if artists else ''
+            artist = song.get_artist()
             self.similarity.start_song(
-                song.get_filename(), artist, song.get_title())
+                song.get_filename(), artist, song.get_title(), timeout=TIMEOUT)
         if self.running:
             return
         if self.desired_queue_length == 0 or self.queue_needs_songs():
@@ -470,7 +457,7 @@ class AutoQueueBase(object):
             self.log('Remove similarity for %s' % filename)
             self.similarity.remove_track_by_filename(
                 filename, reply_handler=NO_OP,
-                error_handler=NO_OP)
+                error_handler=NO_OP, timeout=TIMEOUT)
 
     def queue_needs_songs(self):
         """Determine whether the queue needs more songs added."""
@@ -656,6 +643,8 @@ class AutoQueueBase(object):
                 'grouping="groundhog day"', 'title=/\\bgroundhog day\\b/'])
         elif month == 2 and day == 14:
             filters.extend([
+                'grouping=hearts', 'title=heart',
+                'grouping=love', 'title=love',
                 'grouping=valentine', 'title=valentine'])
         elif month == 4 and day == 1:
             filters.extend([
@@ -829,17 +818,11 @@ class AutoQueueBase(object):
                     restrictions, context_restrictions)
             else:
                 restrictions = context_restrictions
-        cache_key = (artist, title, filename, tags, restrictions)
-        if cache_key in self.cached_misses:
-            self.cached_misses.remove(cache_key)
-            self.cached_misses.append(cache_key)
-            return None
         search = self.construct_search(
             artist=artist, title=title, filename=filename, tags=tags,
             restrictions=restrictions)
         songs = self.player_search(search)
         if not songs:
-            self.cached_misses.append(cache_key)
             if not restrictions:
                 if filename:
                     if not isinstance(filename, unicode):
@@ -851,17 +834,17 @@ class AutoQueueBase(object):
                         self.log('Remove similarity for %s' % filename)
                         self.similarity.remove_track_by_filename(
                             filename, reply_handler=NO_OP,
-                            error_handler=NO_OP)
+                            error_handler=NO_OP, timeout=TIMEOUT)
                 elif (artist and title):
                     self.log('Remove %s - %s' % (artist, title))
                     self.similarity.remove_track(
                         artist, title, reply_handler=NO_OP,
-                        error_handler=NO_OP)
+                        error_handler=NO_OP, timeout=TIMEOUT)
                 elif artist:
                     self.log('Remove %s' % artist)
                     self.similarity.remove_artist(
                         artist, reply_handler=NO_OP,
-                        error_handler=NO_OP)
+                        error_handler=NO_OP, timeout=TIMEOUT)
             return
         while songs:
             tag_set = get_stripped_tags(self.last_song)
@@ -885,9 +868,6 @@ class AutoQueueBase(object):
                 if frequency > 0 and random.random() > rating - frequency:
                     continue
                 return song
-        self.cached_misses.append(cache_key)
-        while len(self.cached_misses) > 5000:
-            self.cached_misses.popleft()
 
     def fill_queue(self):
         """Search for appropriate songs and put them in the queue."""
@@ -1136,17 +1116,8 @@ class AutoQueueBase(object):
                                               in songs]):
                             for _, _, song in songs:
                                 self.player_enqueue(song)
-                                if self.has_mirage and self.use_mirage:
-                                    self.similarity.queue_song(
-                                        song.get_filename(),
-                                        song.get_artists()[0],
-                                        song.get_title())
                             return
             self.player_enqueue(self.found)
-            if self.has_mirage and self.use_mirage:
-                self.similarity.queue_song(
-                    self.found.get_filename(), self.found.get_artists()[0],
-                    self.found.get_title())
 
     def get_blocked_artists(self):
         """Get a list of blocked artists."""
