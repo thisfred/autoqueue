@@ -10,11 +10,13 @@ import gtk
 from datetime import datetime
 from quodlibet.plugins.events import EventPlugin
 from quodlibet.parse import Query
-from quodlibet.library import library
 from quodlibet import config
+from quodlibet import const
 from collections import deque
 from quodlibet.util import copool
 from quodlibet.qltk.entry import ValidatingEntry
+import quodlibet.library
+library = quodlibet.library.init(const.LIBRARY)
 
 from autoqueue import AutoQueueBase, SongBase
 
@@ -433,15 +435,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def player_search(self, search):
         """Perform a player search."""
-        try:
-            if search is None:
-                search = ""
-            myfilter = Query(search).search
-            songs = filter(myfilter, library.itervalues())
-        except (Query.error, RuntimeError, AttributeError):
-            self.log("error in: %s" % search)
-            print "err"
-            return []
+        songs = library.query(search)
         return [Song(song) for song in songs]
 
     def player_get_songs_in_queue(self):
