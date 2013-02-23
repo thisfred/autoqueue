@@ -61,6 +61,18 @@ SEARCH_FORM = """
 </form>
 """
 
+ACTION_BUTTON = """
+<form action="%(url)s" method="POST">
+    <input type="submit" value="%(name)s"/>
+</form>
+"""
+
+ACTION_URL = '%s/users/%s/%s/%s'
+
+ACTION_ROW = (
+    '<tr><td>%(before_action)s</td><td>%(title_or_filename)s</td>'
+    '<td>%(after_action)s</td></tr>')
+
 bus = dbus.SessionBus()
 sim = bus.get_object(
     'org.autoqueue', '/org/autoqueue/Similarity',
@@ -69,29 +81,44 @@ SIMILARITY = dbus.Interface(
     sim, dbus_interface='org.autoqueue.SimilarityInterface')
 
 
-def get_action(req, track):
-    ACTION_URL = '<a href="%s/users/%s/%s/%s">%s</a>'
+def get_song_row(req, track):
     if 'id' in track:
         # history + now playing
         if track['loved']:
-            return ACTION_URL % (
-                req.application_url, req.vars['user_id'], 'meh',
-                track['id'], 'lose the &lt;3')
-        if track['hated']:
-            return ACTION_URL % (
-                req.application_url, req.vars['user_id'], 'meh',
-                track['id'], "don't h8")
-        return '%s %s' % (
-            ACTION_URL % (
-                req.application_url, req.vars['user_id'], 'love',
-                track['id'], '&lt;3'),
-            ACTION_URL % (
-                req.application_url, req.vars['user_id'], 'hate',
-                track['id'], 'h8'))
-    # search results
-    return ACTION_URL % (
-        req.application_url, req.vars['user_id'], 'request',
-        quote(track['filename'], safe=''), 'request')
+            after_url = ACTION_URL % (
+                req.application_url, req.vars['user_id'], 'meh', track['id'])
+            before_action = ''
+            after_action = ACTION_BUTTON % {
+                'url': after_url, 'name': 'lose the &lt;3'}
+        elif track['hated']:
+            after_url = ACTION_URL % (
+                req.application_url, req.vars['user_id'], 'meh', track['id'])
+            before_action = ''
+            after_action = ACTION_BUTTON % {
+                'url': after_url, 'name': 'lose the &lt;3'}
+        else:
+            before_url = ACTION_URL % (
+                req.application_url, req.vars['user_id'], 'hate', track['id'])
+            before_action = ACTION_BUTTON % {
+                'url': before_url, 'name': 'h8'}
+            after_url = ACTION_URL % (
+                req.application_url, req.vars['user_id'], 'love', track['id'])
+            after_action = ACTION_BUTTON % {
+                'url': after_url, 'name': '&lt;3'}
+    else:
+        # search results
+        before_action = ''
+        after_url = ACTION_URL % (
+            req.application_url, req.vars['user_id'], 'request',
+            quote(track['filename'], safe=''))
+        after_action = ACTION_BUTTON % {'url': after_url, 'name': 'request'}
+    try:
+        return ACTION_ROW % {
+            'title_or_filename': get_title_or_filename(track),
+            'before_action': before_action,
+            'after_action': after_action}
+    except UnicodeDecodeError:
+        return ''
 
 
 def get_title_or_filename(track):
@@ -100,17 +127,9 @@ def get_title_or_filename(track):
     return track['filename'].split('/')[-1]
 
 
-def song_row(req, track):
-    try:
-        return '<tr><td>%s</td><td>%s</td></tr>' % (
-            get_title_or_filename(track), get_action(req, track))
-    except UnicodeDecodeError:
-        return ''
-
-
 def song_table(req, array):
     return '<table>\n%s</table>' % (
-        '\n'.join([song_row(req, s) for s in array]),)
+        '\n'.join([get_song_row(req, s) for s in array]),)
 
 
 def index(req, start_response):
