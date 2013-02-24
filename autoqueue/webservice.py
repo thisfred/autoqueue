@@ -91,11 +91,11 @@ def get_song_row(req, track):
             after_action = ACTION_BUTTON % {
                 'url': after_url, 'name': 'lose the &lt;3'}
         elif track['hated']:
-            after_url = ACTION_URL % (
+            before_url = ACTION_URL % (
                 req.application_url, req.vars['user_id'], 'meh', track['id'])
-            before_action = ''
-            after_action = ACTION_BUTTON % {
-                'url': after_url, 'name': 'lose the &lt;3'}
+            before_action = ACTION_BUTTON % {
+                'url': before_url, 'name': "don't h8"}
+            after_action = ''
         else:
             before_url = ACTION_URL % (
                 req.application_url, req.vars['user_id'], 'hate', track['id'])
