@@ -39,7 +39,7 @@ from dbus.service import method
 
 import sqlite3
 
-from autoqueue.pylast import LastFMNetwork, WSError, NetworkError
+from pylast import LastFMNetwork, WSError, NetworkError
 
 try:
     from mirage import (
@@ -398,9 +398,19 @@ class Similarity(object):
             subprocess.call(['quodlibet', '--next'])
 
     def meh(self, user_id, track_id):
+        user = self.users[user_id]
+        self.last_seen[user_id] = datetime.utcnow()
         self.execute_sql(
             ("DELETE FROM users_2_tracks WHERE users_2_tracks.user = ? AND "
              "users_2_tracks.track = ?", (user_id, track_id)))
+        for filename, track in user.setdefault('hated', {}).items():
+            if track.id == track_id:
+                del user['hated'][filename]
+                return
+        for filename, track in user.setdefault('loved', {}).items():
+            if track.id == track_id:
+                del user['loved'][filename]
+                return
 
     def add_request(self, user_id, filename):
         self.users[user_id].setdefault('requests', []).append(filename)

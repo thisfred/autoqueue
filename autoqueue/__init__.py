@@ -52,6 +52,17 @@ try:
 except ImportError:
     XDG = False
 
+try:
+    import requests
+    REQUESTS = True
+except ImportError:
+    REQUESTS = False
+
+# If you change even a single character of code, I would ask that you
+# get and use your own (free) last.fm api key from here:
+# http://www.last.fm/api/account
+API_KEY = "09d0975a99a4cab235b731d31abf0057"
+
 THRESHOLD = .5
 
 TIMEOUT = 3000
@@ -78,6 +89,41 @@ EASTERS = [
     datetime(2015, 4, 5), datetime(2016, 3, 27), datetime(2017, 4, 16),
     datetime(2018, 4, 1), datetime(2019, 4, 21), datetime(2020, 4, 12),
     datetime(2021, 4, 4), datetime(2022, 4, 17)]
+
+
+def get_artists_playing_nearby(location_geohash, location):
+    params = {
+        'method': 'geo.getevents',
+        'limit': 25,
+        'api_key': API_KEY,
+        'format': 'json'}
+    if location_geohash:
+        lon, lat = geohash.decode(location_geohash)
+        params['long'] = lon
+        params['lat'] = lat
+    if location:
+        params['location'] = location
+    nearby_artists = []
+    r = requests.get('http://ws.audioscrobbler.com/2.0/', params=params)
+    try:
+        total_pages = int(r.json['events']['@attr']['totalPages'])
+        page = int(r.json['events']['@attr']['page'])
+        while True:
+            for event in r.json['events']['event']:
+                artists = event['artists']['artist']
+                if isinstance(artists, list):
+                    nearby_artists.extend(artists)
+                else:
+                    nearby_artists.append(artists)
+            if page == total_pages:
+                return nearby_artists
+            params['page'] = page + 1
+            r = requests.get(
+                'http://ws.audioscrobbler.com/2.0/', params=params)
+            page = int(r.json['events']['@attr']['page'])
+    except Exception, e:
+        print e
+    return nearby_artists
 
 
 def get_stripped_tags(last_song):
@@ -252,6 +298,7 @@ class AutoQueueBase(object):
         self.found = None
         self.location = ''
         self.geohash = ''
+        self.nearby_artists = []
         self.cached_weather_tags = None
         self.cached_weather_tags_at = None
         self.birthdays = ''
@@ -264,6 +311,9 @@ class AutoQueueBase(object):
         self.has_mirage = self.similarity.has_mirage()
         self.player_set_variables_from_config()
         self.set_presence()
+        if self.location or self.geohash:
+            self.nearby_artists = get_artists_playing_nearby(
+                self.geohash, self.location)
 
     def set_presence(self):
         for user in self.present.split(','):
@@ -684,6 +734,7 @@ class AutoQueueBase(object):
         for tag in [t for t in get_stripped_tags(last_song) if not t ==
                     'geotagged']:
             filters.append('grouping=/^(.*:)?%s$/' % tag)
+        filters.extend(['artist="%s"' % a for a in self.nearby_artists])
         context_restrictions = '&(|(%s),&(%s))' % (
             ','.join(filters), ','.join(not_filters))
         return context_restrictions
