@@ -89,7 +89,7 @@ def get_song_row(req, track):
                 req.application_url, req.vars['user_id'], 'meh', track['id'])
             before_action = ''
             after_action = ACTION_BUTTON % {
-                'url': after_url, 'name': 'lose the &lt;3'}
+                'url': after_url, 'name': 'stop &lt;3ing'}
         elif track['hated']:
             before_url = ACTION_URL % (
                 req.application_url, req.vars['user_id'], 'meh', track['id'])
@@ -110,20 +110,23 @@ def get_song_row(req, track):
         before_action = ''
         after_url = ACTION_URL % (
             req.application_url, req.vars['user_id'], 'request',
-            quote(track['filename'], safe=''))
+            quote(track['filename'].encode('utf-8'), safe=''))
         after_action = ACTION_BUTTON % {'url': after_url, 'name': 'request'}
     try:
-        return ACTION_ROW % {
+        return (ACTION_ROW % {
             'title_or_filename': get_title_or_filename(track),
             'before_action': before_action,
-            'after_action': after_action}
+            'after_action': after_action}).encode('utf-8')
     except UnicodeDecodeError:
         return ''
 
 
 def get_title_or_filename(track):
     if track.get('title'):
-        return '%s - %s' % (track['artist'] or '', track['title'])
+        if track['artist']:
+            return '<a href="http://last.fm/music/%s">%s</a> - %s' % (
+                quote(track['artist'].encode('utf-8')), track['artist'] or '',
+                track['title'])
     return track['filename'].split('/')[-1]
 
 
@@ -171,11 +174,12 @@ def users(req, start_response):
     if player_info.get('requests'):
         body += '<br /><br /><strong>requests</strong><br /><br />'
         body += '<br />'.join(
-            ['%s' % (filename,) for filename in player_info['requests']])
+            ['%s' % (filename.encode('utf-8'),) for filename in
+             player_info['requests']])
 
     body += '<br /><br />'
     body += LOGOUT_FORM % {'url': req.url + 'leave/'}
-    res.body = (TEMPLATE % body).encode('utf-8')
+    res.body = (TEMPLATE % body)
     return res
 
 

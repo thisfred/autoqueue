@@ -404,11 +404,11 @@ class Similarity(object):
             ("DELETE FROM users_2_tracks WHERE users_2_tracks.user = ? AND "
              "users_2_tracks.track = ?", (user_id, track_id)))
         for filename, track in user.setdefault('hated', {}).items():
-            if track.id == track_id:
+            if track['id'] == track_id:
                 del user['hated'][filename]
                 return
         for filename, track in user.setdefault('loved', {}).items():
-            if track.id == track_id:
+            if track['id'] == track_id:
                 del user['loved'][filename]
                 return
 

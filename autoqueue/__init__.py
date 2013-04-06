@@ -74,7 +74,7 @@ NO_OP = lambda *a, **kw: None
 BANNED_ALBUMS = [
     'ep', 'greatest hits', 'demo', 'the best of', 'the very best of', 'live',
     'demos', 'self titled', 'untitled album', '[non-album tracks]', 'single',
-    'singles', '7"', 'covers']
+    'singles', '7"', 'covers', 'album']
 
 SEASONS = ['winter', 'spring', 'summer', 'autumn']
 MONTHS = [
@@ -89,6 +89,11 @@ EASTERS = [
     datetime(2015, 4, 5), datetime(2016, 3, 27), datetime(2017, 4, 16),
     datetime(2018, 4, 1), datetime(2019, 4, 21), datetime(2020, 4, 12),
     datetime(2021, 4, 4), datetime(2022, 4, 17)]
+
+
+def escape(the_string):
+    """Double escape quotes."""
+    return the_string.replace('"', '\\"').replace("'", "\\'")
 
 
 def get_artists_playing_nearby(location_geohash, location):
@@ -698,7 +703,9 @@ class AutoQueueBase(object):
                 'grouping=valentine', 'title=valentine'])
         elif month == 4 and day == 1:
             filters.extend([
-                'grouping=april fool', 'title=april fool'])
+                'title=prank', 'grouping=fools', 'title=fool',
+                'grouping=jokes', 'title=joke', 'grouping=pranks',
+                'grouping=hoaxes', 'title=hoax'])
         elif month == 5 and day == 5:
             filters.extend([
                 'grouping="cinco de mayo"', 'title=/\\bcinco de mayo\\b/',
@@ -708,6 +715,11 @@ class AutoQueueBase(object):
                 'grouping=/solstices?/', 'title=/\\bsolstices?\\b/'])
         elif month == 9 and day == 11:
             filters.extend(['grouping="09-11"', 'title="9/11"'])
+        if day == 13 and day_name == 'friday':
+            filters.extend([
+                'grouping=superstition', 'grouping=bad luck',
+                'title=superstition', 'title=bad luck', 'grouping=horror'])
+
         if ':' in self.birthdays:
             for name_date in self.birthdays.split(','):
                 name, bdate = name_date.strip().split(':')
@@ -734,7 +746,8 @@ class AutoQueueBase(object):
         for tag in [t for t in get_stripped_tags(last_song) if not t ==
                     'geotagged']:
             filters.append('grouping=/^(.*:)?%s$/' % tag)
-        filters.extend(['artist="%s"' % a for a in self.nearby_artists])
+        filters.extend(
+            ['artist="%s"' % escape(a) for a in self.nearby_artists])
         context_restrictions = '&(|(%s),&(%s))' % (
             ','.join(filters), ','.join(not_filters))
         return context_restrictions
@@ -1151,7 +1164,7 @@ class AutoQueueBase(object):
                 break
         if self.found:
             if self.whole_albums:
-                if self.found.get_tracknumber() == 1:
+                if self.found.get_tracknumber() == 1 and random.random() > .5:
                     album = self.found.get_album()
                     album_artist = self.found.get_album_artist()
                     album_id = self.found.get_musicbrainz_albumid()

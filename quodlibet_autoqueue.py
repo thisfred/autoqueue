@@ -87,7 +87,7 @@ NO_OP = lambda *a, **kw: None
 
 def escape(the_string):
     """Double escape quotes."""
-    return the_string.replace('"', '\\"')
+    return the_string.replace('"', '\\"').replace("'", "\\'")
 
 
 def remove_role(artist):
@@ -432,7 +432,11 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def player_search(self, search):
         """Perform a player search."""
-        songs = app.library.query(search)
+        try:
+            songs = app.library.query(search)
+        except Exception, e:
+            print repr(search), repr(e)
+            return []
         return [Song(song) for song in songs]
 
     def player_get_songs_in_queue(self):
