@@ -112,6 +112,10 @@ def get_song_row(req, track):
             req.application_url, req.vars['user_id'], 'request',
             quote(track['filename'].encode('utf-8'), safe=''))
         after_action = ACTION_BUTTON % {'url': after_url, 'name': 'request'}
+        after_url2 = ACTION_URL % (
+            req.application_url, req.vars['user_id'], 'queue',
+            quote(track['filename'].encode('utf-8'), safe=''))
+        after_action += ACTION_BUTTON % {'url': after_url2, 'name': 'queue'}
     try:
         return (ACTION_ROW % {
             'title_or_filename': get_title_or_filename(track),
@@ -217,6 +221,14 @@ def request(req, start_response):
         location=req.application_url + '/users/%s/' % user_id)
 
 
+def queue(req, start_response):
+    user_id = req.vars['user_id']
+    subprocess.Popen(
+        ['quodlibet', '--enqueue=%s' % (req.vars['filename'],)])
+    return exc.HTTPSeeOther(
+        location=req.application_url + '/users/%s/' % user_id)
+
+
 def loved(req, start_response):
     res = Response()
     user_info_blob = SIMILARITY.get_user_info(int(req.vars['user_id']))
@@ -274,6 +286,7 @@ URLS = [
     (r'^/users/(?P<user_id>\d+)/hate/(?P<track_id>\d+)/?$', hate),
     (r'^/users/(?P<user_id>\d+)/meh/(?P<track_id>\d+)/?$', meh),
     (r'^/users/(?P<user_id>\d+)/request/(?P<filename>.*)/?$', request),
+    (r'^/users/(?P<user_id>\d+)/queue/(?P<filename>.*)/?$', queue),
     (r'^/users/(?P<user_id>\d+)/loved/?$', loved),
     (r'^/users/(?P<user_id>\d+)/hated/?$', hated),
     (r'^/users/(?P<user_id>\d+)/search/?$', search),

@@ -7,6 +7,7 @@ it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation"""
 
 import gtk
+import gobject
 from datetime import datetime
 from quodlibet.plugins.events import EventPlugin
 from quodlibet.parse import Query
@@ -226,18 +227,18 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         if not song:
             return
         ssong = Song(song)
-        self.on_song_ended(ssong, skipped)
+        gobject.idle_add(self.on_song_ended, ssong, skipped)
 
     def plugin_on_song_started(self, song):
         """Triggered when a song starts."""
         if not song:
             return
         ssong = Song(song)
-        self.on_song_started(ssong)
+        gobject.idle_add(self.on_song_started, ssong)
 
     def plugin_on_removed(self, songs):
         """Triggered when songs are removed from the library."""
-        self.on_removed([Song(s) for s in songs])
+        gobject.idle_add(self.on_removed, [Song(s) for s in songs])
 
     def PluginPreferences(self, parent):  # pylint: disable=C0103
         """Set and unset preferences from gui or config file."""

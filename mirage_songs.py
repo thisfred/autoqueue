@@ -1,6 +1,7 @@
 """Mirage songs plugin."""
 
 import dbus
+import gobject
 from quodlibet.plugins.songsmenu import SongsMenuPlugin
 from dbus.mainloop.glib import DBusGMainLoop
 DBusGMainLoop(set_as_default=True)
@@ -36,6 +37,9 @@ class MirageSongsPlugin(SongsMenuPlugin):
 
     def plugin_songs(self, songs):
         """Add the work to the coroutine pool."""
+        gobject.idle_add(self.doit, songs)
+
+    def doit(self, songs):
         for song in songs:
             filename = song('~filename')
             try:
