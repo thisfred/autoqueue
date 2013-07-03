@@ -41,7 +41,7 @@ except ImportError:
 try:
     import geohash
     GEOHASH = True
-except:
+except ImportError:
     GEOHASH = False
 
 DBusGMainLoop(set_as_default=True)
@@ -83,7 +83,7 @@ MONTHS = [
 DAYS = [
     'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
     'sunday']
-TIMES = ['night', 'morning', 'afternoon']
+TIMES = ['evening', 'morning', 'afternoon']
 EASTERS = [
     datetime(2012, 4, 8), datetime(2013, 3, 31), datetime(2014, 4, 20),
     datetime(2015, 4, 5), datetime(2016, 3, 27), datetime(2017, 4, 16),
@@ -97,6 +97,7 @@ def escape(the_string):
 
 
 def get_artists_playing_nearby(location_geohash, location):
+    """Get a list of artists playing nearby venues in the near future."""
     params = {
         'method': 'geo.getevents',
         'limit': 25,
@@ -109,12 +110,12 @@ def get_artists_playing_nearby(location_geohash, location):
     if location:
         params['location'] = location
     nearby_artists = []
-    r = requests.get('http://ws.audioscrobbler.com/2.0/', params=params)
+    response = requests.get('http://ws.audioscrobbler.com/2.0/', params=params)
     try:
-        total_pages = int(r.json['events']['@attr']['totalPages'])
-        page = int(r.json['events']['@attr']['page'])
+        total_pages = int(response.json['events']['@attr']['totalPages'])
+        page = int(response.json['events']['@attr']['page'])
         while True:
-            for event in r.json['events']['event']:
+            for event in response.json['events']['event']:
                 artists = event['artists']['artist']
                 if isinstance(artists, list):
                     nearby_artists.extend(artists)
@@ -123,9 +124,9 @@ def get_artists_playing_nearby(location_geohash, location):
             if page == total_pages:
                 return nearby_artists
             params['page'] = page + 1
-            r = requests.get(
+            response = requests.get(
                 'http://ws.audioscrobbler.com/2.0/', params=params)
-            page = int(r.json['events']['@attr']['page'])
+            page = int(response.json['events']['@attr']['page'])
     except Exception, e:
         print e
     return nearby_artists
@@ -621,9 +622,8 @@ class AutoQueueBase(object):
                         filters.extend([
                             'grouping=/\\b%s\\b/' % condition,
                             'title=/\\b%s\\b/' % condition])
-        if 'night' in weather_tags or hour <= 6 or hour >= 18:
-            search, not_search = self.exclusive_search(
-                'night', TIMES, alt='evening')
+        if hour <= 6 or hour >= 18:
+            search, not_search = self.exclusive_search('evening', TIMES)
             filters.extend(search)
             not_filters.extend(not_search)
         if hour >= 6 and hour < 12:
