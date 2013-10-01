@@ -6,8 +6,7 @@ This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation"""
 
-import gtk
-import gobject
+from gi.repository import Gtk, GLib
 from datetime import datetime
 from quodlibet.plugins.events import EventPlugin
 from quodlibet.parse import Query
@@ -227,18 +226,18 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         if not song:
             return
         ssong = Song(song)
-        gobject.idle_add(self.on_song_ended, ssong, skipped)
+        GLib.idle_add(self.on_song_ended, ssong, skipped)
 
     def plugin_on_song_started(self, song):
         """Triggered when a song starts."""
         if not song:
             return
         ssong = Song(song)
-        gobject.idle_add(self.on_song_started, ssong)
+        GLib.idle_add(self.on_song_started, ssong)
 
     def plugin_on_removed(self, songs):
         """Triggered when songs are removed from the library."""
-        gobject.idle_add(self.on_removed, [Song(s) for s in songs])
+        GLib.idle_add(self.on_removed, [Song(s) for s in songs])
 
     def PluginPreferences(self, parent):  # pylint: disable=C0103
         """Set and unset preferences from gui or config file."""
@@ -267,12 +266,12 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 config.set('plugins', 'autoqueue_%s' % key, value)
                 setattr(self, key, int(value))
 
-        table = gtk.Table()
+        table = Gtk.Table()
         table.set_col_spacings(3)
         i = 0
         j = 0
         for setting in BOOL_SETTINGS:
-            button = gtk.CheckButton(label=BOOL_SETTINGS[setting]['label'])
+            button = Gtk.CheckButton(label=BOOL_SETTINGS[setting]['label'])
             button.set_name(setting)
             button.set_active(
                 config.get(
@@ -286,10 +285,14 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 i += 1
         for setting in INT_SETTINGS:
             j += 1
-            label = gtk.Label('%s:' % INT_SETTINGS[setting]['label'])
-            entry = gtk.Entry()
-            table.attach(label, 0, 1, j, j + 1, xoptions=gtk.FILL | gtk.SHRINK)
-            table.attach(entry, 1, 2, j, j + 1, xoptions=gtk.FILL | gtk.SHRINK)
+            label = Gtk.Label('%s:' % INT_SETTINGS[setting]['label'])
+            entry = Gtk.Entry()
+            table.attach(
+                label, 0, 1, j, j + 1,
+                xoptions=Gtk.AttachOptions.FILL | Gtk.AttachOptions.SHRINK)
+            table.attach(
+                entry, 1, 2, j, j + 1,
+                xoptions=Gtk.AttachOptions.FILL | Gtk.AttachOptions.SHRINK)
             entry.connect('changed', int_changed, setting)
             try:
                 entry.set_text(
@@ -298,10 +301,14 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 pass
         for setting in STR_SETTINGS:
             j += 1
-            label = gtk.Label('%s:' % STR_SETTINGS[setting]['label'])
+            label = Gtk.Label('%s:' % STR_SETTINGS[setting]['label'])
             entry = ValidatingEntry(Query.is_valid_color)
-            table.attach(label, 0, 1, j, j + 1, xoptions=gtk.FILL | gtk.SHRINK)
-            table.attach(entry, 1, 2, j, j + 1, xoptions=gtk.FILL | gtk.SHRINK)
+            table.attach(
+                label, 0, 1, j, j + 1,
+                xoptions=Gtk.AttachOptions.FILL | Gtk.AttachOptions.SHRINK)
+            table.attach(
+                entry, 1, 2, j, j + 1,
+                xoptions=Gtk.AttachOptions.FILL | Gtk.AttachOptions.SHRINK)
             entry.connect('changed', str_changed, setting)
             try:
                 entry.set_text(config.get('plugins', 'autoqueue_%s' % setting))

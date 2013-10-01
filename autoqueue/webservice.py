@@ -80,6 +80,12 @@ sim = bus.get_object(
 SIMILARITY = dbus.Interface(
     sim, dbus_interface='org.autoqueue.SimilarityInterface')
 
+ql = bus.get_object(
+    'net.sacredchao.QuodLibet', '/net/sacredchao/QuodLibet',
+    follow_name_owner_changes=False)
+QUODLIBET = dbus.Interface(
+    ql, dbus_interface='net.sacredchao.QuodLibet')
+
 
 def get_song_row(req, track):
     if 'id' in track:
@@ -262,10 +268,9 @@ def search(req, start_response):
     res = Response()
     user_info_blob = SIMILARITY.get_user_info(int(req.vars['user_id']))
     user_info = json.loads(user_info_blob)
-    cmd = subprocess.Popen(
-        ['quodlibet', '--print-query=%s' % (query,)], stdout=subprocess.PIPE,
-        bufsize=-1)
-    filenames = cmd.communicate()[0].split('\n')
+    query_result = QUODLIBET.Query(query)
+    tracks = []
+    filenames = [r['~filename'] for r in query_result]
     tracks = [
         update_statuses({'filename': f}, user_info) for f in filenames if f]
     body = ''
@@ -312,5 +317,5 @@ def application(environ, start_response):
 
 if __name__ == '__main__':
     from wsgiref.simple_server import make_server
-    srv = make_server('10.0.0.2', 8888, application)
+    srv = make_server('192.168.0.4', 8888, application)
     srv.serve_forever()
