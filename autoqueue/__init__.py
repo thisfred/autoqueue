@@ -620,7 +620,7 @@ class AutoQueueBase(object):
                 for condition in weather_tags:
                     if condition:
                         filters.extend([
-                            'grouping=/\\b%s\\b/' % condition,
+                            "grouping=/'%s'/" % condition,
                             'title=/\\b%s\\b/' % condition])
         if hour <= 6 or hour >= 18:
             search, not_search = self.exclusive_search('evening', TIMES)
@@ -652,7 +652,8 @@ class AutoQueueBase(object):
                 'grouping="hallowe\'en"', 'title=/\\bhallowe\\\'en\\b/',
                 'grouping=all hallow\'s', 'title=/\\ball hallow\\\'s\\b/',
                 'title=/\\bhaunt/', 'title=ghost', 'grouping="monsters"',
-                'grouping="horror"'])
+                'grouping="horror"', 'title=/\\bdevil/', 'title=/\\bwitch/',
+                'title=/\\bpumkin/', 'grouping="ghosts"'])
         for easter in EASTERS:
             delta = eoq - easter
             days_after_easter = delta.days
