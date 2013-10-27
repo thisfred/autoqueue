@@ -654,7 +654,11 @@ class AutoQueueBase(object):
                 'title=/\\bhaunt/', 'title=ghost', 'grouping="monsters"',
                 'grouping="horror"', 'title=/\\bdevil/', 'title=/\\bwitch/',
                 'title=/\\bpumkin/', 'title=/\\bbone/', 'title=/\\bskeleton/',
-                'grouping="ghosts"'])
+                'grouping="ghosts"', 'title=/\\bzombi/', 'title=/\\bwerewol/',
+                'grouping=/\\bvampir/', 'title=/\\bmonster/',
+                'title=/\\bhorror/', 'title=/\\bscare/', 'title=/\\bscary/',
+                'title=/\\bfear/', 'title=/\\bfright/', 'title=/\\bblood/',
+                'title=/\\bbat/', 'title=/\\bdracula/', 'title=/\\bspider/'])
         for easter in EASTERS:
             delta = eoq - easter
             days_after_easter = delta.days
