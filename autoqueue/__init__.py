@@ -402,7 +402,7 @@ class AutoQueueBase(object):
         now = datetime.now()
         while self._blocked_artists_times:
             if self._blocked_artists_times[
-                0] + timedelta(self.artist_block_time) > now:
+                    0] + timedelta(self.artist_block_time) > now:
                 break
             self.log("Unblocked %s (%s)" % (
                 self._blocked_artists.popleft(),
@@ -634,12 +634,12 @@ class AutoQueueBase(object):
             search, not_search = self.exclusive_search('afternoon', TIMES)
             filters.extend(search)
             not_filters.extend(not_search)
-        if month == 12 and day >= 20 and day <= 27:
+        if month == 12 and day >= 20 and day <= 29:
             filters.extend([
-               'grouping="christmas"', 'title=/\\bchristmas\\b/'])
+                'grouping="christmas"', 'title=/\\bchristmas\\b/'])
         else:
             not_filters.extend([
-               '!grouping="christmas"', '!title=/\\bchristmas\\b/'])
+                '!grouping="christmas"', '!title=/\\bchristmas\\b/'])
         if (month == 12 and day >= 26) or month == 1 and day == 1:
             filters.extend([
                 'grouping="kwanzaa"', 'title=/\\bkwanzaa\\b/'])
@@ -1181,9 +1181,8 @@ class AutoQueueBase(object):
                             album=album, album_artist=album_artist,
                             album_id=album_id)
                         songs = sorted(
-                                [(song.get_discnumber(),
-                                  song.get_tracknumber(), song)for song in
-                                  self.player_search(search)])
+                            [(song.get_discnumber(), song.get_tracknumber(),
+                              song)for song in self.player_search(search)])
                         if songs and not any([self.disallowed(song[2]) for song
                                               in songs]):
                             for _, _, song in songs:
