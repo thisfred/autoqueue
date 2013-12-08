@@ -31,6 +31,13 @@ from cStringIO import StringIO
 from ctypes import cdll, Structure, POINTER, c_float, c_int, byref
 from scipy import array, fromfile, zeros, dot, single, vectorize
 
+import gi
+gi.require_version('Gst', '1.0')
+from gi.repository import GObject, Gst
+
+GObject.threads_init()
+Gst.init(None)
+
 
 class MirageAudio(Structure):
     """Mirage audio."""

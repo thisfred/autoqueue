@@ -23,7 +23,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 import dbus
 import dbus.service
 import functools
-import gobject
+from gi.repository import GObject
 import os
 import random
 import json
@@ -41,14 +41,14 @@ import sqlite3
 
 from pylast import LastFMNetwork, WSError, NetworkError
 
-try:
-    from mirage import (
-        Mir, MatrixDimensionMismatchException, MfccFailedException,
-        instance_from_picklestring, instance_to_picklestring,
-        ScmsConfiguration, distance)
-    MIRAGE = True
-except ImportError:
-    MIRAGE = False
+#try:
+from mirage import (
+    Mir, MatrixDimensionMismatchException, MfccFailedException,
+    instance_from_picklestring, instance_to_picklestring,
+    ScmsConfiguration, distance)
+MIRAGE = True
+#except ImportError:
+#    MIRAGE = False
 
 
 try:
@@ -970,11 +970,10 @@ class SimilarityService(dbus.service.Object):
     """Service that can be queried for similar songs."""
 
     def __init__(self, bus_name, object_path):
-        import gst  # noqa
         self.similarity = Similarity()
         super(SimilarityService, self).__init__(
             bus_name=bus_name, object_path=object_path)
-        self.loop = gobject.MainLoop()
+        self.loop = GObject.MainLoop()
 
     @method(dbus_interface=IFACE, in_signature='s', out_signature='i')
     def join(self, name):

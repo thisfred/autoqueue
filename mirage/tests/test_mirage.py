@@ -4,7 +4,12 @@ from mirage import Mir, Matrix, ScmsConfiguration
 from mirage import distance
 from decimal import Decimal, getcontext
 
-import gst
+import gi
+gi.require_version('Gst', '1.0')
+from gi.repository import GObject, Gst
+
+GObject.threads_init()
+Gst.init(None)
 
 MIR = Mir()
 
@@ -82,18 +87,18 @@ class TestMir(unittest.TestCase):
         conf = ScmsConfiguration(20)
 
         self.assertEqual(0, int(distance(SCMS, SCMS, conf)))
-        self.assertEqual(75, int(distance(SCMS, SCMS2, conf)))
-        self.assertEqual(52, int(distance(SCMS, SCMS3, conf)))
+        self.assertEqual(70, int(distance(SCMS, SCMS2, conf)))
+        self.assertEqual(49, int(distance(SCMS, SCMS3, conf)))
         self.assertEqual(69, int(distance(SCMS, SCMS4, conf)))
-        self.assertEqual(240, int(distance(SCMS, SCMS5, conf)))
+        self.assertEqual(235, int(distance(SCMS, SCMS5, conf)))
 
-        self.assertEqual(75, int(distance(SCMS2, SCMS, conf)))
+        self.assertEqual(70, int(distance(SCMS2, SCMS, conf)))
         self.assertEqual(0, int(distance(SCMS2, SCMS2, conf)))
         self.assertEqual(16, int(distance(SCMS2, SCMS3, conf)))
         self.assertEqual(59, int(distance(SCMS2, SCMS4, conf)))
         self.assertEqual(124, int(distance(SCMS2, SCMS5, conf)))
 
-        self.assertEqual(52, int(distance(SCMS3, SCMS, conf)))
+        self.assertEqual(49, int(distance(SCMS3, SCMS, conf)))
         self.assertEqual(16, int(distance(SCMS3, SCMS2, conf)))
         self.assertEqual(0, int(distance(SCMS3, SCMS3, conf)))
         self.assertEqual(49, int(distance(SCMS3, SCMS4, conf)))
@@ -105,7 +110,7 @@ class TestMir(unittest.TestCase):
         self.assertEqual(0, int(distance(SCMS4, SCMS4, conf)))
         self.assertEqual(124, int(distance(SCMS4, SCMS5, conf)))
 
-        self.assertEqual(240, int(distance(SCMS5, SCMS, conf)))
+        self.assertEqual(235, int(distance(SCMS5, SCMS, conf)))
         self.assertEqual(124, int(distance(SCMS5, SCMS2, conf)))
         self.assertEqual(84, int(distance(SCMS5, SCMS3, conf)))
         self.assertEqual(124, int(distance(SCMS5, SCMS4, conf)))

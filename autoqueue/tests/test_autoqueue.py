@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Tests for autoqueue."""
-import gobject
+from gi.repository import GObject
 import unittest
 from datetime import datetime
 from xml.dom import minidom
@@ -9,7 +9,7 @@ from autoqueue import SongBase, AutoQueueBase
 
 
 # we have to do this or the tests break badly
-gobject.threads_init()
+GObject.threads_init()
 
 
 FAKE_RESPONSES = {
