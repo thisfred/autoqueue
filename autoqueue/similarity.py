@@ -561,9 +561,9 @@ class Similarity(object):
         tried = set([])
         misses = 0
         miss_target = total / 200
-        while True:
+        while len(tried) < total:
             entry = random.randrange(0, total)
-            while entry in tried:
+            while entry in tried and len(tried) < total:
                 entry = random.randrange(0, total)
             tried.add(entry)
             track_id, buf, other_filename = tracks[entry]
@@ -644,13 +644,13 @@ class Similarity(object):
             "SELECT track_2_track.match, artists.name, tracks.title"
             " FROM track_2_track INNER JOIN tracks ON"
             " track_2_track.track2 = tracks.id INNER JOIN artists ON"
-            " artists.id = tracks.artist WHERE track_2_track.track1 UNION "
+            " artists.id = tracks.artist WHERE track_2_track.track1 = ? UNION "
             "SELECT track_2_track.match, artists.name, tracks.title"
             " FROM track_2_track INNER JOIN tracks ON"
             " track_2_track.track1 = tracks.id INNER JOIN artists ON"
             " artists.id = tracks.artist WHERE track_2_track.track2"
             " = ? ORDER BY track_2_track.match DESC;",
-            (track_id,))
+            (track_id, track_id))
         command = self.get_sql_command(sql, priority=0)
         return command.result_queue.get()
 
@@ -667,7 +667,7 @@ class Similarity(object):
             "SELECT match, name FROM artist_2_artist INNER JOIN"
             " artists ON artist_2_artist.artist1 = artists.id WHERE"
             " artist_2_artist.artist2 = ? ORDER BY match DESC;",
-            (artist_id,))
+            (artist_id, artist_id))
         command = self.get_sql_command(sql, priority=0)
         return command.result_queue.get()
 
