@@ -541,7 +541,8 @@ class Similarity(object):
         command = self.get_sql_command(sql, priority=priority)
         return command.result_queue.get()
 
-    def get_ordered_mirage_tracks(self, filename, excluded_filenames, number):
+    def get_ordered_mirage_tracks(self, filename, excluded_filenames, number,
+                                  cutoff=20000):
         """Get neighbours for track."""
         start_time = time()
         if not excluded_filenames:
@@ -596,7 +597,7 @@ class Similarity(object):
             best.append((dist, filename, 1))
         best.sort()
         print "%d tries in %f s" % (tries, time() - start_time)
-        return best
+        return [r for r in best if r[0] < cutoff]
 
     def get_requests(self):
         for user_id in self.present:
@@ -845,7 +846,8 @@ class Similarity(object):
                 return
             self.add_track(filename, scms, priority=priority - 1)
 
-    def get_similar_tracks_from_lastfm(self, artist_name, title, track_id):
+    def get_similar_tracks_from_lastfm(self, artist_name, title, track_id,
+                                       cutoff=0):
         """Get similar tracks."""
         try:
             lastfm_track = self.network.get_track(artist_name, title)
@@ -857,6 +859,8 @@ class Similarity(object):
         try:
             for similar in lastfm_track.get_similar():
                 match = int(100 * similar.match)
+                if match <= cutoff:
+                    continue
                 item = similar.item
                 similar_artist = item.artist.get_name()
                 similar_title = item.title
@@ -871,7 +875,8 @@ class Similarity(object):
         self.update_similar_tracks(tracks_to_update)
         return results
 
-    def get_similar_artists_from_lastfm(self, artist_name, artist_id):
+    def get_similar_artists_from_lastfm(self, artist_name, artist_id,
+                                        cutoff=0):
         """Get similar artists from lastfm."""
         try:
             lastfm_artist = self.network.get_artist(artist_name)
@@ -883,6 +888,8 @@ class Similarity(object):
         try:
             for similar in lastfm_artist.get_similar():
                 match = int(100 * similar.match)
+                if match <= cutoff:
+                    continue
                 name = similar.item.get_name()
                 artists_to_update.setdefault(artist_id, []).append({
                     'score': match,
