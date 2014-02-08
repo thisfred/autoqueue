@@ -435,8 +435,6 @@ class Similarity(object):
 
     @property
     def present(self):
-        # cutoff = datetime.utcnow() - FIFTEEN_MINUTES
-        # return set([u for u, v in self.last_seen.items() if v < cutoff])
         return set(self.users.keys())
 
     def execute_sql(self, sql=None, priority=1, command=None):
@@ -597,6 +595,8 @@ class Similarity(object):
             best.append((dist, filename, 1))
         best.sort()
         print "%d tries in %f s" % (tries, time() - start_time)
+        if best:
+            cutoff = min(cutoff, best[0][0] * 2)
         return [r for r in best if r[0] < cutoff]
 
     def get_requests(self):
@@ -775,7 +775,7 @@ class Similarity(object):
         self.execute_sql((
             'CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER,'
             ' artist2 INTEGER, match INTEGER, UNIQUE(artist1, artist2));',),
-                         priority=0)
+            priority=0)
         self.execute_sql((
             'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, artist'
             ' INTEGER, title VARCHAR(100), updated DATE, '
@@ -786,7 +786,7 @@ class Similarity(object):
         self.execute_sql((
             'CREATE TABLE IF NOT EXISTS mirage (trackid INTEGER PRIMARY KEY, '
             'filename VARCHAR(300), scms BLOB, UNIQUE(filename));',),
-                         priority=0)
+            priority=0)
         self.execute_sql((
             "CREATE INDEX IF NOT EXISTS a2aa1x ON artist_2_artist "
             "(artist1);",), priority=0)
@@ -806,9 +806,9 @@ class Similarity(object):
     def delete_orphan_artist(self, artist):
         """Delete artists that have no tracks."""
         sql = (
-                'SELECT artists.id FROM artists WHERE artists.name = ? AND '
-                'artists.id NOT IN (SELECT tracks.artist from tracks);',
-                (artist,))
+            'SELECT artists.id FROM artists WHERE artists.name = ? AND '
+            'artists.id NOT IN (SELECT tracks.artist from tracks);',
+            (artist,))
         command = self.get_sql_command(sql, priority=10)
         for row in command.result_queue.get():
             artist_id = row[0]
