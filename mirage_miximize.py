@@ -8,6 +8,14 @@ NO_OP = lambda *a, **kw: None
 
 DBusGMainLoop(set_as_default=True)
 
+# for backwards compatibility with QL revisions prior to 0d807ac2a1f9
+try:
+    from quodlibet import app
+    NEW_QL = True
+except ImportError:
+    from quodlibet.widgets import main
+    NEW_QL = False
+
 
 def get_title(song):
     """Return lowercase UNICODE title of song."""
@@ -30,10 +38,9 @@ class MirageMiximizePlugin(SongsMenuPlugin):
 
     def player_enqueue(self, indices):
         """Put the song at the end of the queue."""
-        if widgets.main is None:
-            reload(widgets)
-        widgets.main.playlist.enqueue(
-            (self._songs[index] for index in indices))
+        playlist = NEW_QL and app.window.playlist or main.playlist
+        playlist.enqueue(
+            [self._songs[index] for index in indices])
         self._songs = None
 
     def plugin_songs(self, songs):
@@ -45,6 +52,7 @@ class MirageMiximizePlugin(SongsMenuPlugin):
             follow_name_owner_changes=True)
         similarity = dbus.Interface(
             sim, dbus_interface='org.autoqueue.SimilarityInterface')
+        print [song['~filename'] for song in songs]
         similarity.miximize(
             [song['~filename'] for song in songs],
             reply_handler=self.player_enqueue, error_handler=NO_OP)

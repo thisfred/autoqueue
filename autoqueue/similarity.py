@@ -839,7 +839,7 @@ class Similarity(object):
         else:
             self.log("no mirage data found for %s, analyzing track" % filename)
             try:
-                scms = self.mir.analyze(filename.encode('utf-8'))
+                scms = self.mir.analyze(filename)
             except (MatrixDimensionMismatchException, MfccFailedException,
                     IndexError), e:
                 self.log(repr(e))

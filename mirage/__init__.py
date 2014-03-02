@@ -462,7 +462,7 @@ class Mir(object):
 
     def analyze(self, filename):
         """Analyze file."""
-        stftdata = self.ad.decode(filename)
+        stftdata = self.ad.decode(filename.encode('utf-8'))
         mfccdata = self.mfcc.apply(stftdata)
         scms = scms_factory(mfccdata)
         return scms
