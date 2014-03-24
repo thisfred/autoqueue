@@ -31,6 +31,11 @@ from dbus.mainloop.glib import DBusGMainLoop
 from collections import deque
 from datetime import date, time, datetime, timedelta
 from cPickle import Pickler, Unpickler
+from autoqueue.search import (
+    get_season_search, get_negative_season_searches, get_day_search,
+    get_negative_day_searches, get_time_of_day_search,
+    get_negative_time_of_day_searches, Weekend, get_searches, get_month_search,
+    get_negative_month_searches, HOLIDAYS, get_birthday_searches)
 
 try:
     import pywapi
@@ -75,20 +80,6 @@ BANNED_ALBUMS = [
     'ep', 'greatest hits', 'demo', 'the best of', 'the very best of', 'live',
     'demos', 'self titled', 'untitled album', '[non-album tracks]', 'single',
     'singles', '7"', 'covers', 'album']
-
-SEASONS = ['winter', 'spring', 'summer', 'autumn']
-MONTHS = [
-    'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
-    'september', 'october', 'november', 'december']
-DAYS = [
-    'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
-    'sunday']
-TIMES = ['evening', 'morning', 'afternoon']
-EASTERS = [
-    datetime(2012, 4, 8), datetime(2013, 3, 31), datetime(2014, 4, 20),
-    datetime(2015, 4, 5), datetime(2016, 3, 27), datetime(2017, 4, 16),
-    datetime(2018, 4, 1), datetime(2019, 4, 21), datetime(2020, 4, 12),
-    datetime(2021, 4, 4), datetime(2022, 4, 17)]
 
 
 def escape(the_string):
@@ -524,228 +515,60 @@ class AutoQueueBase(object):
     def eoq(self):
         return datetime.now() + timedelta(0, self.player_get_queue_length())
 
-    def exclusive_search(self, term, terms, alt=None):
-        """Return a search that searches for term but not the other terms."""
-        search = []
-        not_search = []
-        not_terms = [t for t in terms if not t == term]
-        for nterm in not_terms:
-            not_search.extend(
-                ['!grouping=/^%ss?$/' % nterm, '!title=/\\b%ss?\\b/' % nterm])
-        if alt:
-            search.extend([
-                'grouping=/^%ss?$/' % term, 'title=/\\b%ss?\\b/' % term,
-                'grouping=/^%ss?$/' % alt, 'title=/\\b%ss?\\b/' % alt])
-        else:
-            search.extend([
-                'grouping=/^%ss?$/' % term, 'title=/\\b%ss?\\b/' % term])
-        return search, not_search
-
     def get_context_restrictions(self):
         """Get context filters."""
         eoq = self.eoq
-        hour = eoq.hour
         year = eoq.year
-        mar_21 = datetime(year, 3, 21)
-        jun_21 = datetime(year, 6, 21)
-        sep_21 = datetime(year, 9, 21)
-        dec_21 = datetime(year, 12, 21)
         month = eoq.month
-        weekday = eoq.isoweekday()
-        day_name = DAYS[weekday - 1]
-        day = eoq.day
+        day_of_week = eoq.isoweekday()
+        day_of_month = eoq.day
         filters = [
             'grouping="%d"' % year,
-            'grouping="%d-%02d-%02d"' % (year, month, day),
-            'grouping="%02d-%02d"' % (month, day)]
+            'grouping="%d-%02d-%02d"' % (year, month, day_of_month),
+            'grouping="%02d-%02d"' % (month, day_of_month)]
+        not_filters = []
         if month == 12:
             # December is for retrospection
             filters.append('~year=%d' % year)
-        not_filters = []
-        search, not_search = self.exclusive_search(day_name, DAYS)
-        filters.extend(search)
-        not_filters.extend(not_search)
-        month_name = MONTHS[month - 1]
-        search, not_search = self.exclusive_search(month_name, MONTHS)
-        filters.extend(search)
-        not_filters.extend(not_search)
-        if weekday >= 5:
-            filters.extend(
-                ['grouping=/^weekends?$/', 'title=/\\bweekends?\\b/'])
-        if eoq <= mar_21 or eoq >= dec_21:
-            if self.southern_hemisphere:
-                season = 'summer'
-            else:
-                season = 'winter'
-            search, not_search = self.exclusive_search(season, SEASONS)
-            filters.extend(search)
-            not_filters.extend(not_search)
-        if eoq >= mar_21 and eoq <= jun_21:
-            if self.southern_hemisphere:
-                season = 'autumn'
-            else:
-                season = 'spring'
-            search, not_search = self.exclusive_search(season, SEASONS)
-            filters.extend(search)
-            not_filters.extend(not_search)
-            filters.extend(search)
-            not_filters.extend(not_search)
-        if eoq >= jun_21 and eoq <= sep_21:
-            if self.southern_hemisphere:
-                season = 'winter'
-            else:
-                season = 'summer'
-            search, not_search = self.exclusive_search(season, SEASONS)
-            filters.extend(search)
-            not_filters.extend(not_search)
-        if eoq >= sep_21 and eoq <= dec_21:
-            if self.southern_hemisphere:
-                season = 'spring'
-            else:
-                season = 'autumn'
-            search, not_search = self.exclusive_search(season, SEASONS)
-            filters.extend(search)
-            not_filters.extend(not_search)
-        weather_tags = []
-        if self.location:
-            city, state_country = self.location.split(',')
-            city = city.strip().lower()
-            state_country = state_country.strip().lower()
-            filters.extend([
-                'grouping=/^(.*:)?%s$/' % city, 'title=/\\b%s\\b/' % city,
-                'grouping=/^(.*:)?%s$/' % state_country, 'title=/\\b%s\\b/' %
-                state_country])
-            if WEATHER:
-                weather_tags = self.get_weather_tags()
-                for condition in weather_tags:
-                    if condition:
-                        filters.extend([
-                            "grouping=/'%s'/" % condition,
-                            'title=/\\b%s\\b/' % condition])
-        if hour <= 6 or hour >= 18:
-            search, not_search = self.exclusive_search('evening', TIMES)
-            filters.extend(search)
-            not_filters.extend(not_search)
-        if hour >= 6 and hour < 12:
-            search, not_search = self.exclusive_search('morning', TIMES)
-            filters.extend(search)
-            not_filters.extend(not_search)
-        if hour >= 12 and hour < 18:
-            search, not_search = self.exclusive_search('afternoon', TIMES)
-            filters.extend(search)
-            not_filters.extend(not_search)
-        if month == 12 and day >= 20 and day <= 29:
-            filters.extend([
-                'grouping="christmas"', 'title=/\\bchristmas\\b/'])
+        day_search = get_day_search(eoq)
+        filters.extend(day_search.get_search_expressions())
+        for negative in get_negative_day_searches(eoq, day_search):
+            not_filters.extend(
+                negative.get_negative_search_expressions())
+        month_search = get_month_search(eoq)
+        filters.extend(month_search.get_search_expressions())
+        for negative in get_negative_month_searches(eoq, month_search):
+            not_filters.extend(
+                negative.get_negative_search_expressions())
+        if day_of_week >= 5:
+            filters.extend(Weekend.get_search_expressions())
         else:
-            not_filters.extend([
-                '!grouping="christmas"', '!title=/\\bchristmas\\b/'])
-        if (month == 12 and day >= 26) or month == 1 and day == 1:
-            filters.extend([
-                'grouping="kwanzaa"', 'title=/\\bkwanzaa\\b/'])
-        if (month == 12 and day >= 27) or (month == 1 and day <= 7):
-            filters.extend([
-                'grouping="new year"', 'title="/\\bnew years?\\b/"'])
-        if (month == 10 and day >= 25) or (month == 11 and day < 2):
-            filters.extend([
-                'grouping="halloween"', 'title=/\\bhalloween\\b/',
-                'grouping="hallowe\'en"', 'title=/\\bhallowe\\\'en\\b/',
-                'grouping=all hallow\'s', 'title=/\\ball hallow\\\'s\\b/',
-                'title=/\\bhaunt/', 'title=ghost', 'grouping="monsters"',
-                'grouping="horror"', 'title=/\\bdevil/', 'title=/\\bwitch/',
-                'title=/\\bpumkin/', 'title=/\\bbone/', 'title=/\\bskeleton/',
-                'grouping="ghosts"', 'title=/\\bzombi/', 'title=/\\bwerewol/',
-                'grouping=/\\bvampir/', 'title=/\\bmonster/',
-                'title=/\\bevil/', 'title=/\\bhorror/', 'title=/\\bscare/',
-                'title=/\\bscary/', 'title=/\\bfear/', 'title=/\\bfright/',
-                'title=/\\bblood/', 'title=/\\bbat/', 'title=/\\bdracula/',
-                'title=/\\bspider/', 'title=/\\bcostume/', 'title=/\\bsatan/',
-                'title=/\\bspook/', 'title=/\\bhell\\b/', 'title=/\\bundead/'])
-        for easter in EASTERS:
-            delta = eoq - easter
-            days_after_easter = delta.days
-            if abs(days_after_easter) < 5:
-                filters.extend([
-                    'grouping="easter"', 'title=/\\beaster\\b/'])
-            if days_after_easter == -47:
-                filters.extend([
-                    'grouping="shrove tuesday"',
-                    'grouping="mardi gras"', 'title=/\\bmardi gras\\b/'])
-            if days_after_easter == -46:
-                filters.extend(['grouping="ash wednesday"'])
-            if days_after_easter == -7:
-                filters.extend(['grouping="palm sunday"'])
-            if days_after_easter == -3:
-                filters.extend(['grouping="maundy thursday"'])
-            if days_after_easter == -2:
-                filters.extend(['grouping="good friday"'])
-            if days_after_easter == 39:
-                filters.extend([
-                    'grouping=ascension', 'title=/\\bascension\\b/'])
-            if days_after_easter == 49:
-                filters.extend([
-                    'grouping=pentecost', 'title=/\\bpentecost\\b/'])
-            if days_after_easter == 50:
-                filters.extend(['grouping="whit monday"'])
-            if days_after_easter == 56:
-                filters.extend([
-                    'grouping=all saints', 'title=/\\ball saints\\b/'])
-        if month == 11 and day == 11:
-            filters.extend([
-                'grouping="armistice day"', 'title=/\\barmistice day\\b/',
-                'grouping="veterans day"', 'title=/\\bveterans?\\b/',
-                'grouping="veterans"'])
-        elif month == 8 and day == 15:
-            filters.extend([
-                'grouping=assumption', 'title=/\\bassumption\\b/'])
-        elif month == 7 and day == 4:
-            filters.extend([
-                'grouping="independence"', 'title=/\\bindependence\\b/'])
-        elif month == 2 and day == 2:
-            filters.extend([
-                'grouping="groundhog day"', 'title=/\\bgroundhog day\\b/'])
-        elif month == 2 and day == 14:
-            filters.extend([
-                'grouping=hearts', 'title=heart',
-                'grouping=love', 'title=love',
-                'grouping=valentine', 'title=valentine'])
-        elif month == 4 and day == 1:
-            filters.extend([
-                'title=prank', 'grouping=fools', 'title=fool',
-                'grouping=jokes', 'title=joke', 'grouping=pranks',
-                'grouping=hoaxes', 'title=hoax'])
-        elif month == 5 and day == 5:
-            filters.extend([
-                'grouping="cinco de mayo"', 'title=/\\bcinco de mayo\\b/',
-                'grouping="mexico"', 'title=/\\bmexico\\b/'])
-        elif (month == 6 or month == 12) and day == 21:
-            filters.extend([
-                'grouping=/solstices?/', 'title=/\\bsolstices?\\b/'])
-        elif month == 9 and day == 11:
-            filters.extend(['grouping="09-11"', 'title="9/11"'])
-        if day == 13 and day_name == 'friday':
-            filters.extend([
-                'grouping=superstition', 'grouping=bad luck',
-                'title=superstition', 'title=bad luck', 'grouping=horror'])
-
-        if ':' in self.birthdays:
-            for name_date in self.birthdays.split(','):
-                name, bdate = name_date.strip().split(':')
-                bdate = bdate.strip()
-                if '-' in bdate:
-                    bdate = [int(i) for i in bdate.split('-')]
-                else:
-                    bdate = [int(i) for i in bdate.split('/')]
-                if month == bdate[-2] and day == bdate[-1]:
-                    if len(bdate) == 3:
-                        filters.extend([
-                            'grouping=%s' % bdate[0],
-                            'grouping="%s"' % (year - bdate[0]),
-                            '~year=%d' % bdate[0]])
-                    filters.extend([
-                        'grouping="birthdays"', 'title=/\\bbirthdays?\\b/',
-                        'grouping="%s"' % name.strip(), 'title=/\\b%s\\b/' %
-                        name.strip()])
+            not_filters.extend(Weekend.get_negative_search_expressions())
+        season_search = get_season_search(eoq, self.southern_hemisphere)
+        filters.extend(season_search.get_search_expressions())
+        for negative in get_negative_season_searches(
+                eoq, season_search, self.southern_hemisphere):
+            not_filters.extend(negative.get_negative_search_expressions())
+        if self.location:
+            locations = [l.strip().lower() for l in self.location.split(',')]
+            for location_search in get_searches(locations, multiples=False):
+                filters.extend(location_search.get_search_expressions())
+        if WEATHER:
+            for weather_search in get_searches(self.get_weather_tags(),
+                                               multiples=False):
+                filters.extend(weather_search.get_search_expressions())
+        time_of_day_search = get_time_of_day_search(eoq)
+        filters.extend(time_of_day_search.get_search_expressions())
+        for negative in get_negative_time_of_day_searches(
+                eoq, time_of_day_search):
+            not_filters.extend(
+                negative.get_negative_search_expressions())
+        for holiday in HOLIDAYS:
+            filters.extend(holiday.get_search_expressions_for_date(eoq))
+            not_filters.extend(
+                holiday.get_negative_search_expressions_for_date(eoq))
+        for birthday in get_birthday_searches(self.birthdays, eoq):
+            filters.extend(birthday.get_search_expressions_for_date(eoq))
         if self.geohash:
             filters.append('grouping=/^geohash:%s/' % (self.geohash[:2],))
         if self.extra_context:
@@ -756,8 +579,7 @@ class AutoQueueBase(object):
             filters.append('grouping=/^(.*:)?%s$/' % tag)
         filters.extend(
             ['artist="%s"' % escape(a) for a in self.nearby_artists])
-        context_restrictions = '&(|(%s),&(%s))' % (
-            ','.join(filters), ','.join(not_filters))
+        context_restrictions = '|(%s)' % (','.join(filters),)
         return context_restrictions
 
     @staticmethod
@@ -809,8 +631,7 @@ class AutoQueueBase(object):
             if eoq > sunrise and eoq < sunset:
                 conditions.extend(['daylight'])
             else:
-                conditions.extend([
-                    'dark', 'darkness', 'night', 'nocturn[a-z]*'])
+                conditions.extend(['dark', 'darkness'])
         cs = weather.get(
             'condition', {}).get('text', '').lower().strip().split('/')
         for condition in cs:
