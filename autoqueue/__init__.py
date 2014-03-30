@@ -1,7 +1,6 @@
 """AutoQueue: an automatic queueing plugin library.
-version 0.3
 
-Copyright 2007-2012 Eric Casteleijn <thisfred@gmail.com>,
+Copyright 2007-2014 Eric Casteleijn <thisfred@gmail.com>,
                     Daniel Nouri <daniel.nouri@gmail.com>
                     Jasper OpdeCoul <jasper.opdecoul@gmail.com>
                     Graham White
@@ -31,11 +30,7 @@ from dbus.mainloop.glib import DBusGMainLoop
 from collections import deque
 from datetime import date, time, datetime, timedelta
 from cPickle import Pickler, Unpickler
-from autoqueue.search import (
-    get_season_search, get_negative_season_searches, get_day_search,
-    get_negative_day_searches, get_time_of_day_search,
-    get_negative_time_of_day_searches, Weekend, get_searches, get_month_search,
-    get_negative_month_searches, HOLIDAYS, get_birthday_searches)
+from autoqueue.context import Context
 
 try:
     import pywapi
@@ -84,6 +79,7 @@ BANNED_ALBUMS = [
 
 def escape(the_string):
     """Double escape quotes."""
+    # TODO: move to utils
     return the_string.replace('"', '\\"').replace("'", "\\'")
 
 
@@ -121,21 +117,6 @@ def get_artists_playing_nearby(location_geohash, location):
     except Exception, e:
         print e
     return nearby_artists
-
-
-def get_stripped_tags(last_song):
-    """Return a set of stripped tags."""
-    tags = last_song.get_tags()
-    if not tags:
-        return []
-    tagset = set([])
-    for tag in tags:
-        if tag.startswith("artist:") or tag.startswith("album:"):
-            stripped = ":".join(tag.split(":")[1:])
-        else:
-            stripped = tag
-        tagset.add(stripped)
-    return tagset
 
 
 class SongBase(object):
@@ -201,6 +182,14 @@ class SongBase(object):
     def get_playcount(self):
         """Return the playcount of the song."""
 
+    @abstractmethod
+    def get_date_string(self):
+        """Return the playcount of the song."""
+
+    @abstractmethod
+    def get_year(self):
+        """Return the playcount of the song."""
+
     def get_play_frequency(self):
         """Return the play frequency of the song (plays / day)."""
         count = self.get_playcount()
@@ -215,54 +204,49 @@ class SongBase(object):
         days = float(max((now - datetime.fromtimestamp(last_started)).days, 1))
         return 1.0 / days
 
+    def get_stripped_tags(self):
+        """Return a set of stripped tags."""
+        tags = self.get_tags()
+        if not tags:
+            return []
+        tagset = set([])
+        for tag in tags:
+            if tag.startswith("artist:") or tag.startswith("album:"):
+                stripped = ":".join(tag.split(":")[1:])
+            else:
+                stripped = tag
+            tagset.add(stripped)
+        return tagset
 
-def geo_score(song, tags):
-    if not tags:
-        return 0
-    song_tags = get_stripped_tags(song)
-    if not song_tags:
-        return 0
-    geohashes = [t.split(':')[1] for t in tags if t.startswith('geohash:')]
-    if GEOHASH:
-        for h in geohashes[:]:
-            geohashes.extend(geohash.neighbors(h))
-    other_geohashes = [
-        t.split(':')[1] for t in song_tags if t.startswith('geohash:')]
-    if GEOHASH:
-        for h in other_geohashes[:]:
-            other_geohashes.extend(geohash.neighbors(h))
-    if not (geohashes and other_geohashes):
-        return 0
-    longest_common = 0
-    for ghash in geohashes:
-        for other in other_geohashes:
-            if ghash[0] != other[0]:
-                continue
-            shortest = min(len(ghash), len(other))
-            i = 0
-            while (i < shortest and ghash[i] == other[i]):
-                i += 1
-            if i > longest_common:
-                longest_common = i
-    return 1 - (1.0 / (2 ** longest_common))
+    def get_non_geo_tags(self):
+        """Get all the song tags unrelated to geotagging."""
+        song_tags = self.get_stripped_tags()
+        return [
+            t for t in song_tags if not t.startswith('geohash:')
+            and not t == 'geotagged']
+
+    def get_geohashes(self):
+        """Get all the geohashes from this song."""
+        song_tags = self.get_stripped_tags()
+        geohashes = [
+            t.split(':')[1] for t in song_tags if t.startswith('geohash:')]
+        if GEOHASH:
+            for h in geohashes[:]:
+                geohashes.extend(geohash.neighbors(h))
+        return geohashes
 
 
 def tag_score(song, tags):
     """Calculate similarity score by tags."""
     if not tags:
         return 0
-    song_tags = get_stripped_tags(song)
+    song_tags = song.get_non_geo_tags()
     if not song_tags:
         return 0
-    ng_tags = {
-        t for t in tags if not (t.startswith('geohash:') or t == 'geotagged')}
-    ng_song_tags = {
-        t for t in song_tags if not
-        (t.startswith('geohash:') or t == 'geotagged')}
-    if ng_song_tags or ng_song_tags:
+    if song_tags or tags:
         score = (
-            len(ng_song_tags & ng_tags) /
-            float(len(ng_song_tags | ng_tags) + 1))
+            len(song_tags & tags) /
+            float(len(song_tags | tags) + 1))
         return score
     return 0
 
@@ -292,7 +276,6 @@ class AutoQueueBase(object):
         self.get_blocked_artists_pickle()
         self.last_songs = []
         self.last_song = None
-        self.found = None
         self.location = ''
         self.geohash = ''
         self.nearby_artists = []
@@ -515,73 +498,6 @@ class AutoQueueBase(object):
     def eoq(self):
         return datetime.now() + timedelta(0, self.player_get_queue_length())
 
-    def get_context_restrictions(self):
-        """Get context filters."""
-        eoq = self.eoq
-        year = eoq.year
-        month = eoq.month
-        day_of_week = eoq.isoweekday()
-        day_of_month = eoq.day
-        filters = [
-            'grouping="%d"' % year,
-            'grouping="%d-%02d-%02d"' % (year, month, day_of_month),
-            'grouping="%02d-%02d"' % (month, day_of_month)]
-        not_filters = []
-        if month == 12:
-            # December is for retrospection
-            filters.append('~year=%d' % year)
-        day_search = get_day_search(eoq)
-        filters.extend(day_search.get_search_expressions())
-        for negative in get_negative_day_searches(eoq, day_search):
-            not_filters.extend(
-                negative.get_negative_search_expressions())
-        month_search = get_month_search(eoq)
-        filters.extend(month_search.get_search_expressions())
-        for negative in get_negative_month_searches(eoq, month_search):
-            not_filters.extend(
-                negative.get_negative_search_expressions())
-        if day_of_week >= 5:
-            filters.extend(Weekend.get_search_expressions())
-        else:
-            not_filters.extend(Weekend.get_negative_search_expressions())
-        season_search = get_season_search(eoq, self.southern_hemisphere)
-        filters.extend(season_search.get_search_expressions())
-        for negative in get_negative_season_searches(
-                eoq, season_search, self.southern_hemisphere):
-            not_filters.extend(negative.get_negative_search_expressions())
-        if self.location:
-            locations = [l.strip().lower() for l in self.location.split(',')]
-            for location_search in get_searches(locations, multiples=False):
-                filters.extend(location_search.get_search_expressions())
-        if WEATHER:
-            for weather_search in get_searches(self.get_weather_tags(),
-                                               multiples=False):
-                filters.extend(weather_search.get_search_expressions())
-        time_of_day_search = get_time_of_day_search(eoq)
-        filters.extend(time_of_day_search.get_search_expressions())
-        for negative in get_negative_time_of_day_searches(
-                eoq, time_of_day_search):
-            not_filters.extend(
-                negative.get_negative_search_expressions())
-        for holiday in HOLIDAYS:
-            filters.extend(holiday.get_search_expressions_for_date(eoq))
-            not_filters.extend(
-                holiday.get_negative_search_expressions_for_date(eoq))
-        for birthday in get_birthday_searches(self.birthdays, eoq):
-            filters.extend(birthday.get_search_expressions_for_date(eoq))
-        if self.geohash:
-            filters.append('grouping=/^geohash:%s/' % (self.geohash[:2],))
-        if self.extra_context:
-            filters.append(self.extra_context)
-        last_song = self.last_song
-        for tag in [t for t in get_stripped_tags(last_song) if not t ==
-                    'geotagged']:
-            filters.append('grouping=/^(.*:)?%s$/' % tag)
-        filters.extend(
-            ['artist="%s"' % escape(a) for a in self.nearby_artists])
-        context_restrictions = '|(%s)' % (','.join(filters),)
-        return context_restrictions
-
     @staticmethod
     def string_to_datetime(time_string):
         time_string, ampm = time_string.split()
@@ -602,6 +518,8 @@ class AutoQueueBase(object):
 
     def get_weather_tags(self):
         now = datetime.now()
+        if not WEATHER:
+            return []
         if self.cached_weather_tags and (now < self.cached_weather_tags_at +
                                          FIVE_MINUTES):
             return self.cached_weather_tags
@@ -622,12 +540,12 @@ class AutoQueueBase(object):
             sunset = self.string_to_datetime(sunset)
             if abs(sunrise - eoq) < THIRTY_MINUTES:
                 conditions.extend([
-                    'sunrises?', 'dawns?', 'aurora', 'break of day', 'dawning',
+                    'sunrise', 'dawn', 'aurora', 'break of day', 'dawning',
                     'daybreak', 'sunup'])
             elif abs(sunset - eoq) < THIRTY_MINUTES:
                 conditions.extend([
-                    'sunsets?', 'dusks?', 'gloaming', 'nightfalls?',
-                    'sundowns?', 'twilight', 'eventides?', 'close of day'])
+                    'sunset', 'dusk', 'gloaming', 'nightfall',
+                    'sundown', 'twilight', 'eventide', 'close of day'])
             if eoq > sunrise and eoq < sunset:
                 conditions.extend(['daylight'])
             else:
@@ -643,9 +561,9 @@ class AutoQueueBase(object):
                     conditions.append(unmodified)
                 if unmodified[-1] == 'y':
                     if unmodified[-2] == unmodified[-3]:
-                        conditions.append(unmodified[:-2] + 's?')
+                        conditions.append(unmodified[:-2])
                     else:
-                        conditions.append(unmodified[:-1] + 's?')
+                        conditions.append(unmodified[:-1])
                 if eoq > sunrise and eoq < sunset and condition == 'fair':
                     conditions.extend(['sun', 'sunny', 'sunlight'])
         temperature = weather.get('condition', {}).get('temp', '')
@@ -660,19 +578,19 @@ class AutoQueueBase(object):
                 temperature_tags.extend(['hot', 'heat'])
         speed = float(weather.get('wind', {}).get('speed', '0') or '0')
         if speed < 1:
-            wind_conditions = ['calms?']
+            wind_conditions = ['calm']
         elif speed <= 30:
-            wind_conditions = ['breezes?', 'breezy']
+            wind_conditions = ['breeze', 'breezy']
         elif speed <= 38:
-            wind_conditions = ['winds?', 'windy']
+            wind_conditions = ['wind', 'windy']
         elif speed <= 54:
-            wind_conditions = ['winds?', 'windy', 'gales?']
+            wind_conditions = ['wind', 'windy', 'gale']
         elif speed <= 72:
             wind_conditions = [
-                'winds?', 'windy', 'storms?', 'stormy']
+                'wind', 'windy', 'storm', 'stormy']
         else:
             wind_conditions = [
-                'winds?', 'windy', 'storms?', 'hurricanes?']
+                'wind', 'windy', 'storm', 'hurricane']
         humidity = float(
             weather.get('atmosphere', {}).get('humidity', '0') or '0')
         if humidity > 65:
@@ -700,68 +618,6 @@ class AutoQueueBase(object):
             return self.player_construct_tag_search(
                 tags, restrictions)
 
-    def search_and_filter(self, artist=None, title=None, filename=None,
-                          tags=None, context_filter=False):
-        """Perform a search and filter the results."""
-        restrictions = self.restrictions
-        if context_filter:
-            context_restrictions = self.get_context_restrictions()
-            if restrictions:
-                restrictions = '&(%s,%s)' % (
-                    restrictions, context_restrictions)
-            else:
-                restrictions = context_restrictions
-        search = self.construct_search(
-            artist=artist, title=title, filename=filename, tags=tags,
-            restrictions=restrictions)
-        songs = self.player_search(search)
-        if not songs:
-            if not restrictions:
-                if filename:
-                    if not isinstance(filename, unicode):
-                        try:
-                            filename = filename.decode('utf-8')
-                        except UnicodeDecodeError:
-                            self.log('failed to decode filename %r' % filename)
-                    if self.has_mirage and self.use_mirage:
-                        self.log('Remove similarity for %s' % filename)
-                        self.similarity.remove_track_by_filename(
-                            filename, reply_handler=NO_OP,
-                            error_handler=NO_OP, timeout=TIMEOUT)
-                elif (artist and title):
-                    self.log('Remove %s - %s' % (artist, title))
-                    self.similarity.remove_track(
-                        artist, title, reply_handler=NO_OP,
-                        error_handler=NO_OP, timeout=TIMEOUT)
-                elif artist:
-                    self.log('Remove %s' % artist)
-                    self.similarity.remove_artist(
-                        artist, reply_handler=NO_OP,
-                        error_handler=NO_OP, timeout=TIMEOUT)
-            return
-        while songs:
-            tag_set = get_stripped_tags(self.last_song)
-            song = random.choice(songs)
-            songs.remove(song)
-            if not self.disallowed(song):
-                rating = song.get_rating()
-                if rating is NotImplemented:
-                    rating = THRESHOLD
-                frequency = song.get_play_frequency()
-                score = tag_score(song, tag_set)
-                if score:
-                    rating += (1 - rating) * score
-                score2 = geo_score(song, tag_set)
-                if score2:
-                    rating += (1 - rating) * score2
-                if frequency is NotImplemented:
-                    frequency = 0
-                self.log("score: %.5f, play frequency %.5f" % (
-                    rating, frequency))
-                if frequency > 0 and random.random() > rating - frequency:
-                    continue
-                return song
-
     def fill_queue(self):
         """Search for appropriate songs and put them in the queue."""
         if self.queue_needs_songs() or self.desired_queue_length == 0:
@@ -770,7 +626,6 @@ class AutoQueueBase(object):
     def queue_song(self):
         """Queue a single track."""
         self.running = True
-        self.found = None
         self.last_songs = self.get_last_songs()
         song = self.last_song = self.last_songs.pop()
         filename = song.get_filename()
@@ -837,12 +692,12 @@ class AutoQueueBase(object):
 
     def _mirage_reply_handler(self, results=None):
         """Exexute processing asynchronous."""
+        self.found = False
         if results:
             for _ in self.process_results([{'score': match,
                                             'filename': filename,
                                             'loved': l}
-                                           for match, filename, l in
-                                           results]):
+                                           for match, filename, l in results]):
                 yield
         if self.found:
             if not self.queue_needs_songs():
@@ -872,9 +727,10 @@ class AutoQueueBase(object):
 
     def _similar_tracks_handler(self, results=None):
         """Exexute processing asynchronous."""
-        for _ in self.process_results([
-                {'score': match, 'artist': artist, 'title': title} for
-                match, artist, title in results]):
+        self.found = False
+        for _ in self.process_results([{'score': match, 'artist': artist,
+                                        'title': title} for match, artist,
+                                       title in results], invert_scores=True):
             yield
         if self.found:
             if not self.queue_needs_songs():
@@ -896,10 +752,11 @@ class AutoQueueBase(object):
 
     def _similar_artists_handler(self, results=None):
         """Exexute processing asynchronous."""
+        self.found = False
         if results:
-            for _ in self.process_results([
-                    {'score': match, 'artist': artist} for
-                    match, artist in results]):
+            for _ in self.process_results([{'score': match, 'artist': artist}
+                                           for match, artist in results],
+                                          invert_scores=True):
                 yield
         if self.found:
             if not self.queue_needs_songs():
@@ -909,7 +766,8 @@ class AutoQueueBase(object):
             return
         if self.use_groupings:
             for _ in self.process_results(
-                    self.get_ordered_similar_by_tag(self.last_song)):
+                    self.get_ordered_similar_by_tag(self.last_song),
+                    invert_scores=True):
                 yield
             if self.found:
                 if not self.queue_needs_songs():
@@ -935,81 +793,130 @@ class AutoQueueBase(object):
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
 
-    def process_results(self, results):
-        """Process similarity results from dbus."""
-        if self.contextualize:
-            self.log("Context search.")
-            for result in self._process_results(results, context_filter=True):
-                yield
-            if self.found:
-                return
-            self.log("Context free search.")
-        for result in self._process_results(results):
+    def satisfies(self, song, criteria):
+        """Check whether the song satisfies any of the criteria."""
+        filename = criteria.get('filename')
+        if filename:
+            return filename == song.get_filename()
+        title = criteria.get('title')
+        artist = criteria.get('artist')
+        if title:
+            return song.get_title() == title and song.get_artist() == artist
+        if artist:
+            return artist in song.get_artists()
+        tags = criteria.get('tags')
+        song_tags = song.get_tags()
+        for tag in tags:
+            if (tag in song_tags
+                    or 'artist:%s' % (tag,) in song_tags
+                    or 'album:%s' % (tag,) in song_tags):
+                return True
+        return False
+
+    def search_database(self, results):
+        """Do a batch search for several songs at once."""
+        searches = [
+            self.construct_search(
+                artist=result.get('artist'), title=result.get('title'),
+                filename=result.get('filename'), tags=result.get('tags'))
+            for result in results]
+        for search in searches:
+            if self.restrictions:
+                search = '&(%s,%s)' % (search, self.restrictions)
+            for song in self.player_search(search):
+                for result in results:
+                    if self.satisfies(song, result):
+                        result['song'] = song
+                        yield
+
+    def adjust_scores(self, results, invert_scores):
+        """Adjust scores based on similarity with previous song and context."""
+        context = Context(
+            date=self.eoq,
+            location=self.location,
+            geohash=self.geohash,
+            birthdays=self.birthdays,
+            last_song=self.last_song,
+            nearby_artists=self.nearby_artists,
+            southern_hemisphere=self.southern_hemisphere,
+            weather_tags=self.get_weather_tags(),
+            extra_context=self.extra_context)
+        maximum_score = max(result['score'] for result in results) + 1
+        for result in results:
+            if invert_scores:
+                result['score'] = maximum_score - result['score']
+            context.adjust_score(result)
             yield
 
-    def _process_results(self, results, context_filter=False):
-        """Process and possibly filter results."""
-        for number, result in enumerate(results):
-            if not result:
-                continue
+    def process_results(self, results, invert_scores=False):
+        """Process results and queue best one(s)."""
+        for _ in self.search_database(results):
             yield
-            look_for = unicode(result.get('artist', ''))
-            if look_for:
-                title = unicode(result.get('title', ''))
-                if title:
-                    look_for += ' - ' + title
-            elif 'filename' in result:
-                look_for = unicode(result['filename'])
-            elif 'tags' in result:
-                look_for = result['tags']
-            else:
-                self.log(repr(result))
-                look_for = unicode(result)
-            self.log('%03d: %06d %s' % (
-                number + 1, result.get('score', 0), look_for))
-            artist = unicode(result.get('artist', ''))
-            if artist:
-                if artist in self.get_blocked_artists():
-                    continue
-            filename = unicode(result.get("filename", ''))
-            tags = result.get("tags")
-            if result.get('loved', 0):
-                # loved tracks are always in context
-                cf = False
-            else:
-                cf = context_filter
-            if filename:
-                self.found = self.search_and_filter(
-                    filename=filename, context_filter=cf)
-            elif tags:
-                self.found = self.search_and_filter(
-                    tags=tags, context_filter=cf)
-            else:
-                self.found = self.search_and_filter(
-                    artist=unicode(result.get("artist", '')),
-                    title=unicode(result.get("title", '')),
-                    context_filter=cf)
-            if self.found:
-                break
-        if self.found:
-            if self.whole_albums:
-                if self.found.get_tracknumber() == 1 and random.random() > .5:
-                    album = self.found.get_album()
-                    album_artist = self.found.get_album_artist()
-                    album_id = self.found.get_musicbrainz_albumid()
-                    if album and album.lower() not in BANNED_ALBUMS:
-                        search = self.player_construct_album_search(
-                            album=album, album_artist=album_artist,
-                            album_id=album_id)
-                        songs = sorted(
-                            [(song.get_discnumber(), song.get_tracknumber(),
-                              song)for song in self.player_search(search)])
-                        if songs and not any([self.disallowed(song[2]) for song
-                                              in songs]):
-                            for _, _, song in songs:
-                                self.player_enqueue(song)
-                            return
-            self.player_enqueue(self.found)
+        for _ in self.adjust_scores(results, invert_scores):
+            yield
+        for number, result in enumerate(sorted(results,
+                                               key=lambda x: x['score'])):
+            song = result['song']
+            self.log_lookup(number, result)
+            frequency = song.get_play_frequency()
+            if frequency is NotImplemented:
+                frequency = 1
+            rating = song.get_rating()
+            if rating is NotImplemented:
+                rating = THRESHOLD
+            self.log("score: %.5f, play frequency %.5f" % (rating, frequency))
+            if frequency > 0 and random.random() > rating - frequency:
+                continue
+
+            if self.maybe_enqueue_album(song):
+                self.found = True
+                return
+
+            self.player_enqueue(song)
+            self.found = True
+            return
+
+
+    def log_lookup(self, number, result):
+        look_for = unicode(result.get('artist', ''))
+        if look_for:
+            title = unicode(result.get('title', ''))
+            if title:
+                look_for += ' - ' + title
+        elif 'filename' in result:
+            look_for = unicode(result['filename'])
+        elif 'tags' in result:
+            look_for = result['tags']
+        else:
+            self.log(repr(result))
+            look_for = unicode(result)
+        self.log('%03d: %06d %s' % (
+            number + 1, result.get('score', 0), look_for))
+
+    def maybe_enqueue_album(self, song):
+        """Determine if a whole album should be queued, and do so."""
+        if (self.whole_albums and song.get_tracknumber() == 1
+                and random.random() > .5):
+            album = song.get_album()
+            album_artist = song.get_album_artist()
+            album_id = song.get_musicbrainz_albumid()
+            if album and album.lower() not in BANNED_ALBUMS:
+                return self.enqueue_album(album, album_artist, album_id)
+
+        return False
+
+    def enqueue_album(self, album, album_artist, album_id):
+        """Try to enqueue whole album."""
+        search = self.player_construct_album_search(
+            album=album, album_artist=album_artist, album_id=album_id)
+        songs = sorted(
+            [(song.get_discnumber(), song.get_tracknumber(),
+                song)for song in self.player_search(search)])
+        if songs and not any([self.disallowed(song[2]) for song in songs]):
+            for _, _, song in songs:
+                self.player_enqueue(song)
+            return True
+        return False
 
     def get_blocked_artists(self):
         """Get a list of blocked artists."""
@@ -1025,7 +932,7 @@ class AutoQueueBase(object):
 
     def get_ordered_similar_by_tag(self, last_song):
         """Get similar tracks by tag."""
-        tag_set = get_stripped_tags(last_song)
+        tag_set = set(last_song.get_non_geo_tags())
         search = self.construct_search(
             tags=list(tag_set), restrictions=self.restrictions)
         songs = sorted(

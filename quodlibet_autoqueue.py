@@ -196,6 +196,17 @@ class Song(SongBase):
         """Get the rating for the song."""
         return self.song("~#rating")
 
+    def get_date_string(self):
+        """Get the rating for the song."""
+        return self.song("date")
+
+    def get_year(self):
+        """Get the rating for the song."""
+        try:
+            return int(self.song("~year"))
+        except ValueError:
+            return None
+
 
 class AutoQueue(EventPlugin, AutoQueueBase):
     """The actual plugin class"""
