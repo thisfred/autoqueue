@@ -313,6 +313,7 @@ class DatePredicate(Predicate):
         new = cls()
         new.month = date.month
         new.day = date.day
+        new.build_searches()
         return new
 
     def applies_in_context(self, context):
@@ -324,8 +325,6 @@ class DatePredicate(Predicate):
         if self.month and self.day:
             self.tag_searches.append(
                 self.build_tag_search("%02d-%02d" % (self.month, self.day)))
-        else:
-            print repr(self), "missing month or day";
 
 
 class Winter(ExclusivePredicate):

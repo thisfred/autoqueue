@@ -240,7 +240,7 @@ def tag_score(song, tags):
     """Calculate similarity score by tags."""
     if not tags:
         return 0
-    song_tags = song.get_non_geo_tags()
+    song_tags = set(song.get_non_geo_tags())
     if not song_tags:
         return 0
     if song_tags or tags:
@@ -801,9 +801,11 @@ class AutoQueueBase(object):
         title = criteria.get('title')
         artist = criteria.get('artist')
         if title:
-            return song.get_title() == title and song.get_artist() == artist
+            return (
+                song.get_title().lower() == title.lower()
+                and song.get_artist().lower() == artist.lower())
         if artist:
-            return artist in song.get_artists()
+            return artist.lower() in [a.lower() for a in song.get_artists()]
         tags = criteria.get('tags')
         song_tags = song.get_tags()
         for tag in tags:
@@ -823,7 +825,8 @@ class AutoQueueBase(object):
         for search in searches:
             if self.restrictions:
                 search = '&(%s,%s)' % (search, self.restrictions)
-            for song in self.player_search(search):
+            songs = self.player_search(search)
+            for song in songs:
                 for result in results:
                     if self.satisfies(song, result):
                         result['song'] = song
@@ -842,7 +845,10 @@ class AutoQueueBase(object):
             weather_tags=self.get_weather_tags(),
             extra_context=self.extra_context)
         maximum_score = max(result['score'] for result in results) + 1
-        for result in results:
+        for result in results[:]:
+            if not 'song' in result:
+                results.remove(result)
+                continue
             if invert_scores:
                 result['score'] = maximum_score - result['score']
             context.adjust_score(result)
@@ -850,10 +856,14 @@ class AutoQueueBase(object):
 
     def process_results(self, results, invert_scores=False):
         """Process results and queue best one(s)."""
+        if not results:
+            return
         for _ in self.search_database(results):
             yield
         for _ in self.adjust_scores(results, invert_scores):
             yield
+        if not results:
+            return
         for number, result in enumerate(sorted(results,
                                                key=lambda x: x['score'])):
             song = result['song']
@@ -872,9 +882,10 @@ class AutoQueueBase(object):
                 self.found = True
                 return
 
-            self.player_enqueue(song)
-            self.found = True
-            return
+            if not self.disallowed(song):
+                self.player_enqueue(song)
+                self.found = True
+                return
 
 
     def log_lookup(self, number, result):
@@ -933,6 +944,8 @@ class AutoQueueBase(object):
     def get_ordered_similar_by_tag(self, last_song):
         """Get similar tracks by tag."""
         tag_set = set(last_song.get_non_geo_tags())
+        if not tag_set:
+            return []
         search = self.construct_search(
             tags=list(tag_set), restrictions=self.restrictions)
         songs = sorted(
