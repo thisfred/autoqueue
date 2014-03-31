@@ -738,7 +738,7 @@ class AutoQueueBase(object):
                 return
             self.queue_song()
             return
-        artists = self.last_song.get_artists()
+        artists = [a.encode('utf-8') for a in self.last_song.get_artists()]
         self.log('Get similar artists for %s' % artists)
         self.similarity.get_ordered_similar_artists(
             artists,

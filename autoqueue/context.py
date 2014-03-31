@@ -302,7 +302,7 @@ class ExclusivePredicate(Predicate):
         result['score'] *= 2
 
 
-class DatePredicate(Predicate):
+class DatePredicate(ExclusivePredicate):
 
     day = None
     month = None
@@ -327,7 +327,13 @@ class DatePredicate(Predicate):
                 self.build_tag_search("%02d-%02d" % (self.month, self.day)))
 
 
-class Winter(ExclusivePredicate):
+class SeasonPredicate(ExclusivePredicate):
+
+    def negative_score(self, result):
+        result['score'] *= (1 + 1 / 4.0)
+
+
+class Winter(SeasonPredicate):
 
     terms = ('winter', 'wintertime')
 
@@ -345,7 +351,7 @@ class Winter(ExclusivePredicate):
         return False
 
 
-class Spring(ExclusivePredicate):
+class Spring(SeasonPredicate):
 
     terms = ('spring', 'springtime')
 
@@ -363,7 +369,7 @@ class Spring(ExclusivePredicate):
         return False
 
 
-class Summer(ExclusivePredicate):
+class Summer(SeasonPredicate):
 
     terms = ('summer', 'summertime')
 
@@ -381,7 +387,7 @@ class Summer(ExclusivePredicate):
         return False
 
 
-class Autumn(ExclusivePredicate):
+class Autumn(SeasonPredicate):
 
     terms = ('autumn',)
     tag_only_terms = ('fall',)
@@ -797,7 +803,7 @@ class BirthdayPredicate(DatePredicate):
         super(BirthdayPredicate, self).__init__()
 
     def applies_to_song(self, song, exclusive):
-        if self.year == song.get_year():
+        if not exclusive and self.year == song.get_year():
             return True
         return super(BirthdayPredicate, self).applies_to_song(song, exclusive)
 
