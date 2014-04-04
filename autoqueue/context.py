@@ -551,7 +551,7 @@ class Night(ExclusivePredicate):
         return date.hour >= 21 or date.hour < 4
 
 
-class Evening(Predicate):
+class Evening(ExclusivePredicate):
 
     terms = ('evening',)
 
@@ -560,7 +560,7 @@ class Evening(Predicate):
         return date.hour >= 18 and date.hour < 21
 
 
-class Morning(Predicate):
+class Morning(ExclusivePredicate):
 
     terms = ('morning',)
 
@@ -569,7 +569,7 @@ class Morning(Predicate):
         return date.hour >= 4 and date.hour < 12
 
 
-class Afternoon(Predicate):
+class Afternoon(ExclusivePredicate):
 
     terms = ('afternoon',)
 
