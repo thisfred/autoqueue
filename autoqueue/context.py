@@ -14,10 +14,10 @@ EASTERS = {
     2021: datetime(2021, 4, 4),
     2022: datetime(2022, 4, 17)}
 
-mar_21 = lambda year: datetime(year, 3, 21)
-jun_21 = lambda year: datetime(year, 6, 21)
-sep_21 = lambda year: datetime(year, 9, 21)
-dec_21 = lambda year: datetime(year, 12, 21)
+MAR21 = lambda year: datetime(year, 3, 21)
+JUN21 = lambda year: datetime(year, 6, 21)
+SEP21 = lambda year: datetime(year, 9, 21)
+DEC21 = lambda year: datetime(year, 12, 21)
 
 
 def escape(the_string):
@@ -89,7 +89,7 @@ class Context(object):
 
     def add_birthday_predicates(self):
         for name_date in self.birthdays.split(','):
-            if not ':' in name_date:
+            if ':' not in name_date:
                 continue
             name, bdate = name_date.strip().split(':')
             bdate = bdate.strip()
@@ -126,7 +126,8 @@ class Context(object):
         self.predicates.extend(
             STATIC_PREDICATES + [
                 YearPredicate(self.date.year),
-                DatePredicate.from_date(self.date)])
+                DatePredicate.from_date(self.date),
+                TimePredicate.from_date(self.date)])
 
 
 class Predicate(object):
@@ -212,13 +213,6 @@ class Predicate(object):
         return cls.get_search_expressions(modifier='!')
 
 
-class StringPredicate(Predicate):
-
-    def __init__(self, term):
-        self.terms = (term,)
-        super(StringPredicate, self).__init__()
-
-
 class ArtistPredicate(Predicate):
 
     def __init__(self, artist):
@@ -302,6 +296,61 @@ class ExclusivePredicate(Predicate):
         result['score'] *= 2
 
 
+class StringPredicate(ExclusivePredicate):
+
+    def __init__(self, term):
+        self.terms = (term,)
+        super(StringPredicate, self).__init__()
+
+
+class TimePredicate(ExclusivePredicate):
+
+    hour = None
+    minute = None
+    time_tag = re.compile('^([0-9]{2}):([0-9]{2})$')
+
+    def applies_in_context(self, context):
+        return self._close_enough(context.date.hour, context.date.minute)
+
+    def _close_enough(self, hour, minute):
+        difference = (hour - self.hour) * 60
+        difference += (minute - self.minute)
+        return abs(difference) <= 30 or (24 * 60) - abs(difference) <= 30
+
+    def applies_to_song(self, song, exclusive):
+        song_tags = song.get_non_geo_tags()
+        for tag in song_tags:
+            match = self.time_tag.match(tag)
+            if match:
+                hour, minute = match.groups()
+                if self._close_enough(int(hour), int(minute)):
+                    return True
+
+        return super(TimePredicate, self).applies_to_song(song, exclusive)
+
+    @classmethod
+    def from_date(cls, date):
+        new = cls()
+        new.hour = date.hour
+        new.minute = date.minute
+        new.build_searches()
+        return new
+
+
+class Noon(TimePredicate):
+
+    hour = 12
+    minute = 0
+    terms = ('noon',)
+
+
+class Midnight(TimePredicate):
+
+    hour = 0
+    minute = 0
+    terms = ('midnight',)
+
+
 class DatePredicate(ExclusivePredicate):
 
     day = None
@@ -340,11 +389,11 @@ class Winter(SeasonPredicate):
     def applies_in_context(self, context):
         date = context.date
         southern_hemisphere = context.southern_hemisphere
-        if (date >= dec_21(date.year) or date <= mar_21(date.year)
+        if (date >= DEC21(date.year) or date <= MAR21(date.year)
                 and not southern_hemisphere):
             return True
 
-        if (date >= jun_21(date.year) and date <= sep_21(date.year)
+        if (date >= JUN21(date.year) and date <= SEP21(date.year)
                 and southern_hemisphere):
             return True
 
@@ -358,11 +407,11 @@ class Spring(SeasonPredicate):
     def applies_in_context(self, context):
         date = context.date
         southern_hemisphere = context.southern_hemisphere
-        if (date >= mar_21(date.year) and date <= jun_21(date.year)
+        if (date >= MAR21(date.year) and date <= JUN21(date.year)
                 and not southern_hemisphere):
             return True
 
-        if (date >= sep_21(date.year) and date <= dec_21(date.year)
+        if (date >= SEP21(date.year) and date <= DEC21(date.year)
                 and southern_hemisphere):
             return True
 
@@ -376,11 +425,11 @@ class Summer(SeasonPredicate):
     def applies_in_context(self, context):
         date = context.date
         southern_hemisphere = context.southern_hemisphere
-        if (date >= jun_21(date.year) and date <= sep_21(date.year)
+        if (date >= JUN21(date.year) and date <= SEP21(date.year)
                 and not southern_hemisphere):
             return True
 
-        if (date >= dec_21(date.year) or date <= mar_21(date.year)
+        if (date >= DEC21(date.year) or date <= MAR21(date.year)
                 and southern_hemisphere):
             return True
 
@@ -395,11 +444,11 @@ class Autumn(SeasonPredicate):
     def applies_in_context(self, context):
         date = context.date
         southern_hemisphere = context.southern_hemisphere
-        if (date >= sep_21(date.year) and date <= dec_21(date.year)
+        if (date >= SEP21(date.year) and date <= DEC21(date.year)
                 and not southern_hemisphere):
             return True
 
-        if (date >= mar_21(date.year) and date <= jun_21(date.year)
+        if (date >= MAR21(date.year) and date <= JUN21(date.year)
                 and southern_hemisphere):
             return True
 
@@ -818,4 +867,4 @@ STATIC_PREDICATES = [
     July(), August(), September(), October(), November(), December(),
     Monday(), Tuesday(), Wednesday(), Thursday(), Friday(), Saturday(),
     Sunday(), Weekend(), Spring(), Summer(), Autumn(), Winter(),
-    Evening(), Morning(), Afternoon(), Night()]
+    Evening(), Morning(), Afternoon(), Night(), Midnight(), Noon()]
