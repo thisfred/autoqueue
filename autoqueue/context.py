@@ -162,7 +162,7 @@ class Predicate(object):
         return re.compile(r'\b%s\b' % (self._build_search(term),))
 
     def build_tag_search(self, term):
-        return re.compile('^%s$' % (self._build_search(term),))
+        return re.compile('%s$' % (self._build_search(term),))
 
     def get_title_searches(self, exclusive):
         """Get title searches for this predicate."""
@@ -178,7 +178,7 @@ class Predicate(object):
         """Determine whether the predicate applies to the song."""
         title = song.get_title().lower()
         for search in self.get_title_searches(exclusive=exclusive):
-            if search.match(title):
+            if search.search(title):
                 return True
         for search in self.get_tag_searches(exclusive=exclusive):
             for tag in song.get_non_geo_tags():
