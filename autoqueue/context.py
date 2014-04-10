@@ -177,13 +177,15 @@ class Predicate(object):
     def applies_to_song(self, song, exclusive):
         """Determine whether the predicate applies to the song."""
         title = song.get_title().lower()
-        for search in self.get_title_searches(exclusive=exclusive):
-            if search.search(title):
-                return True
         for search in self.get_tag_searches(exclusive=exclusive):
             for tag in song.get_non_geo_tags():
                 if search.match(tag):
                     return True
+
+        for search in self.get_title_searches(exclusive=exclusive):
+            if search.search(title):
+                return True
+
         return False
 
     def applies_in_context(self, context):
