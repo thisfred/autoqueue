@@ -120,12 +120,13 @@ class Song(SongBase):
         artists.extend([remove_role(p) for p in performers])
         return list(set(artists))
 
-    def get_title(self):
+    def get_title(self, with_version=True):
         """return lowercase UNICODE title of song"""
-        version = self.song.comma("version").lower()
         title = self.song.comma("title").lower()
-        if version:
-            return "%s (%s)" % (title, version)
+        if with_version:
+            version = self.song.comma("version").lower()
+            if version:
+                return "%s (%s)" % (title, version)
         return title
 
     def get_album(self):

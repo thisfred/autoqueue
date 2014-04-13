@@ -139,7 +139,7 @@ class SongBase(object):
         """Return lowercase UNICODE name of artists and performers."""
 
     @abstractmethod
-    def get_title(self):
+    def get_title(self, with_version=True):
         """Return lowercase UNICODE title of song."""
 
     @abstractmethod
@@ -590,7 +590,7 @@ class AutoQueueBase(object):
                 'wind', 'windy', 'storm', 'stormy']
         else:
             wind_conditions = [
-                'wind', 'windy', 'storm', 'hurricane']
+                'wind', 'windy', 'storm', 'stormy', 'hurricane']
         humidity = float(
             weather.get('atmosphere', {}).get('humidity', '0') or '0')
         if humidity > 65:

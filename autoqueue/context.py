@@ -25,6 +25,8 @@ def escape(the_string):
     # TODO: move to utils
     return the_string.replace('"', '\\"').replace("'", "\\'")
 
+alphanumspace = re.compile(r'([^\s\w]|_)+')
+
 
 class Context(object):
 
@@ -50,12 +52,10 @@ class Context(object):
         for predicate in self.predicates:
             if (predicate.applies_to_song(result['song'], exclusive=False)
                     and predicate.applies_in_context(self)):
-                print repr(predicate), "adjusting positively", result['score']
                 predicate.positive_score(result)
                 print repr(predicate), "adjusted positively", result['score']
             elif (predicate.applies_to_song(result['song'], exclusive=True)
                     and not predicate.applies_in_context(self)):
-                print repr(predicate), "adjusting negatively", result['score']
                 predicate.negative_score(result)
                 print repr(predicate), "adjusted negatively", result['score']
 
@@ -76,6 +76,12 @@ class Context(object):
 
     def add_last_song_predicates(self):
         if self.last_song:
+
+            self.predicates.extend([
+                StringPredicate(word) for word in
+                alphanumspace.sub(
+                    ' ', self.last_song.get_title(with_version=False)).split()
+                if len(word) > 3])
             self.predicates.append(
                 TagsPredicate(self.last_song.get_non_geo_tags()))
             self.predicates.append(
@@ -156,7 +162,7 @@ class Predicate(object):
             self.build_tag_search(term) for term in self.non_exclusive_terms]
 
     def _build_search(self, term):
-        return '%s(e?s)?' % (term,)
+        return '%s(e?s)?' % (re.escape(term),)
 
     def build_title_search(self, term):
         return re.compile(r'\b%s\b' % (self._build_search(term),))
@@ -176,7 +182,7 @@ class Predicate(object):
 
     def applies_to_song(self, song, exclusive):
         """Determine whether the predicate applies to the song."""
-        title = song.get_title().lower()
+        title = song.get_title(with_version=False).lower()
         for search in self.get_tag_searches(exclusive=exclusive):
             for tag in song.get_non_geo_tags():
                 if search.match(tag):
@@ -245,6 +251,9 @@ class TagsPredicate(Predicate):
             float(len(song_tags | self.tags) + 1))
         result['score'] /= 1 + score
 
+    def __repr__(self):
+        return '<TagsPredicate %r>' % self.tags
+
 
 class GeohashPredicate(Predicate):
 
@@ -259,6 +268,9 @@ class GeohashPredicate(Predicate):
                     return True
 
         return False
+
+    def __repr__(self):
+        return '<GeohashPredicate %r>' % self.geohashes
 
     def positive_score(self, result):
         longest_common = 0
@@ -298,11 +310,16 @@ class ExclusivePredicate(Predicate):
         result['score'] *= 2
 
 
-class StringPredicate(ExclusivePredicate):
+class StringPredicate(Predicate):
 
     def __init__(self, term):
         self.terms = (term,)
         super(StringPredicate, self).__init__()
+
+    def __repr__(self):
+        return '<StringPredicate %r>' % self.terms
+
+
 
 
 class TimePredicate(ExclusivePredicate):
