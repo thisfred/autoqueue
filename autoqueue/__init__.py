@@ -20,17 +20,18 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
-
-import dbus
 import os
 import random
-
 from abc import ABCMeta, abstractmethod
-from dbus.mainloop.glib import DBusGMainLoop
-from collections import deque
-from datetime import date, time, datetime, timedelta
 from cPickle import Pickler, Unpickler
+from collections import deque
+
+import dbus
+from datetime import date, time, datetime, timedelta
+from dbus.mainloop.glib import DBusGMainLoop
+
 from autoqueue.context import Context
+
 
 try:
     import pywapi

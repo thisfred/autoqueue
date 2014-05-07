@@ -168,7 +168,7 @@ class Predicate(object):
         return re.compile(r'\b%s\b' % (self._build_search(term),))
 
     def build_tag_search(self, term):
-        return re.compile('%s$' % (self._build_search(term),))
+        return re.compile(r'(.*:)?%s$' % (self._build_search(term),))
 
     def get_title_searches(self, exclusive):
         """Get title searches for this predicate."""
@@ -392,7 +392,8 @@ class DatePredicate(ExclusivePredicate):
         super(DatePredicate, self).build_searches()
         if self.month and self.day:
             self.tag_searches.append(
-                self.build_tag_search("%02d-%02d" % (self.month, self.day)))
+                self.build_tag_search(
+                    r"(\d{4}-)?%02d-%02d" % (self.month, self.day)))
 
 
 class SeasonPredicate(ExclusivePredicate):
