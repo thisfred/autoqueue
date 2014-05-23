@@ -399,7 +399,7 @@ class DatePredicate(ExclusivePredicate):
 class SeasonPredicate(ExclusivePredicate):
 
     def negative_score(self, result):
-        result['score'] *= (1 + 1 / 4.0)
+        result['score'] *= (1 + 1 / 2.0)
 
 
 class Winter(SeasonPredicate):
@@ -481,7 +481,7 @@ class MonthPredicate(ExclusivePredicate):
         return context.date.month == self.month
 
     def negative_score(self, result):
-        result['score'] *= (1 + 1 / 12.0)
+        result['score'] *= (1 + 1 / 2.0)
 
 
 class January(MonthPredicate):
@@ -566,7 +566,7 @@ class DayPredicate(ExclusivePredicate):
                 context.date.hour < 4)
 
     def negative_score(self, result):
-        result['score'] *= (1 + 1 / 7.0)
+        result['score'] *= (1 + 1 / 2.0)
 
 
 class Monday(DayPredicate):
