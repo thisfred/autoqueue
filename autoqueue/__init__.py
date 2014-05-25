@@ -27,7 +27,7 @@ from cPickle import Pickler, Unpickler
 from collections import deque
 
 import dbus
-from datetime import date, time, datetime, timedelta
+from datetime import datetime, timedelta
 from dbus.mainloop.glib import DBusGMainLoop
 
 from autoqueue.context import Context
@@ -67,8 +67,7 @@ API_KEY = "09d0975a99a4cab235b731d31abf0057"
 THRESHOLD = .5
 
 TIMEOUT = 3000
-FIVE_MINUTES = timedelta(0, 300)
-THIRTY_MINUTES = timedelta(0, 1800)
+FIVE_MINUTES = timedelta(minutes=5)
 
 NO_OP = lambda *a, **kw: None
 
@@ -280,8 +279,8 @@ class AutoQueueBase(object):
         self.location = ''
         self.geohash = ''
         self.nearby_artists = []
-        self.cached_weather_tags = None
-        self.cached_weather_tags_at = None
+        self.cached_weather = None
+        self.cached_weather_at = None
         self.birthdays = ''
         bus = dbus.SessionBus()
         sim = bus.get_object(
@@ -499,109 +498,22 @@ class AutoQueueBase(object):
     def eoq(self):
         return datetime.now() + timedelta(0, self.player_get_queue_length())
 
-    @staticmethod
-    def string_to_datetime(time_string):
-        time_string, ampm = time_string.split()
-        hour, minute = time_string.split(':')
-        hour = int(hour)
-        minute = int(minute)
-        if ampm == 'am':
-            if hour == 12:
-                delta = -12
-            else:
-                delta = 0
-        else:
-            if hour == 12:
-                delta = 0
-            else:
-                delta = 12
-        return datetime.combine(date.today(), time(hour + delta, minute))
-
-    def get_weather_tags(self):
-        now = datetime.now()
+    def get_weather(self):
         if not WEATHER:
-            return []
-        if self.cached_weather_tags and (now < self.cached_weather_tags_at +
-                                         FIVE_MINUTES):
-            return self.cached_weather_tags
+            return {}
+        weather = {}
+        now = datetime.now()
+        if self.cached_weather and (now <
+                                    self.cached_weather_at + FIVE_MINUTES):
+            return self.cached_weather
         if self.zipcode:
             try:
                 weather = pywapi.get_weather_from_yahoo(self.zipcode)
             except Exception, e:
                 self.log(repr(e))
-                return []
-        else:
-            return []
-        conditions = []
-        eoq = self.eoq
-        sunset = weather.get('astronomy', {}).get('sunset', '')
-        sunrise = weather.get('astronomy', {}).get('sunrise', '')
-        if sunrise and sunset:
-            sunrise = self.string_to_datetime(sunrise)
-            sunset = self.string_to_datetime(sunset)
-            if abs(sunrise - eoq) < THIRTY_MINUTES:
-                conditions.extend([
-                    'sunrise', 'dawn', 'aurora', 'break of day', 'dawning',
-                    'daybreak', 'sunup'])
-            elif abs(sunset - eoq) < THIRTY_MINUTES:
-                conditions.extend([
-                    'sunset', 'dusk', 'gloaming', 'nightfall',
-                    'sundown', 'twilight', 'eventide', 'close of day'])
-            if eoq > sunrise and eoq < sunset:
-                conditions.extend(['daylight'])
-            else:
-                conditions.extend(['dark', 'darkness'])
-        cs = weather.get(
-            'condition', {}).get('text', '').lower().strip().split('/')
-        for condition in cs:
-            condition = condition.strip()
-            if condition:
-                conditions.append(condition)
-                unmodified = condition.split()[-1]
-                if unmodified not in conditions:
-                    conditions.append(unmodified)
-                if unmodified[-1] == 'y':
-                    if unmodified[-2] == unmodified[-3]:
-                        conditions.append(unmodified[:-2])
-                    else:
-                        conditions.append(unmodified[:-1])
-                if eoq > sunrise and eoq < sunset and condition == 'fair':
-                    conditions.extend(['sun', 'sunny', 'sunlight'])
-        temperature = weather.get('condition', {}).get('temp', '')
-        temperature_tags = []
-        if temperature:
-            degrees_c = int(temperature)
-            if degrees_c <= 0:
-                temperature_tags.extend(['freezing', 'frozen', 'ice'])
-            if degrees_c <= 10:
-                temperature_tags.extend(['cold'])
-            if degrees_c >= 30:
-                temperature_tags.extend(['hot', 'heat'])
-        speed = float(weather.get('wind', {}).get('speed', '0') or '0')
-        if speed < 1:
-            wind_conditions = ['calm']
-        elif speed <= 30:
-            wind_conditions = ['breeze', 'breezy']
-        elif speed <= 38:
-            wind_conditions = ['wind', 'windy']
-        elif speed <= 54:
-            wind_conditions = ['wind', 'windy', 'gale']
-        elif speed <= 72:
-            wind_conditions = [
-                'wind', 'windy', 'storm', 'stormy']
-        else:
-            wind_conditions = [
-                'wind', 'windy', 'storm', 'stormy', 'hurricane']
-        humidity = float(
-            weather.get('atmosphere', {}).get('humidity', '0') or '0')
-        if humidity > 65:
-            if 'hot' in temperature_tags:
-                conditions.extend(['muggy', 'oppressive'])
-            conditions.append('humid(ity)?')
-        self.cached_weather_tags = (
-            conditions + wind_conditions + temperature_tags)
-        self.cached_weather_tags_at = datetime.now()
-        return self.cached_weather_tags
+        self.cached_weather = weather
+        self.cached_weather_at = datetime.now()
+        return self.cached_weather
 
     def construct_search(self, artist=None, title=None, tags=None,
                          filename=None, restrictions=None):
@@ -843,7 +755,7 @@ class AutoQueueBase(object):
             last_song=self.last_song,
             nearby_artists=self.nearby_artists,
             southern_hemisphere=self.southern_hemisphere,
-            weather_tags=self.get_weather_tags(),
+            weather=self.get_weather(),
             extra_context=self.extra_context)
         maximum_score = max(result['score'] for result in results) + 1
         for result in results[:]:

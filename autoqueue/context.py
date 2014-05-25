@@ -1,7 +1,7 @@
 """Context awareness filters."""
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, date, time
 
 EASTERS = {
     2014: datetime(2014, 4, 20),
@@ -19,6 +19,8 @@ JUN21 = lambda year: datetime(year, 6, 21)
 SEP21 = lambda year: datetime(year, 9, 21)
 DEC21 = lambda year: datetime(year, 12, 21)
 
+ONE_HOUR = timedelta(hours=1)
+
 
 def escape(the_string):
     """Double escape quotes."""
@@ -33,8 +35,7 @@ class Context(object):
     """Object representing the current context."""
 
     def __init__(self, date, location, geohash, birthdays, last_song,
-                 nearby_artists, southern_hemisphere, weather_tags,
-                 extra_context):
+                 nearby_artists, southern_hemisphere, weather, extra_context):
         self.date = date
         self.location = location
         self.geohash = geohash
@@ -42,10 +43,28 @@ class Context(object):
         self.last_song = last_song
         self.nearby_artists = nearby_artists
         self.southern_hemisphere = southern_hemisphere
-        self.weather_tags = weather_tags
+        self.weather = weather
         self.predicates = []
         self.extra_context = extra_context
         self.build_predicates()
+
+    @staticmethod
+    def string_to_datetime(time_string):
+        time_string, ampm = time_string.split()
+        hour, minute = time_string.split(':')
+        hour = int(hour)
+        minute = int(minute)
+        if ampm == 'am':
+            if hour == 12:
+                delta = -12
+            else:
+                delta = 0
+        else:
+            if hour == 12:
+                delta = 0
+            else:
+                delta = 12
+        return datetime.combine(date.today(), time(hour + delta, minute))
 
     def adjust_score(self, result):
         """Adjust the score for the result if appropriate."""
@@ -76,12 +95,11 @@ class Context(object):
 
     def add_last_song_predicates(self):
         if self.last_song:
-
-            self.predicates.extend([
-                StringPredicate(word) for word in
-                alphanumspace.sub(
-                    ' ', self.last_song.get_title(with_version=False)).split()
-                if len(word) > 3])
+            self.predicates.append(
+                StringPredicate([
+                    word for word in alphanumspace.sub(
+                        ' ', self.last_song.get_title(
+                            with_version=False)).split() if len(word) > 3]))
             self.predicates.append(
                 TagsPredicate(self.last_song.get_non_geo_tags()))
             self.predicates.append(
@@ -89,9 +107,8 @@ class Context(object):
 
     def add_extra_predicates(self):
         if self.extra_context:
-            for term in [l.strip().lower() for l in
-                         self.extra_context.split(',')]:
-                self.predicates.append(StringPredicate(term))
+            self.predicates.append(StringPredicate([
+                l.strip().lower() for l in self.extra_context.split(',')]))
 
     def add_birthday_predicates(self):
         for name_date in self.birthdays.split(','):
@@ -111,9 +128,40 @@ class Context(object):
                         year=year, month=month, day=day, name=name, age=age))
 
     def add_weather_predicates(self):
-        for weather_condition in self.weather_tags:
+        if not self.weather:
+            return
+        self.predicates.extend([
+            Freezing(), Cold(), Hot(), Calm(), Breeze(), Wind(), Storm(),
+            Gale(), Storm(), Hurricane(), Humid()])
+        sunrise = self.weather.get('astronomy', {}).get('sunrise', '')
+        sunset = self.weather.get('astronomy', {}).get('sunset', '')
+        if sunrise and sunset:
+            sunrise = self.string_to_datetime(sunrise)
+            if sunrise:
+                self.predicates.append(Dawn.from_date(sunrise))
+            sunset = self.string_to_datetime(sunset)
+            if sunset:
+                self.predicates.append(Dusk.from_date(sunset))
+            self.predicates.append(Darkness.from_dates(end=sunrise))
             self.predicates.append(
-                StringPredicate(weather_condition))
+                Daylight.from_dates(start=sunrise, end=sunset))
+            self.predicates.append(Darkness.from_dates(start=sunset))
+            self.predicates.append(Sun.from_dates(start=sunrise, end=sunset))
+        cs = self.weather.get(
+            'condition', {}).get('text', '').lower().strip().split('/')
+        for condition in cs:
+            condition = condition.strip()
+            if condition:
+                conditions = []
+                unmodified = condition.split()[-1]
+                if unmodified not in conditions:
+                    conditions.append(unmodified)
+                if unmodified[-1] == 'y':
+                    if unmodified[-2] == unmodified[-3]:
+                        conditions.append(unmodified[:-2])
+                    else:
+                        conditions.append(unmodified[:-1])
+                self.predicates.append(StringPredicate(conditions))
 
     def add_location_predicates(self):
         if self.location:
@@ -320,6 +368,126 @@ class StringPredicate(Predicate):
         return '<StringPredicate %r>' % self.terms
 
 
+class WeatherPredicate(ExclusivePredicate):
+
+    def get_weather_conditions(self, context):
+        return context.weather.get(
+            'condition', {}).get('text', '').lower().strip().split('/')
+
+    def get_temperature(self, context):
+        temperature = self.weather.get('condition', {}).get('temp', '')
+        if not temperature:
+            return None
+
+        return int(temperature)
+
+    def get_wind_speed(self, context):
+        return float(context.get('wind', {}).get('speed', '0'))
+
+    def get_humidity(self, context):
+        return float(self.weather.get('atmosphere', {}).get('humidity', '0'))
+
+
+class Freezing(WeatherPredicate):
+
+    terms = ('freezing', 'frozen', 'ice')
+
+    def applies_in_context(self, context):
+        temperature = self.get_temperature(context)
+        if temperature is None:
+            return False
+
+        if temperature > 0:
+            return False
+
+        return True
+
+
+class Cold(WeatherPredicate):
+
+    terms = ('cold', 'chill', 'chilly')
+
+    def applies_in_context(self, context):
+        temperature = self.get_temperature(context)
+        if temperature is None:
+            return False
+
+        if temperature > 10:
+            return False
+
+        return True
+
+
+class Hot(WeatherPredicate):
+
+    terms = ('hot', 'heat')
+
+    def applies_in_context(self, context):
+        temperature = self.get_temperature(context)
+        if temperature is None:
+            return False
+
+        if temperature < 30:
+            return False
+
+        return True
+
+
+class Calm(WeatherPredicate):
+
+    terms = ('calm',)
+
+    def applies_in_context(self, context):
+        return self.get_wind_speed(context) < 1
+
+
+class Breeze(WeatherPredicate):
+
+    terms = ('breeze', 'breezy')
+
+    def applies_in_context(self, context):
+        speed = self.get_wind_speed(context)
+        return speed <= 30 and speed > 0
+
+
+class Wind(WeatherPredicate):
+
+    terms = ('wind', 'windy')
+
+    def applies_in_context(self, context):
+        return self.get_wind_speed(context) > 30
+
+
+class Gale(WeatherPredicate):
+
+    terms = ('gale',)
+
+    def applies_in_context(self, context):
+        return self.get_wind_speed(context) > 38
+
+
+class Storm(WeatherPredicate):
+
+    terms = ('storm', 'stormy')
+
+    def applies_in_context(self, context):
+        return self.get_wind_speed(context) > 54
+
+
+class Hurricane(WeatherPredicate):
+
+    terms = ('hurricane',)
+
+    def applies_in_context(self, context):
+        return self.get_wind_speed(context) > 72
+
+
+class Humid(WeatherPredicate):
+
+    terms = ('humid', 'humidity')
+
+    def applies_in_context(self, context):
+        return self.get_humidity(context) > 65
 
 
 class TimePredicate(ExclusivePredicate):
@@ -327,6 +495,7 @@ class TimePredicate(ExclusivePredicate):
     hour = None
     minute = None
     time_tag = re.compile('^([0-9]{2}):([0-9]{2})$')
+    max_diff = 30
 
     def applies_in_context(self, context):
         return self._close_enough(context.date.hour, context.date.minute)
@@ -334,7 +503,9 @@ class TimePredicate(ExclusivePredicate):
     def _close_enough(self, hour, minute):
         difference = (hour - self.hour) * 60
         difference += (minute - self.minute)
-        return abs(difference) <= 30 or (24 * 60) - abs(difference) <= 30
+        return (
+            abs(difference) <= self.max_diff or
+            (24 * 60) - abs(difference) <= self.max_diff)
 
     def applies_to_song(self, song, exclusive):
         song_tags = song.get_non_geo_tags()
@@ -354,6 +525,62 @@ class TimePredicate(ExclusivePredicate):
         new.minute = date.minute
         new.build_searches()
         return new
+
+
+class TimeRangePredicate(ExclusivePredicate):
+
+    start = None
+    end = None
+
+    def applies_in_context(self, context):
+        if self.start and context.date < self.start:
+            return False
+
+        if self.end and context.date > self.end:
+            return False
+
+        return True
+
+    @classmethod
+    def from_dates(cls, start=None, end=None):
+        new = cls()
+        new.start = start
+        new.end = end
+        return new
+
+
+class Daylight(TimeRangePredicate):
+
+    terms = ('daylight',)
+
+
+class Darkness(TimeRangePredicate):
+
+    terms = ('dark', 'darkness')
+
+
+class Sun(TimeRangePredicate, WeatherPredicate):
+
+    terms = ('sun', 'sunny', 'sunlight')
+
+    def applies_in_context(self, context):
+        return 'fair' in self.get_conditions(context)
+
+
+class Dawn(TimePredicate):
+
+    max_diff = 60
+    terms = (
+        'sunrise', 'dawn', 'aurora', 'break of day', 'dawning', 'daybreak',
+        'sunup')
+
+
+class Dusk(TimePredicate):
+
+    max_diff = 60
+    terms = (
+        'sunset', 'dusk', 'gloaming', 'nightfall', 'sundown', 'twilight',
+        'eventide', 'close of day')
 
 
 class Noon(TimePredicate):
