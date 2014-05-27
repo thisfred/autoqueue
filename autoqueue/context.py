@@ -95,11 +95,12 @@ class Context(object):
 
     def add_last_song_predicates(self):
         if self.last_song:
-            self.predicates.append(
-                StringPredicate([
-                    word for word in alphanumspace.sub(
-                        ' ', self.last_song.get_title(
-                            with_version=False)).split() if len(word) > 3]))
+            words = [
+                word for word in alphanumspace.sub(
+                    ' ', self.last_song.get_title(with_version=False)).split()
+                if len(word) > 3]
+            if words:
+                self.predicates.append(StringPredicate(words))
             self.predicates.append(
                 TagsPredicate(self.last_song.get_non_geo_tags()))
             self.predicates.append(
@@ -107,8 +108,9 @@ class Context(object):
 
     def add_extra_predicates(self):
         if self.extra_context:
-            self.predicates.append(StringPredicate([
-                l.strip().lower() for l in self.extra_context.split(',')]))
+            words = [l.strip().lower() for l in self.extra_context.split(',')]
+            if words:
+                self.predicates.append(StringPredicate(words))
 
     def add_birthday_predicates(self):
         for name_date in self.birthdays.split(','):
@@ -132,7 +134,7 @@ class Context(object):
             return
         self.predicates.extend([
             Freezing(), Cold(), Hot(), Calm(), Breeze(), Wind(), Storm(),
-            Gale(), Storm(), Hurricane(), Humid()])
+            Gale(), Storm(), Hurricane(), Humid(), Cloudy()])
         sunrise = self.weather.get('astronomy', {}).get('sunrise', '')
         sunset = self.weather.get('astronomy', {}).get('sunset', '')
         if sunrise and sunset:
@@ -151,6 +153,8 @@ class Context(object):
             'condition', {}).get('text', '').lower().strip().split('/')
         for condition in cs:
             condition = condition.strip()
+            with open('weather_conditions.txt', 'a') as weather_file:
+                weather_file.write('%s\n' % condition)
             if condition:
                 conditions = []
                 unmodified = condition.split()[-1]
@@ -161,13 +165,14 @@ class Context(object):
                         conditions.append(unmodified[:-2])
                     else:
                         conditions.append(unmodified[:-1])
-                self.predicates.append(StringPredicate(conditions))
+                if conditions:
+                    self.predicates.append(StringPredicate(conditions))
 
     def add_location_predicates(self):
         if self.location:
-            for location in self.location.split(','):
-                self.predicates.append(
-                    StringPredicate(location.strip().lower()))
+            locations = [l.lower() for l in self.location.split(',')]
+            if locations:
+                self.predicates.append(StringPredicate(locations))
         if self.geohash:
             self.predicates.append(GeohashPredicate([self.geohash]))
 
@@ -375,17 +380,17 @@ class WeatherPredicate(ExclusivePredicate):
             'condition', {}).get('text', '').lower().strip().split('/')
 
     def get_temperature(self, context):
-        temperature = self.weather.get('condition', {}).get('temp', '')
+        temperature = context.weather.get('condition', {}).get('temp', '')
         if not temperature:
             return None
 
         return int(temperature)
 
     def get_wind_speed(self, context):
-        return float(context.get('wind', {}).get('speed', '0'))
+        return float(context.weather.get('wind', {}).get('speed', '0'))
 
     def get_humidity(self, context):
-        return float(self.weather.get('atmosphere', {}).get('humidity', '0'))
+        return float(context.weather.get('atmosphere', {}).get('humidity', '0'))
 
 
 class Freezing(WeatherPredicate):
@@ -564,7 +569,20 @@ class Sun(TimeRangePredicate, WeatherPredicate):
     terms = ('sun', 'sunny', 'sunlight')
 
     def applies_in_context(self, context):
-        return 'fair' in self.get_conditions(context)
+        return 'fair' in self.get_weather_conditions(context)
+
+
+class Cloudy(WeatherPredicate):
+
+    terms = ('cloud', 'cloudy', 'overcast')
+
+    def applies_in_context(self, context):
+        conditions = self.get_weather_conditions(context)
+        for condition in conditions:
+            if 'cloudy' in condition or 'overcast' in condition:
+                return True
+
+        return False
 
 
 class Dawn(TimePredicate):
