@@ -74,7 +74,7 @@ class Context(object):
                 predicate.positive_score(result)
                 print repr(predicate), "adjusted positively", result['score']
             elif (predicate.applies_to_song(result['song'], exclusive=True)
-                    and not predicate.applies_in_context(self)):
+                  and not predicate.applies_in_context(self)):
                 predicate.negative_score(result)
                 print repr(predicate), "adjusted negatively", result['score']
 
@@ -134,7 +134,7 @@ class Context(object):
             return
         self.predicates.extend([
             Freezing(), Cold(), Hot(), Calm(), Breeze(), Wind(), Storm(),
-            Gale(), Storm(), Hurricane(), Humid(), Cloudy()])
+            Gale(), Storm(), Hurricane(), Humid(), Cloudy(), Rain()])
         sunrise = self.weather.get('astronomy', {}).get('sunrise', '')
         sunset = self.weather.get('astronomy', {}).get('sunset', '')
         if sunrise and sunset:
@@ -580,6 +580,19 @@ class Cloudy(WeatherPredicate):
         conditions = self.get_weather_conditions(context)
         for condition in conditions:
             if 'cloudy' in condition or 'overcast' in condition:
+                return True
+
+        return False
+
+
+class Rain(WeatherPredicate):
+
+    terms = ('rain', 'rainy')
+
+    def applies_in_context(self, context):
+        conditions = self.get_weather_conditions(context)
+        for condition in conditions:
+            if 'rain' in condition or 'shower' in condition:
                 return True
 
         return False
