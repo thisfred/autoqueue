@@ -158,6 +158,8 @@ class Context(object):
             if condition:
                 conditions = []
                 unmodified = condition.split()[-1]
+                if unmodified in ('rain', 'drizzle', 'cloudy'):
+                    continue
                 if unmodified not in conditions:
                     conditions.append(unmodified)
                 if unmodified[-1] == 'y':
@@ -587,12 +589,13 @@ class Cloudy(WeatherPredicate):
 
 class Rain(WeatherPredicate):
 
-    terms = ('rain', 'rainy')
+    terms = ('rain', 'rainy', 'shower', 'drizzle', 'raining')
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
         for condition in conditions:
-            if 'rain' in condition or 'shower' in condition:
+            if 'rain' in condition or 'shower' in condition or\
+                    'drizzle' in condition:
                 return True
 
         return False
