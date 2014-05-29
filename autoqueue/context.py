@@ -568,7 +568,7 @@ class Darkness(TimeRangePredicate):
 
 class Sun(TimeRangePredicate, WeatherPredicate):
 
-    terms = ('sun', 'sunny', 'sunlight')
+    terms = ('sun', 'sunny', 'sunlight', 'sunshine')
 
     def applies_in_context(self, context):
         return 'fair' in self.get_weather_conditions(context)
