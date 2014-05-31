@@ -362,7 +362,7 @@ class SongYearPredicate(YearPredicate):
 class ExclusivePredicate(Predicate):
 
     def negative_score(self, result):
-        result['score'] *= 2
+        result['score'] *= 1.5
 
 
 class StringPredicate(Predicate):
