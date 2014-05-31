@@ -571,10 +571,11 @@ class Sun(TimeRangePredicate, WeatherPredicate):
     terms = ('sun', 'sunny', 'sunlight', 'sunshine')
 
     def applies_in_context(self, context):
-        conditions = self.get_weather_conditions(context)
-        for condition in conditions:
-            if 'partly cloudy' in condition or 'fair' in condition:
-                return True
+        if super(Sun, self).applies_in_context(context):
+            conditions = self.get_weather_conditions(context)
+            for condition in conditions:
+                if 'partly cloudy' in condition or 'fair' in condition:
+                    return True
 
         return False
 
