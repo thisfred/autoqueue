@@ -263,7 +263,7 @@ class AutoQueueBase(object):
         self.running = False
         self.verbose = False
         self.song = None
-        self.number = 40
+        self.number = 20
         self.restrictions = None
         self.extra_context = None
         self.present = []
