@@ -397,7 +397,7 @@ class WeatherPredicate(ExclusivePredicate):
 
 class Freezing(WeatherPredicate):
 
-    terms = ('freezing', 'frozen', 'ice')
+    terms = ('freezing', 'frozen', 'ice', 'frost')
 
     def applies_in_context(self, context):
         temperature = self.get_temperature(context)
