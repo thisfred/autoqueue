@@ -20,6 +20,7 @@ SEP21 = lambda year: datetime(year, 9, 21)
 DEC21 = lambda year: datetime(year, 12, 21)
 
 ONE_HOUR = timedelta(hours=1)
+ONE_DAY = timedelta(days=1)
 
 
 def escape(the_string):
@@ -188,7 +189,11 @@ class Context(object):
             STATIC_PREDICATES + [
                 YearPredicate(self.date.year),
                 DatePredicate.from_date(self.date),
-                TimePredicate.from_date(self.date)])
+                TimePredicate.from_date(self.date),
+                Midnight.from_date(self.date - ONE_DAY),
+                Midnight.from_date(self.date),
+                Midnight.from_date(self.date + ONE_DAY),
+                Noon.from_date(self.date)])
 
 
 class Predicate(object):
@@ -499,8 +504,6 @@ class Humid(WeatherPredicate):
 
 class TimePredicate(ExclusivePredicate):
 
-    hour = None
-    minute = None
     time_tag = re.compile('^([0-9]{2}):([0-9]{2})$')
     max_diff = 30
 
@@ -508,11 +511,14 @@ class TimePredicate(ExclusivePredicate):
         return self._close_enough(context.date.hour, context.date.minute)
 
     def _close_enough(self, hour, minute):
-        difference = (hour - self.hour) * 60
-        difference += (minute - self.minute)
-        return (
-            abs(difference) <= self.max_diff or
-            (24 * 60) - abs(difference) <= self.max_diff)
+        song_date = datetime(
+            self.date.year, self.date.month, self.date.day, hour, minute)
+        song_dates = [song_date, song_date + ONE_DAY, song_date - ONE_DAY]
+        for date in song_dates:
+            difference = abs(date - self.date)
+            if difference <= timedelta(minutes=self.max_diff):
+                return True
+        return False
 
     def applies_to_song(self, song, exclusive):
         song_tags = song.get_non_geo_tags()
@@ -528,10 +534,12 @@ class TimePredicate(ExclusivePredicate):
     @classmethod
     def from_date(cls, date):
         new = cls()
-        new.hour = date.hour
-        new.minute = date.minute
+        new.date = date
         new.build_searches()
         return new
+
+    def __repr__(self):
+        return '<TimePredicate %s>' % (self.date,)
 
 
 class TimeRangePredicate(ExclusivePredicate):
@@ -595,7 +603,7 @@ class Cloudy(WeatherPredicate):
 
 class Rain(WeatherPredicate):
 
-    terms = ('rain', 'rainy', 'shower', 'drizzle', 'raining')
+    terms = ('rain', 'rainy', 'shower', 'drizzle', 'raining', 'raindrop')
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -625,16 +633,26 @@ class Dusk(TimePredicate):
 
 class Noon(TimePredicate):
 
-    hour = 12
-    minute = 0
     terms = ('noon',)
+
+    @classmethod
+    def from_date(cls, date):
+        new = cls()
+        new.date = datetime(date.year, date.month, date.day, 12, 0)
+        new.build_searches()
+        return new
 
 
 class Midnight(TimePredicate):
 
-    hour = 0
-    minute = 0
     terms = ('midnight',)
+
+    @classmethod
+    def from_date(cls, date):
+        new = cls()
+        new.date = datetime(date.year, date.month, date.day, 0, 0)
+        new.build_searches()
+        return new
 
 
 class DatePredicate(ExclusivePredicate):
@@ -1147,4 +1165,4 @@ STATIC_PREDICATES = [
     July(), August(), September(), October(), November(), December(),
     Monday(), Tuesday(), Wednesday(), Thursday(), Friday(), Saturday(),
     Sunday(), Weekend(), Spring(), Summer(), Autumn(), Winter(),
-    Evening(), Morning(), Afternoon(), Night(), Midnight(), Noon()]
+    Evening(), Morning(), Afternoon(), Night(),]
