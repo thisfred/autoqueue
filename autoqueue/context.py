@@ -590,7 +590,7 @@ class Sun(TimeRangePredicate, WeatherPredicate):
 
 class Cloudy(WeatherPredicate):
 
-    terms = ('cloud', 'cloudy', 'overcast')
+    terms = ('cloud', 'cloudy', 'overcast', 'gloom', 'gloomy')
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
