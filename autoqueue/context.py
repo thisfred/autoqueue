@@ -141,10 +141,10 @@ class Context(object):
         if sunrise and sunset:
             sunrise = self.string_to_datetime(sunrise)
             if sunrise:
-                self.predicates.append(Dawn.from_date(sunrise))
+                self.predicates.append(Dawn.from_datetime(sunrise))
             sunset = self.string_to_datetime(sunset)
             if sunset:
-                self.predicates.append(Dusk.from_date(sunset))
+                self.predicates.append(Dusk.from_datetime(sunset))
             self.predicates.append(Darkness.from_dates(end=sunrise))
             self.predicates.append(
                 Daylight.from_dates(start=sunrise, end=sunset))
@@ -189,10 +189,8 @@ class Context(object):
             STATIC_PREDICATES + [
                 YearPredicate(self.date.year),
                 DatePredicate.from_date(self.date),
-                TimePredicate.from_date(self.date),
-                Midnight.from_date(self.date - ONE_DAY),
+                TimePredicate.from_datetime(self.date),
                 Midnight.from_date(self.date),
-                Midnight.from_date(self.date + ONE_DAY),
                 Noon.from_date(self.date)])
 
 
@@ -511,10 +509,10 @@ class TimePredicate(ExclusivePredicate):
         return self._close_enough(context.date.hour, context.date.minute)
 
     def _close_enough(self, hour, minute):
-        song_date = datetime(
+        other_date = datetime(
             self.date.year, self.date.month, self.date.day, hour, minute)
-        song_dates = [song_date, song_date + ONE_DAY, song_date - ONE_DAY]
-        for date in song_dates:
+        other_dates = [other_date, other_date + ONE_DAY, other_date - ONE_DAY]
+        for date in other_dates:
             difference = abs(date - self.date)
             if difference <= timedelta(minutes=self.max_diff):
                 return True
@@ -532,9 +530,9 @@ class TimePredicate(ExclusivePredicate):
         return super(TimePredicate, self).applies_to_song(song, exclusive)
 
     @classmethod
-    def from_date(cls, date):
+    def from_datetime(cls, datetime):
         new = cls()
-        new.date = date
+        new.date = datetime
         new.build_searches()
         return new
 
