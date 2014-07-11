@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
 import os
 import random
+import re
 from abc import ABCMeta, abstractmethod
 from cPickle import Pickler, Unpickler
 from collections import deque
@@ -120,6 +121,7 @@ def get_artists_playing_nearby(location_geohash, location):
 
 
 class SongBase(object):
+
     """A wrapper object around player specific song objects."""
 
     __metaclass__ = ABCMeta
@@ -436,6 +438,11 @@ class AutoQueueBase(object):
 
     def disallowed(self, song):
         """Check whether a song is not allowed to be queued."""
+        date_search = re.compile(r"(\d{4}-)?%02d-%02d" % (
+            self.eoq.month, self.eoq.day))
+        for tag in song.get_stripped_tags():
+            if date_search.match(tag):
+                return False
         for artist in song.get_artists():
             if artist in self.get_blocked_artists():
                 return True

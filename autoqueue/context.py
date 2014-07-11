@@ -69,14 +69,18 @@ class Context(object):
 
     def adjust_score(self, result):
         """Adjust the score for the result if appropriate."""
+        song = result['song']
         for predicate in self.predicates:
-            if (predicate.applies_to_song(result['song'], exclusive=False)
-                    and predicate.applies_in_context(self)):
+            in_context = predicate.applies_in_context(self)
+            if predicate.applies_to_song(song, exclusive=False) and in_context:
                 predicate.positive_score(result)
+                print "%s - %s" % (
+                    song.get_artist(), song.get_title(with_version=False))
                 print repr(predicate), "adjusted positively", result['score']
-            elif (predicate.applies_to_song(result['song'], exclusive=True)
-                  and not predicate.applies_in_context(self)):
-                predicate.negative_score(result)
+            elif predicate.applies_to_song(song, exclusive=True) \
+                    and not in_context:
+                print "%s - %s" % (
+                    song.get_artist(), song.get_title(with_version=False))
                 print repr(predicate), "adjusted negatively", result['score']
 
     def build_predicates(self):
