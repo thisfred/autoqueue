@@ -79,6 +79,7 @@ class Context(object):
                 print repr(predicate), "adjusted positively", result['score']
             elif predicate.applies_to_song(song, exclusive=True) \
                     and not in_context:
+                predicate.negative_score(result)
                 print "%s - %s" % (
                     song.get_artist(), song.get_title(with_version=False))
                 print repr(predicate), "adjusted negatively", result['score']
@@ -369,7 +370,7 @@ class SongYearPredicate(YearPredicate):
 class ExclusivePredicate(Predicate):
 
     def negative_score(self, result):
-        result['score'] *= 1.5
+        result['score'] *= 2
 
 
 class StringPredicate(Predicate):
@@ -441,7 +442,7 @@ class Hot(WeatherPredicate):
         if temperature is None:
             return False
 
-        if temperature < 30:
+        if temperature < 25:
             return False
 
         return True
