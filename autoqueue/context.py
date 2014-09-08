@@ -150,10 +150,10 @@ class Context(object):
             sunset = self.string_to_datetime(sunset)
             if sunset:
                 self.predicates.append(Dusk.from_datetime(sunset))
-            self.predicates.append(Darkness.from_dates(end=sunrise))
             self.predicates.append(
                 Daylight.from_dates(start=sunrise, end=sunset))
-            self.predicates.append(Darkness.from_dates(start=sunset))
+            self.predicates.append(
+                NotDaylight.from_dates(start=sunrise, end=sunset))
             self.predicates.append(Sun.from_dates(start=sunrise, end=sunset))
         cs = self.weather.get(
             'condition', {}).get('text', '').lower().strip().split('/')
@@ -351,7 +351,7 @@ class GeohashPredicate(Predicate):
 
                     if i > longest_common:
                         longest_common = i
-        result['score'] *= 1.0 / (2 ** longest_common)
+        result['score'] *= 1.0 / (1.1 ** longest_common)
 
 
 class YearPredicate(Predicate):
@@ -397,10 +397,13 @@ class WeatherPredicate(ExclusivePredicate):
         return int(temperature)
 
     def get_wind_speed(self, context):
-        return float(context.weather.get('wind', {}).get('speed', '0'))
+        return float(
+            context.weather.get('wind', {}).get('speed', '').strip() or '0')
 
     def get_humidity(self, context):
-        return float(context.weather.get('atmosphere', {}).get('humidity', '0'))
+        return float(
+            context.weather.get('atmosphere', {}).get('humidity', '').strip()
+            or '0')
 
 
 class Freezing(WeatherPredicate):
@@ -572,7 +575,19 @@ class Daylight(TimeRangePredicate):
     terms = ('daylight',)
 
 
-class Darkness(TimeRangePredicate):
+class NegativeTimeRangePredicate(TimeRangePredicate):
+
+    def applies_in_context(self, context):
+        if self.start and context.date > self.start:
+            return False
+
+        if self.end and context.date < self.end:
+            return False
+
+        return True
+
+
+class NotDaylight(NegativeTimeRangePredicate):
 
     terms = ('dark', 'darkness')
 

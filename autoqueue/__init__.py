@@ -270,6 +270,7 @@ class AutoQueueBase(object):
         self.extra_context = None
         self.present = []
         self.use_mirage = True
+        self.use_gaia = True
         self.whole_albums = True
         self.contextualize = True
         self.southern_hemisphere = False
@@ -291,6 +292,7 @@ class AutoQueueBase(object):
         self.similarity = dbus.Interface(
             sim, dbus_interface='org.autoqueue.SimilarityInterface')
         self.has_mirage = self.similarity.has_mirage()
+        self.has_gaia = self.similarity.has_gaia()
         self.player_set_variables_from_config()
         self.set_presence()
         if self.location or self.geohash:
@@ -563,7 +565,43 @@ class AutoQueueBase(object):
             self.log('Could not decode filename: %r' % filename)
 
     def analyzed(self):
-        """Handler for analyzed track."""
+        song = self.last_song
+        filename = song.get_filename()
+        try:
+            if not isinstance(filename, unicode):
+                filename = unicode(filename, 'utf-8')
+        except UnicodeDecodeError:
+            self.log('Could not decode filename: %r' % filename)
+            return
+        blocked_artists = self.get_blocked_artists()
+        if self.has_gaia and self.use_gaia:
+            self.log('Get similar tracks for: %s' % filename)
+            self.similarity.get_ordered_gaia_tracks(
+                filename, blocked_artists, self.number,
+                reply_handler=self.gaia_reply_handler,
+                error_handler=self.error_handler, timeout=TIMEOUT)
+        else:
+            self.gaia_reply_handler([])
+
+    def gaia_reply_handler(self, results):
+        """Handler for (mirage) similar tracks returned from dbus."""
+        self.player_execute_async(
+            self._gaia_reply_handler, results=results)
+
+    def _gaia_reply_handler(self, results=None):
+        """Exexute processing asynchronous."""
+        self.found = False
+        if results:
+            for _ in self.process_results([{'score': match,
+                                            'filename': filename }
+                                           for match, filename in results]):
+                yield
+        if self.found:
+            if not self.queue_needs_songs():
+                self.done()
+                return
+            self.queue_song()
+            return
         song = self.last_song
         excluded_filenames = []
         for other in self.get_artists_track_filenames(song.get_artists()):

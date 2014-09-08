@@ -40,12 +40,15 @@ class MirageSongsPlugin(SongsMenuPlugin):
         GLib.idle_add(self.doit, songs)
 
     def doit(self, songs):
+        filenames = []
         for song in songs:
             filename = song('~filename')
-            try:
-                if not isinstance(filename, unicode):
+            if not isinstance(filename, unicode):
+                try:
                     filename = unicode(filename, 'utf-8')
-                self.similarity.analyze_track(
-                    filename, 10, reply_handler=NO_OP, error_handler=NO_OP)
-            except:
-                print "Could not decode filename: %r" % song('~filename')
+                except:
+                    print "Could not decode filename: %r" % song('~filename')
+                    continue
+            filenames.append(filename)
+        self.similarity.analyze_tracks(
+            filenames, 10, reply_handler=NO_OP, error_handler=NO_OP)
