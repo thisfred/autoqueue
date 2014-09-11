@@ -30,10 +30,10 @@ import json
 
 import subprocess
 from threading import Thread
-from Queue import Queue, PriorityQueue
+from Queue import Queue, PriorityQueue, Empty
 from time import strptime, time
 from datetime import datetime, timedelta
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from dbus.mainloop.glib import DBusGMainLoop
 from dbus.service import method
 
@@ -87,6 +87,9 @@ DEFAULT_TRACK = Track(
     artist=None,
     title=None)
 
+ADD = 'add'
+REMOVE = 'remove'
+
 
 def memoize(f):
     cache = {}
@@ -114,6 +117,154 @@ class SQLCommand(object):
         self.result_queue = Queue()
 
 
+class GaiaAnalysis(Thread):
+
+    def __init__(self, db_path, queue):
+        super(GaiaAnalysis, self).__init__()
+        self.gaia_db_path = db_path
+        self.gaia_db = self.load_gaia()
+        self.gaia_db_transformed = self.transform_gaia_db(self.gaia_db)
+        self.metric = DistanceFunctionFactory.create(
+            'euclidean', self.gaia_db_transformed.layout())
+        self.commands = {
+            ADD: self._add_point,
+            REMOVE: self._remove_point}
+        self.queue = queue
+
+    def transform_gaia_db(self, original):
+        ds = transform(original, 'fixlength')
+        ds = transform(ds, 'cleaner')
+        ds = transform(ds, 'remove', {'descriptorNames': '*mfcc*'})
+        ds = transform(ds, 'remove', {'descriptorNames': '*beats_position*'})
+        ds = transform(ds, 'remove', {'descriptorNames': '*bpm_estimates*'})
+        ds = transform(ds, 'remove', {'descriptorNames': '*bpm_intervals*'})
+        ds = transform(ds, 'remove', {'descriptorNames': '*onset_times*'})
+        ds = transform(ds, 'normalize')
+        ds = transform(
+            ds, 'pca', {
+                'dimension': 30,
+                'descriptorNames': ['*.mean', '*.var'],
+                'resultName': 'pca30'})
+        ds.setReferenceDataSet(original)
+        return ds
+
+    def load_gaia(self):
+        if os.path.exists(self.gaia_db_path):
+            ds = DataSet()
+            ds.load(self.gaia_db_path)
+        else:
+            db = {}
+            for directory in self.music_dirs:
+                filename = self.index_sig_files(directory)
+                db.update({
+                    k.encode('utf-8'): v.encode('utf-8')
+                    for k, v in yaml.load(open(filename).read()).items()})
+            ds = DataSet.mergeFiles(db)
+            ds.save(self.gaia_db_path)
+
+        return ds
+
+    @staticmethod
+    def get_db_filename(directory):
+        return '%s.yaml' % (directory.replace('/', '_'),)
+
+    def index_sig_files(self, directory):
+        filename = self.get_db_filename(directory)
+        files = [
+            f for f in subprocess.check_output(
+                "find -L %s -iname '*.sig'" % directory, shell=True).split('\n')
+            if f]
+
+        with open(filename, 'w') as output:
+            for sig_file in files:
+                if isinstance(sig_file, unicode):
+                    sig_file = sig_file.encode('utf-8')
+                output.write(
+                    '"%s": "%s"\n' % (
+                        '.'.join(sig_file.split('.')[:-1]), sig_file))
+        return filename
+
+
+    def _add_point(self, filename):
+        encoded = filename.encode('utf-8')
+        if self.gaia_db.contains(encoded):
+            return
+        signame = self.get_signame(encoded)
+        if not os.path.exists(signame):
+            if not self.essentia_analyze(encoded, signame):
+                return
+        point = Point()
+        point.load(signame)
+        point.setName(encoded)
+        self.gaia_db.addPoint(point)
+
+    def _remove_point(self, filename):
+        encoded = filename.encode('utf-8')
+        try:
+            self.gaia_db.removePoint(encoded)
+            self.gaia_db.save(self.gaia_db_path)
+        except:
+            pass
+        signame = self.get_signame(encoded)
+        if os.path.isfile(signame):
+            os.remove(signame)
+
+    @staticmethod
+    def get_signame(filename):
+        """Get the path for the analysis data file for this filename."""
+        return filename + '.sig'
+
+    def essentia_analyze(self, filename, signame):
+        try:
+            subprocess.check_call(
+                ['timeout', '120', ESSENTIA_EXTRACTOR_PATH, filename, signame])
+            return True
+        except Exception as e:
+            print e
+            return False
+
+    def run(self):
+        print "STARTING GAIA ANALYSIS THREAD"
+        while True:
+            found = defaultdict(list)
+            cmd, filename = self.queue.get()
+            while filename:
+                found[cmd].append(filename)
+                try:
+                    cmd, filename = self.queue.get(block=True, timeout=1)
+                except Empty:
+                    break
+            for cmd in found.keys():
+                for filename in found[cmd]:
+                    print cmd, filename
+                    self.commands[cmd](filename)
+            self.gaia_db_transformed = self.transform_gaia_db(self.gaia_db)
+            self.gaia_db.save(self.gaia_db_path)
+
+    def get_tracks(self, filename, excluded_artists, number, cutoff):
+        encoded = filename.encode('utf-8')
+        if not self.gaia_db.contains(encoded):
+            self.queue.put((ADD, filename))
+            return []
+
+        view = View(self.gaia_db_transformed)
+        if excluded_artists:
+            filt = 'WHERE label.metadata.tags.artist NOT IN (%s)' % (
+                ','.join([
+                    '"%s", "%s"' % (
+                        artist.encode('utf-8'),
+                        artist.encode('utf-8').title())
+                    for artist in excluded_artists]))
+        else:
+            filt = ""
+        try:
+            return [
+                (score * 1000, name) for name, score
+                in view.nnSearch(encoded, self.metric, filt).get(number)[1:]
+                if score * 1000 < cutoff]
+        except:
+            return []
+
 class DatabaseWrapper(Thread):
     """Process to handle all database access."""
 
@@ -126,6 +277,7 @@ class DatabaseWrapper(Thread):
         self.queue = queue              # pylint: disable=W0201
 
     def run(self):
+        print "STARTING DATABASE WRAPPER THREAD"
         connection = sqlite3.connect(self.path, isolation_level='immediate')
         cursor = connection.cursor()
         commit_needed = False
@@ -280,11 +432,11 @@ class Similarity(object):
             self.player_get_data_dir(), "similarity.db")
         self.gaia_db_path = os.path.join(
             self.player_get_data_dir(), "gaia.db")
-        self.queue = PriorityQueue()
+        self.db_queue = PriorityQueue()
         self._db_wrapper = DatabaseWrapper()
         self._db_wrapper.daemon = True
         self._db_wrapper.set_path(self.db_path)
-        self._db_wrapper.set_queue(self.queue)
+        self._db_wrapper.set_queue(self.db_queue)
         self._db_wrapper.start()
         self.create_db()
         if MIRAGE:
@@ -297,81 +449,11 @@ class Similarity(object):
         self.history = []
         self.now_playing = None
         if GAIA:
-            self.gaia_db = self.load_gaia()
-            self.gaia_db.load(self.gaia_db_path)
-            self.gaia_db_transformed = self.transform_gaia_db(self.gaia_db)
-            self.metric = DistanceFunctionFactory.create(
-                'euclidean', self.gaia_db_transformed.layout())
-
-    def transform_point(self, original):
-        point = transform(original, 'fixlength')
-        point = transform(point, 'cleaner')
-        point = transform(point, 'remove', {'descriptorNames': '*mfcc*'})
-        point = transform(point, 'remove', {'descriptorNames': '*beats_position*'})
-        point = transform(point, 'remove', {'descriptorNames': '*bpm_estimates*'})
-        point = transform(point, 'remove', {'descriptorNames': '*bpm_intervals*'})
-        point = transform(point, 'remove', {'descriptorNames': '*onset_times*'})
-        point = transform(point, 'normalize')
-        point = transform(
-            point, 'pca', {
-                'dimension': 30,
-                'descriptorNames': ['*.mean', '*.var'],
-                'resultName': 'pca30'})
-        point.setReferencePoint(original)
-        return point
-
-    def transform_gaia_db(self, original):
-        ds = transform(original, 'fixlength')
-        ds = transform(ds, 'cleaner')
-        ds = transform(ds, 'remove', {'descriptorNames': '*mfcc*'})
-        ds = transform(ds, 'remove', {'descriptorNames': '*beats_position*'})
-        ds = transform(ds, 'remove', {'descriptorNames': '*bpm_estimates*'})
-        ds = transform(ds, 'remove', {'descriptorNames': '*bpm_intervals*'})
-        ds = transform(ds, 'remove', {'descriptorNames': '*onset_times*'})
-        ds = transform(ds, 'normalize')
-        ds = transform(
-            ds, 'pca', {
-                'dimension': 30,
-                'descriptorNames': ['*.mean', '*.var'],
-                'resultName': 'pca30'})
-        ds.setReferenceDataSet(original)
-        return ds
-
-    def load_gaia(self):
-        if os.path.exists(self.gaia_db_path):
-            ds = DataSet()
-            ds.load(self.gaia_db_path)
-        else:
-            db = {}
-            for directory in self.music_dirs:
-                filename = self.index_sig_files(directory)
-                db.update({
-                    k.encode('utf-8'): v.encode('utf-8')
-                    for k, v in yaml.load(open(filename).read()).items()})
-            ds = DataSet.mergeFiles(db)
-            ds.save(self.gaia_db_path)
-
-        return ds
-
-    @staticmethod
-    def get_db_filename(directory):
-        return '%s.yaml' % (directory.replace('/', '_'),)
-
-    def index_sig_files(self, directory):
-        filename = self.get_db_filename(directory)
-        files = [
-            f for f in subprocess.check_output(
-                "find -L %s -iname '*.sig'" % directory, shell=True).split('\n')
-            if f]
-
-        with open(filename, 'w') as output:
-            for sig_file in files:
-                if isinstance(sig_file, unicode):
-                    sig_file = sig_file.encode('utf-8')
-                output.write(
-                    '"%s": "%s"\n' % (
-                        '.'.join(sig_file.split('.')[:-1]), sig_file))
-        return filename
+            self.gaia_queue = Queue()
+            self.gaia_analyser = GaiaAnalysis(
+                self.gaia_db_path, self.gaia_queue)
+            self.gaia_analyser.daemon = True
+            self.gaia_analyser.start()
 
     def join(self, name):
         user_id = self.get_user_id(name)
@@ -528,7 +610,7 @@ class Similarity(object):
         """Put sql command on the queue to be executed."""
         if command is None:
             command = SQLCommand(sql)
-        self.queue.put((priority, command))
+        self.db_queue.put((priority, command))
 
     def get_sql_command(self, sql, priority=1):
         """Build a SQLCommand, put it on the queue and return it."""
@@ -564,9 +646,7 @@ class Similarity(object):
         self.execute_sql(
             ('DELETE FROM mirage WHERE filename = ?', (filename,)),
             priority=10)
-        signame = self.get_signame(filename)
-        if os.path.isfile(signame):
-            os.remove(signame)
+        self.gaia_queue.put((REMOVE, filename))
 
     def remove_track(self, artist, title):
         """Delete missing track."""
@@ -630,30 +710,13 @@ class Similarity(object):
         return command.result_queue.get()
 
     def get_ordered_gaia_tracks(self, filename, excluded_artists, number,
-                                cutoff=20000):
+                                cutoff=500):
         """Get neighbours for track."""
-        encoded = filename.encode('utf-8')
         if not excluded_artists:
             excluded_artists = []
-        try:
-            self.gaia_db.point(encoded)
-        except:
-            self.add_gaia_track(encoded)
         # XXX: move to init, if the view updates when new keys are added.
-        view = View(self.gaia_db_transformed)
-        if excluded_artists:
-            filt = 'WHERE label.metadata.tags.artist NOT IN (%s)' % (
-                ','.join([
-                    '"%s", "%s"' % (
-                        artist.encode('utf-8'),
-                        artist.encode('utf-8').title())
-                    for artist in excluded_artists]))
-        else:
-            filt = ""
-        return [
-            (score * 1000, name) for name, score
-            in view.nnSearch(encoded, self.metric, filt).get(number)[1:]
-            if score * 1000 < cutoff]
+        return self.gaia_analyser.get_tracks(
+            filename, excluded_artists, number, cutoff)
 
     def get_ordered_mirage_tracks(self, filename, excluded_filenames, number,
                                   cutoff=20000):
@@ -945,48 +1008,12 @@ class Similarity(object):
             except:
                 return
 
-    @staticmethod
-    def get_signame(filename):
-        """Get the path for the analysis data file for this filename."""
-        return filename + '.sig'
-
-    def essentia_analyze(self, filename, signame):
-        try:
-            subprocess.check_call([ESSENTIA_EXTRACTOR_PATH, filename, signame])
-            return True
-        except:
-            return False
-
-    def add_gaia_tracks(self, filenames):
-        db = {}
-        for filename in filenames:
-            encoded = filename.encode('utf-8')
-            signame = self.get_signame(encoded)
-            db[filename] = signame
-            if not os.path.exists(signame):
-                if not self.essentia_analyze(encoded, signame):
-                    continue
-            point = Point()
-            point.load(signame)
-            point.setName(encoded)
-            self.gaia_db.addPoint(point)
-
-        self.gaia_db_transformed = self.transform_gaia_db(self.gaia_db)
-        self.gaia_db.save(self.gaia_db_path)
-
-    def add_gaia_track(self, filename):
-        self.add_gaia_tracks([filename])
-
     def analyze_track(self, filename, priority):
         """Perform mirage analysis of a track."""
         if not filename:
             return
         if GAIA:
-            encoded = filename.encode('utf-8')
-            try:
-                self.gaia_db.point(encoded)
-            except:
-                self.add_gaia_track(encoded)
+            self.gaia_queue.put((ADD, filename))
         if MIRAGE:
             scms = self.get_scms_from_filename(filename, priority=priority)
             if scms:
@@ -1006,14 +1033,8 @@ class Similarity(object):
         if not filenames:
             return
         if GAIA:
-            to_analyze = []
             for filename in filenames:
-                encoded = filename.encode('utf-8')
-                try:
-                    self.gaia_db.point(encoded)
-                except:
-                    to_analyze.append(encoded)
-            self.add_gaia_tracks(to_analyze)
+                self.gaia_queue.put((ADD, filename))
         if MIRAGE:
             for filename in filenames:
                 scms = self.get_scms_from_filename(filename, priority=priority)
@@ -1230,7 +1251,7 @@ class SimilarityService(dbus.service.Object):
 
     @method(dbus_interface=IFACE, in_signature='asi')
     def analyze_tracks(self, filenames, priority):
-        """Perform mirage analysis of a track."""
+        """Perform analysis of multiple tracks."""
         self.similarity.analyze_tracks(
             [unicode(filename) for filename in filenames], priority)
 
