@@ -33,7 +33,7 @@ from threading import Thread
 from Queue import Queue, PriorityQueue, Empty
 from time import strptime, time
 from datetime import datetime, timedelta
-from collections import namedtuple, defaultdict
+from collections import namedtuple
 from dbus.mainloop.glib import DBusGMainLoop
 from dbus.service import method
 
@@ -188,26 +188,28 @@ class GaiaAnalysis(Thread):
     def _add_point(self, filename):
         encoded = filename.encode('utf-8')
         if self.gaia_db.contains(encoded):
-            return
+            return 0
         signame = self.get_signame(encoded)
         if not os.path.exists(signame):
             if not self.essentia_analyze(encoded, signame):
-                return
+                return 0
         point = Point()
         point.load(signame)
         point.setName(encoded)
         self.gaia_db.addPoint(point)
+        return 1
 
     def _remove_point(self, filename):
         encoded = filename.encode('utf-8')
         try:
             self.gaia_db.removePoint(encoded)
-            self.gaia_db.save(self.gaia_db_path)
+            dirty = 1
         except:
-            pass
+            dirty = 0
         signame = self.get_signame(encoded)
         if os.path.isfile(signame):
             os.remove(signame)
+        return dirty
 
     @staticmethod
     def get_signame(filename):
@@ -226,20 +228,23 @@ class GaiaAnalysis(Thread):
     def run(self):
         print "STARTING GAIA ANALYSIS THREAD"
         while True:
-            found = defaultdict(list)
             cmd, filename = self.queue.get()
+            done = 0
             while filename:
-                found[cmd].append(filename)
+                done += self.commands[cmd](filename)
+                if done and (done % 100 == 0):
+                    self.rebuild()
+                    done = 0
                 try:
-                    cmd, filename = self.queue.get(block=True, timeout=1)
+                    cmd, filename = self.queue.get(block=False)
                 except Empty:
                     break
-            for cmd in found.keys():
-                for filename in found[cmd]:
-                    print cmd, filename
-                    self.commands[cmd](filename)
-            self.gaia_db_transformed = self.transform_gaia_db(self.gaia_db)
-            self.gaia_db.save(self.gaia_db_path)
+            if done:
+                self.rebuild()
+
+    def rebuild(self):
+        self.gaia_db_transformed = self.transform_gaia_db(self.gaia_db)
+        self.gaia_db.save(self.gaia_db_path)
 
     def get_tracks(self, filename, excluded_artists, number, cutoff):
         encoded = filename.encode('utf-8')
