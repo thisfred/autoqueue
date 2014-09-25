@@ -578,13 +578,13 @@ class Daylight(TimeRangePredicate):
 class NegativeTimeRangePredicate(TimeRangePredicate):
 
     def applies_in_context(self, context):
-        if self.start and context.date > self.start:
-            return False
+        if self.start and context.date < self.start:
+            return True
 
-        if self.end and context.date < self.end:
-            return False
+        if self.end and context.date > self.end:
+            return True
 
-        return True
+        return False
 
 
 class NotDaylight(NegativeTimeRangePredicate):
