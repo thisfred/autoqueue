@@ -402,9 +402,14 @@ class AutoQueueBase(object):
     def player_construct_file_search(self, filename, restrictions=None):
         """Construct a search that looks for songs with this filename."""
 
+    def player_construct_files_search(self, filenames):
+        """Construct a search that looks for songs with any of these filenames.
+
+        """
+
     def player_construct_track_search(self, artist, title, restrictions=None):
-        """Construct a search that looks for songs with this artist
-        and title.
+        """Construct a search that looks for songs with this artist and title.
+
         """
 
     def player_construct_artist_search(self, artist, restrictions=None):
@@ -524,6 +529,10 @@ class AutoQueueBase(object):
         self.cached_weather_at = datetime.now()
         return self.cached_weather
 
+    def construct_filenames_search(self, filenames):
+        s = self.player_construct_files_search(filenames)
+        return s
+
     def construct_search(self, artist=None, title=None, tags=None,
                          filename=None, restrictions=None):
         """Construct a search based on several criteria."""
@@ -573,12 +582,10 @@ class AutoQueueBase(object):
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
             return
-        blocked_artists = self.get_blocked_artists()
         if self.has_gaia and self.use_gaia:
             self.log('Get similar tracks for: %s' % filename)
             self.similarity.get_ordered_gaia_tracks(
-                filename, blocked_artists, self.number,
-                reply_handler=self.gaia_reply_handler,
+                filename, self.number, reply_handler=self.gaia_reply_handler,
                 error_handler=self.error_handler, timeout=TIMEOUT)
         else:
             self.gaia_reply_handler([])
@@ -592,9 +599,10 @@ class AutoQueueBase(object):
         """Exexute processing asynchronous."""
         self.found = False
         if results:
-            for _ in self.process_results([{'score': match,
-                                            'filename': filename }
-                                           for match, filename in results]):
+            for _ in self.process_filename_results([{'score': match,
+                                                     'filename': filename }
+                                                    for match, filename
+                                                    in results]):
                 yield
         if self.found:
             if not self.queue_needs_songs():
@@ -652,10 +660,11 @@ class AutoQueueBase(object):
         """Exexute processing asynchronous."""
         self.found = False
         if results:
-            for _ in self.process_results([{'score': match,
-                                            'filename': filename,
-                                            'loved': l}
-                                           for match, filename, l in results]):
+            for _ in self.process_filename_results([{'score': match,
+                                                     'filename': filename,
+                                                     'loved': l}
+                                                    for match, filename, l
+                                                    in results]):
                 yield
         if self.found:
             if not self.queue_needs_songs():
@@ -773,6 +782,11 @@ class AutoQueueBase(object):
                 return True
         return False
 
+    def search_filenames(self, results):
+        filenames = [r['filename'] for r in results]
+        search = self.construct_filenames_search(filenames)
+        self.perform_search(search, results)
+
     def search_database(self, results):
         """Do a batch search for several songs at once."""
         searches = [
@@ -781,14 +795,17 @@ class AutoQueueBase(object):
                 filename=result.get('filename'), tags=result.get('tags'))
             for result in results]
         for search in searches:
-            if self.restrictions:
-                search = '&(%s,%s)' % (search, self.restrictions)
-            songs = self.player_search(search)
-            for song in songs:
-                for result in results:
-                    if self.satisfies(song, result):
-                        result['song'] = song
-                        yield
+            self.perform_search(search, results)
+            yield
+
+    def perform_search(self, search, results):
+        if self.restrictions:
+            search = '&(%s,%s)' % (search, self.restrictions)
+        songs = self.player_search(search)
+        for song in songs:
+            for result in results:
+                if self.satisfies(song, result):
+                    result['song'] = song
 
     def adjust_scores(self, results, invert_scores):
         """Adjust scores based on similarity with previous song and context."""
@@ -822,6 +839,9 @@ class AutoQueueBase(object):
             yield
         if not results:
             return
+        self.pick_result(results)
+
+    def pick_result(self, results):
         for number, result in enumerate(sorted(results,
                                                key=lambda x: x['score'])):
             song = result['song']
@@ -845,6 +865,15 @@ class AutoQueueBase(object):
                 self.found = True
                 return
 
+    def process_filename_results(self, results):
+        if not results:
+            return
+        self.search_filenames(results)
+        for _ in self.adjust_scores(results, invert_scores=False):
+            yield
+        if not results:
+            return
+        self.pick_result(results)
 
     def log_lookup(self, number, result):
         look_for = unicode(result.get('artist', ''))

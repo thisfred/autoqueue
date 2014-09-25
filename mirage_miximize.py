@@ -1,4 +1,7 @@
-"""Add selected songs to the queue in ideal order based on mirage distances."""
+"""
+Add selected songs to the queue in ideal order based on acoustic similarity.
+
+"""
 
 import dbus
 from quodlibet import widgets
@@ -26,13 +29,13 @@ def get_title(song):
     return title
 
 
-class MirageMiximizePlugin(SongsMenuPlugin):
+class MiximizePlugin(SongsMenuPlugin):
     """Add selected songs to the queue in ideal order."""
 
-    PLUGIN_ID = "Mirage Miximize"
-    PLUGIN_NAME = _("Mirage Miximize")
+    PLUGIN_ID = "Miximize"
+    PLUGIN_NAME = _("Miximize")
     PLUGIN_DESC = _("Add selected songs to the queue in ideal order based on"
-                    " mirage distances.")
+                    " acoustic similarity.")
     PLUGIN_ICON = "gtk-find-and-replace"
     PLUGIN_VERSION = "0.1"
 
