@@ -206,13 +206,16 @@ class GaiaAnalysis(Thread):
                 return
         self.queue_sigfile(signame)
         point = Point()
-        point.load(signame)
+        try:
+            point.load(signame)
+        except Exception as e:
+            print e
+            return
         point.setName(encoded)
         try:
             self.gaia_db_transformed.addPoint(point)
         except Exception as e:
             print e
-            pass
 
     def queue_sigfile(self, sig_file):
         with open(self.gaia_queue_path, 'a') as queue:

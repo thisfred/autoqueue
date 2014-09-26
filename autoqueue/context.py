@@ -106,7 +106,8 @@ class Context(object):
                     ' ', self.last_song.get_title(with_version=False)).split()
                 if len(word) > 3]
             if words:
-                self.predicates.append(StringPredicate(words))
+                self.predicates.extend(
+                    [StringPredicate(word) for word in words])
             self.predicates.append(
                 TagsPredicate(self.last_song.get_non_geo_tags()))
             self.predicates.append(
@@ -116,7 +117,8 @@ class Context(object):
         if self.extra_context:
             words = [l.strip().lower() for l in self.extra_context.split(',')]
             if words:
-                self.predicates.append(StringPredicate(words))
+                self.predicates.extend([
+                    StringPredicate(word) for word in words])
 
     def add_birthday_predicates(self):
         for name_date in self.birthdays.split(','):
@@ -174,13 +176,16 @@ class Context(object):
                     else:
                         conditions.append(unmodified[:-1])
                 if conditions:
-                    self.predicates.append(StringPredicate(conditions))
+                    self.predicates.extend([
+                        StringPredicate(condition)
+                        for condition in conditions])
 
     def add_location_predicates(self):
         if self.location:
             locations = [l.lower() for l in self.location.split(',')]
             if locations:
-                self.predicates.append(StringPredicate(locations))
+                self.predicates.extend([
+                    StringPredicate(location) for location in locations])
         if self.geohash:
             self.predicates.append(GeohashPredicate([self.geohash]))
 
@@ -578,13 +583,8 @@ class Daylight(TimeRangePredicate):
 class NegativeTimeRangePredicate(TimeRangePredicate):
 
     def applies_in_context(self, context):
-        if self.start and context.date < self.start:
-            return True
-
-        if self.end and context.date > self.end:
-            return True
-
-        return False
+        return not super(
+            NegativeTimeRangePredicate, self).applies_in_context(context)
 
 
 class NotDaylight(NegativeTimeRangePredicate):
