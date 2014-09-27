@@ -99,24 +99,23 @@ def get_artists_playing_nearby(location_geohash, location):
         params['location'] = location
     nearby_artists = []
     response = requests.get('http://ws.audioscrobbler.com/2.0/', params=params)
-    try:
-        total_pages = int(response.json['events']['@attr']['totalPages'])
-        page = int(response.json['events']['@attr']['page'])
-        while True:
-            for event in response.json['events']['event']:
-                artists = event['artists']['artist']
-                if isinstance(artists, list):
-                    nearby_artists.extend(artists)
-                else:
-                    nearby_artists.append(artists)
-            if page == total_pages:
-                return nearby_artists
-            params['page'] = page + 1
-            response = requests.get(
-                'http://ws.audioscrobbler.com/2.0/', params=params)
-            page = int(response.json['events']['@attr']['page'])
-    except Exception, e:
-        print e
+    json = response.json()
+    total_pages = int(json['events']['@attr']['totalPages'])
+    page = int(json['events']['@attr']['page'])
+    while True:
+        for event in json['events']['event']:
+            artists = event['artists']['artist']
+            if isinstance(artists, list):
+                nearby_artists.extend(artists)
+            else:
+                nearby_artists.append(artists)
+        if page == total_pages:
+            return nearby_artists
+        params['page'] = page + 1
+        response = requests.get(
+            'http://ws.audioscrobbler.com/2.0/', params=params)
+        json = response.json()
+        page = int(json['events']['@attr']['page'])
     return nearby_artists
 
 

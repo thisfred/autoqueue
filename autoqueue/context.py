@@ -142,7 +142,7 @@ class Context(object):
             return
         self.predicates.extend([
             Freezing(), Cold(), Hot(), Calm(), Breeze(), Wind(), Storm(),
-            Gale(), Storm(), Hurricane(), Humid(), Cloudy(), Rain()])
+            Gale(), Storm(), Hurricane(), Humid(), Cloudy(), Rain(), Fog()])
         sunrise = self.weather.get('astronomy', {}).get('sunrise', '')
         sunset = self.weather.get('astronomy', {}).get('sunset', '')
         if sunrise and sunset:
@@ -166,7 +166,8 @@ class Context(object):
             if condition:
                 conditions = []
                 unmodified = condition.split()[-1]
-                if unmodified in ('rain', 'drizzle', 'cloudy'):
+                if unmodified in ('rain', 'drizzle', 'cloudy', 'fog', 'foggy',
+                                  'mist', 'misty'):
                     continue
                 if unmodified not in conditions:
                     conditions.append(unmodified)
@@ -605,6 +606,19 @@ class Sun(TimeRangePredicate, WeatherPredicate):
 
         return False
 
+
+class Fog(WeatherPredicate):
+
+    terms = ('mist', 'misty', 'fog', 'foggy')
+
+    def applies_in_context(self, context):
+        conditions = self.get_weather_conditions(context)
+        for condition in conditions:
+            if 'mist' in condition or 'fog' in condition\
+                    or 'foggy' in condition or 'misty' in condition:
+                return True
+
+        return False
 
 class Cloudy(WeatherPredicate):
 
