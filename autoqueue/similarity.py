@@ -22,7 +22,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 
 import dbus
 import dbus.service
-import functools
 from gi.repository import GObject
 import os
 import random
@@ -91,17 +90,6 @@ ADD = 'add'
 REMOVE = 'remove'
 
 
-def memoize(f):
-    cache = {}
-
-    @functools.wraps(f)
-    def memoizer(*args):
-        if args not in cache:
-            cache[args] = f(*args)
-        return cache[args]
-    return memoizer
-
-
 def cluster_match(cluster1, cluster2):
     """@cluster1 and @cluster2 have matching ends."""
     return (
@@ -110,6 +98,7 @@ def cluster_match(cluster1, cluster2):
 
 
 class SQLCommand(object):
+
     """A SQL command object."""
 
     def __init__(self, sql_statements):
@@ -119,10 +108,12 @@ class SQLCommand(object):
 
 class GaiaAnalysis(Thread):
 
+    """Gaia acoustic analysis and comparison."""
+
     def __init__(self, db_path, queue):
         super(GaiaAnalysis, self).__init__()
         self.gaia_db_path = db_path
-        self.gaia_db_transformed = None
+        self.gaia_db = None
         self.metric = None
         self.commands = {
             ADD: self._analyze,
@@ -130,100 +121,85 @@ class GaiaAnalysis(Thread):
         self.queue = queue
 
     def initialize(self):
-        self.gaia_db_transformed = self.load_gaia_db()
+        """Handle more expensive initialization."""
+        self.gaia_db = self.initialize_gaia_db()
         self.metric = DistanceFunctionFactory.create(
-            'euclidean', self.gaia_db_transformed.layout())
+            'euclidean', self.gaia_db.layout())
 
     @property
     def gaia_queue_path(self):
+        """The path to the queue file."""
         return self.gaia_db_path + '.queue'
 
-    def load_gaia_db(self):
-        if not os.path.isfile(self.gaia_db_path + '.transformed'):
-            original = self.load_gaia()
-            ds = transform(original, 'fixlength')
-            ds = transform(ds, 'cleaner')
-            ds = transform(ds, 'remove', {'descriptorNames': '*mfcc*'})
-            ds = transform(ds, 'remove', {'descriptorNames': '*beats_position*'})
-            ds = transform(ds, 'remove', {'descriptorNames': '*bpm_estimates*'})
-            ds = transform(ds, 'remove', {'descriptorNames': '*bpm_intervals*'})
-            ds = transform(ds, 'remove', {'descriptorNames': '*onset_times*'})
-            ds = transform(ds, 'normalize')
-            ds = transform(
-                ds, 'pca', {
-                    'dimension': 30,
-                    'descriptorNames': ['*.mean', '*.var'],
-                    'resultName': 'pca30'})
-            ds.setReferenceDataSet(original)
-            ds.save(self.gaia_db_path + '.transformed')
+    def initialize_gaia_db(self):
+        """Load or initialize the gaia database."""
+        if not os.path.isfile(self.gaia_db_path):
+            ds = self.create_gaia_db()
         else:
-            ds = self.load_transformed()
+            ds = self.load_gaia_db()
         print "songs in db before processing queue: %d" % ds.size()
-        self.process_queue(ds, self.gaia_db_path + '.transformed')
+        self.process_queue(ds, self.gaia_db_path)
         print "songs in db after processing queue: %d" % ds.size()
         return ds
 
-    def load_transformed(self):
+    def create_gaia_db(self):
+        """Create a new empty gaia database."""
         ds = DataSet()
-        ds.load(self.gaia_db_path + '.transformed')
+        ds = transform(ds, 'fixlength')
+        ds = transform(ds, 'cleaner')
+        ds = transform(ds, 'remove', {'descriptorNames': '*mfcc*'})
+        ds = transform(
+            ds, 'remove', {'descriptorNames': '*beats_position*'})
+        ds = transform(
+            ds, 'remove', {'descriptorNames': '*bpm_estimates*'})
+        ds = transform(
+            ds, 'remove', {'descriptorNames': '*bpm_intervals*'})
+        ds = transform(ds, 'remove', {'descriptorNames': '*onset_times*'})
+        ds = transform(ds, 'normalize')
+        ds = transform(
+            ds, 'pca', {
+                'dimension': 30,
+                'descriptorNames': ['*.mean', '*.var'],
+                'resultName': 'pca30'})
+        ds.save(self.gaia_db_path)
         return ds
 
-    def load_gaia(self):
-        if os.path.exists(self.gaia_db_path):
-            ds = DataSet()
-            ds.load(self.gaia_db_path)
-        else:
-            ds = DataSet()
+    def load_gaia_db(self):
+        """Load the gaia database from disk."""
+        ds = DataSet()
+        ds.load(self.gaia_db_path)
         return ds
-
-    @staticmethod
-    def get_db_filename(directory):
-        return '%s.yaml' % (directory.replace('/', '_'),)
-
-    def index_sig_files(self, directory):
-        filename = self.get_db_filename(directory)
-        files = [
-            f for f in subprocess.check_output(
-                "find -L %s -iname '*.sig'" % directory, shell=True).split('\n')
-            if f]
-
-        with open(filename, 'w') as output:
-            for sig_file in files:
-                if isinstance(sig_file, unicode):
-                    sig_file = sig_file.encode('utf-8')
-                output.write(
-                    '"%s": "%s"\n' % (
-                        '.'.join(sig_file.split('.')[:-1]), sig_file))
-        return filename
 
     def _analyze(self, filename):
+        """Analyze an audio file."""
         encoded = filename.encode('utf-8')
-        if self.gaia_db_transformed.contains(encoded):
+        if self.gaia_db.contains(encoded):
             return
         signame = self.get_signame(encoded)
         if not os.path.exists(signame):
             if not self.essentia_analyze(encoded, signame):
+                # Create a bogus sis file so we don't have to do analysis that
+                # we know is going to fail every time.
+                subprocess.check_call(['touch', signame])
                 return
         self.queue_sigfile(signame)
         point = Point()
         try:
             point.load(signame)
-        except Exception as e:
-            print e
-            return
-        point.setName(encoded)
-        try:
-            self.gaia_db_transformed.addPoint(point)
+            point.setName(encoded)
+            self.gaia_db.addPoint(point)
         except Exception as e:
             print e
 
     def queue_sigfile(self, sig_file):
+        """Add the name of the sigfile to the queue file."""
         with open(self.gaia_queue_path, 'a') as queue:
             queue.write(
                 '"%s": "%s"\n' % (
                     '.'.join(sig_file.split('.')[:-1]), sig_file))
 
     def process_queue(self, db, path):
+        """Process and flush the queue file."""
         if not os.path.isfile(self.gaia_queue_path):
             return
         for name, sigfile in yaml.load(
@@ -255,9 +231,10 @@ class GaiaAnalysis(Thread):
         os.remove(self.gaia_queue_path)
 
     def _remove_point(self, filename):
+        """Remove a point from the gaia database."""
         encoded = filename.encode('utf-8')
         try:
-            self.gaia_db_transformed.removePoint(encoded)
+            self.gaia_db.removePoint(encoded)
         except:
             pass
         signame = self.get_signame(encoded)
@@ -269,6 +246,7 @@ class GaiaAnalysis(Thread):
         return filename + '.sig'
 
     def essentia_analyze(self, filename, signame):
+        """Perform essentia analysis of an audio file."""
         try:
             subprocess.check_call(
                 ['timeout', '300', ESSENTIA_EXTRACTOR_PATH, filename, signame])
@@ -282,23 +260,26 @@ class GaiaAnalysis(Thread):
         print "STARTING GAIA ANALYSIS THREAD"
         while True:
             cmd, filename = self.queue.get()
+            print "%d tracks in queue." % self.queue.qsize()
             while filename:
                 self.commands[cmd](filename)
                 try:
                     cmd, filename = self.queue.get(block=False)
+                    print "%d tracks in queue." % self.queue.qsize()
                 except Empty:
                     break
 
     def get_tracks(self, filename, number, cutoff):
-        while self.gaia_db_transformed is None:
+        """Get most similar tracks from the gaia database."""
+        while self.gaia_db is None:
             sleep(.1)
         encoded = filename.encode('utf-8')
-        if not self.gaia_db_transformed.contains(encoded):
+        if not self.gaia_db.contains(encoded):
             print "%s not found in gaia db" % encoded
             self.queue.put((ADD, filename))
             return []
 
-        view = View(self.gaia_db_transformed)
+        view = View(self.gaia_db)
         try:
             return [
                 (score * 1000, name) for name, score
@@ -308,16 +289,18 @@ class GaiaAnalysis(Thread):
             print e
             return []
 
+
 class DatabaseWrapper(Thread):
+
     """Process to handle all database access."""
 
     def set_path(self, path):
         """Set the database path."""
-        self.path = path                # pylint: disable=W0201
+        self.path = path
 
     def set_queue(self, queue):
         """Set the queue to use."""
-        self.queue = queue              # pylint: disable=W0201
+        self.queue = queue
 
     def run(self):
         print "STARTING DATABASE WRAPPER THREAD"
@@ -335,7 +318,7 @@ class DatabaseWrapper(Thread):
             commit_needed = False
             try:
                 cursor.execute(*sql)
-            except Exception, e:        # pylint: disable=W0703
+            except Exception, e:
                 print e, repr(sql)
             if not sql[0].upper().startswith('SELECT'):
                 commit_needed = True
@@ -346,8 +329,9 @@ class DatabaseWrapper(Thread):
             cmd.result_queue.put(result)
 
 
-class Pair():
-    """A pair of songs"""
+class Pair(object):
+
+    """A pair of songs."""
 
     def __init__(self, song1, song2, song_distance):
         self.song1 = song1
@@ -380,6 +364,7 @@ class Pair():
 
 
 class Clusterer(object):
+
     """Build a list of songs in optimized order."""
 
     def __init__(self, songs, comparison_function):
@@ -467,6 +452,7 @@ class Clusterer(object):
 
 
 class Similarity(object):
+
     """Here the actual similarity computation and lookup happens."""
 
     def __init__(self):
@@ -499,6 +485,7 @@ class Similarity(object):
             self.gaia_analyser.start()
 
     def join(self, name):
+        """Set user to present."""
         user_id = self.get_user_id(name)
         if user_id not in self.users:
             if user_id in self.absent:
@@ -510,13 +497,14 @@ class Similarity(object):
         return user_id
 
     def leave(self, user_id):
+        """Set user to absent."""
         if user_id not in self.users:
             return
         self.absent[user_id] = self.users[user_id]
         del self.users[user_id]
 
-    @memoize
     def get_user_id(self, name):
+        """Get user id from database."""
         sql = ("SELECT users.id FROM users WHERE users.name = ?;", (name,),)
         command = self.get_sql_command(sql, priority=1)
         for row in command.result_queue.get():
@@ -528,6 +516,7 @@ class Similarity(object):
             return row[0]
 
     def get_lovers_and_haters(self, track_id):
+        """Get users who feel strongly about this song."""
         sql = ("SELECT user, loved FROM users_2_tracks WHERE track = ?;", (
             track_id,))
         command = self.get_sql_command(sql, priority=0)
@@ -541,6 +530,7 @@ class Similarity(object):
         return lovers, haters
 
     def get_filename(self, track_id):
+        """Get filename from database."""
         sql = (
             "SELECT filename FROM mirage WHERE mirage.trackid = ?;",
             (track_id,))
@@ -549,6 +539,7 @@ class Similarity(object):
             return row[0]
 
     def get_user_tracks(self, user_id):
+        """Get a user's loved tracks."""
         sql = (
             "SELECT mirage.trackid, mirage.filename, users_2_tracks.loved "
             "FROM users_2_tracks INNER JOIN mirage ON users_2_tracks.track = "
@@ -567,12 +558,14 @@ class Similarity(object):
                     hated=True)
 
     def get_player_info(self):
+        """Get player information."""
         return {
             'history': [t._asdict() for t in self.history],
             'now_playing': self.now_playing and self.now_playing._asdict(),
             'requests': list(self.get_requests())}
 
     def get_user_info(self, user_id):
+        """Get user information."""
         user = self.users[user_id]
         self.last_seen[user_id] = datetime.utcnow()
         if 'loved' not in user:
@@ -586,6 +579,7 @@ class Similarity(object):
         return user
 
     def love(self, user_id, track_id):
+        """Add a track to a user's loved tracks."""
         user = self.users[user_id]
         self.last_seen[user_id] = datetime.utcnow()
         self.execute_sql(
@@ -597,6 +591,7 @@ class Similarity(object):
             filename=filename)
 
     def hate(self, user_id, track_id):
+        """Add a track to a user's hated tracks."""
         user = self.users[user_id]
         self.last_seen[user_id] = datetime.utcnow()
         self.execute_sql(
@@ -610,6 +605,7 @@ class Similarity(object):
             subprocess.call(['quodlibet', '--next'])
 
     def meh(self, user_id, track_id):
+        """Remove a track from the user's loved or hated tracks."""
         user = self.users[user_id]
         self.last_seen[user_id] = datetime.utcnow()
         self.execute_sql(
@@ -625,10 +621,12 @@ class Similarity(object):
                 return
 
     def add_request(self, user_id, filename):
+        """Add a song request."""
         self.users[user_id].setdefault('requests', []).append(filename)
         self.analyze_track(filename, priority=0)
 
     def start_song(self, filename, artist, title):
+        """Signal that a song has started."""
         self.remove_request(filename)
         if self.now_playing:
             self.history.append(self.now_playing)
@@ -640,6 +638,7 @@ class Similarity(object):
             title=title)
 
     def remove_request(self, filename):
+        """Remove song from the requests."""
         for user in self.users.values():
             requests = user.get('requests', [])
             if filename in requests:
@@ -647,6 +646,7 @@ class Similarity(object):
 
     @property
     def present(self):
+        """Get list of users currently present."""
         return set(self.users.keys())
 
     def execute_sql(self, sql=None, priority=1, command=None):
@@ -679,8 +679,9 @@ class Similarity(object):
     def add_track(self, filename, scms, priority):
         """Add track to database."""
         self.execute_sql(
-            ("INSERT INTO mirage (filename, scms) VALUES (?, ?);",
-            (filename, sqlite3.Binary(instance_to_picklestring(scms)))),
+            (
+                "INSERT INTO mirage (filename, scms) VALUES (?, ?);",
+                (filename, sqlite3.Binary(instance_to_picklestring(scms)))),
             priority=priority)
 
     def remove_track_by_filename(self, filename):
@@ -733,7 +734,6 @@ class Similarity(object):
             return instance_from_picklestring(row[0])
         return None
 
-    @memoize
     def get_track_id(self, filename):
         """Get track id from database."""
         sql = ("SELECT trackid FROM mirage WHERE filename = ?;", (filename,))
@@ -759,27 +759,13 @@ class Similarity(object):
         print "finding gaia matches took %f s" % (time() - start_time,)
         return tracks
 
-    def get_ordered_mirage_tracks(self, filename, excluded_filenames, number,
-                                  cutoff=20000):
-        """Get neighbours for track."""
-        start_time = time()
-        if not excluded_filenames:
-            excluded_filenames = []
-        conf = ScmsConfiguration(20)
+    def get_best(self, filename, excluded_filenames, scms, conf, number,
+                 start_time):
+        """Get the top number matches."""
         best = []
-        scms = self.get_scms_from_filename(filename)
-        if scms is None:
-            try:
-                scms = self.mir.analyze(filename)
-            except:
-                return []
-            self.add_track(filename, scms, priority=11)
-        tries = 0
         tracks = self.get_tracks()
         total = len(tracks)
         tried = set([])
-        misses = 0
-        miss_target = total / 200
         while len(tried) < total:
             entry = random.randrange(0, total)
             while entry in tried and len(tried) < total:
@@ -795,13 +781,10 @@ class Similarity(object):
             if dist < 0:
                 continue
             if len(best) >= number:
-                tries += 1
                 if dist > best[-1][0]:
-                    misses += 1
-                    if misses > miss_target:
+                    if time() - start_time > 5:
                         break
                     continue
-                misses = 0
             lovers, haters = self.get_lovers_and_haters(track_id)
             if self.present & haters:
                 continue
@@ -809,17 +792,36 @@ class Similarity(object):
             best.sort()
             while len(best) > number:
                 best.pop()
+        return best
+
+    def get_ordered_mirage_tracks(self, filename, excluded_filenames, number,
+                                  cutoff=20000):
+        """Get neighbours for track."""
+        start_time = time()
+        if not excluded_filenames:
+            excluded_filenames = []
+        scms = self.get_scms_from_filename(filename)
+        if scms is None:
+            try:
+                scms = self.mir.analyze(filename)
+            except:
+                return []
+            self.add_track(filename, scms, priority=11)
+        conf = ScmsConfiguration(20)
+        best = self.get_best(
+            filename, excluded_filenames, scms, conf, number, start_time)
         for filename in self.get_requests():
             other = self.get_scms_from_filename(filename, priority=0)
             dist = int(distance(scms, other, conf) * 1000)
             best.append((dist, filename, 1))
         best.sort()
-        print "%d tries in %f s" % (tries, time() - start_time)
+        print "found results in %f s" % (time() - start_time)
         if best:
             cutoff = min(cutoff, best[0][0] * 2)
         return [r for r in best if r[0] < cutoff]
 
     def get_requests(self):
+        """Generator of requested songs."""
         for user_id in self.present:
             for filename in self.users.get(user_id, {}).get('requests', []):
                 yield filename
@@ -1071,6 +1073,7 @@ class Similarity(object):
                 self.add_track(filename, scms, priority=priority - 1)
 
     def analyze_tracks(self, filenames, priority):
+        """Analyze audio files."""
         if not filenames:
             return
         if GAIA:
@@ -1221,53 +1224,64 @@ class Similarity(object):
 
 
 class SimilarityService(dbus.service.Object):
+
     """Service that can be queried for similar songs."""
 
     def __init__(self, bus_name, object_path):
         self.similarity = Similarity()
-        super(SimilarityService, self).__init__(
-            bus_name=bus_name, object_path=object_path)
+        dbus.service.Object.__init__(
+            self, bus_name=bus_name, object_path=object_path)
         self.loop = GObject.MainLoop()
 
     @method(dbus_interface=IFACE, in_signature='s', out_signature='i')
     def join(self, name):
+        """Set user to present."""
         return self.similarity.join(unicode(name))
 
     @method(dbus_interface=IFACE, in_signature='i')
     def leave(self, user_id):
+        """Set user to absent."""
         self.similarity.leave(user_id)
 
     @method(dbus_interface=IFACE, in_signature='is')
     def add_request(self, user_id, filename):
+        """Add a song request."""
         self.similarity.add_request(int(user_id), unicode(filename))
 
     @method(dbus_interface=IFACE, in_signature='s')
     def end_song(self, filename):
+        """Signal that song has ended."""
         self.similarity.end_song(unicode(filename))
 
     @method(dbus_interface=IFACE, in_signature='sss')
     def start_song(self, filename, artist, title):
+        """Signal that song has started."""
         self.similarity.start_song(
             unicode(filename), unicode(artist), unicode(title))
 
     @method(dbus_interface=IFACE, in_signature='ii')
     def love(self, user_id, track_id):
+        """Add song to user's loved songs."""
         self.similarity.love(int(user_id), int(track_id))
 
     @method(dbus_interface=IFACE, in_signature='ii')
     def hate(self, user_id, track_id):
+        """Add song to user's hated songs."""
         self.similarity.hate(int(user_id), int(track_id))
 
     @method(dbus_interface=IFACE, in_signature='ii')
     def meh(self, user_id, track_id):
+        """Remove song from user's loved or hated songs."""
         self.similarity.meh(int(user_id), int(track_id))
 
     @method(dbus_interface=IFACE, in_signature='i', out_signature='s')
     def get_user_info(self, user_id):
+        """Get user's information."""
         return json.dumps(self.similarity.get_user_info(int(user_id)))
 
     @method(dbus_interface=IFACE, out_signature='s')
     def get_player_info(self):
+        """Get player information."""
         return json.dumps(self.similarity.get_player_info())
 
     @method(dbus_interface=IFACE, in_signature='s')

@@ -595,7 +595,7 @@ class NotDaylight(NegativeTimeRangePredicate):
 
 class Sun(TimeRangePredicate, WeatherPredicate):
 
-    terms = ('sun', 'sunny', 'sunlight', 'sunshine')
+    terms = ('sun', 'sunny', 'sunlight', 'sunshine', 'blue sky', 'blue skies')
 
     def applies_in_context(self, context):
         if super(Sun, self).applies_in_context(context):

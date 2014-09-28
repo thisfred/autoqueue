@@ -520,13 +520,32 @@ class AutoQueueBase(object):
                                     self.cached_weather_at + FIVE_MINUTES):
             return self.cached_weather
         if self.zipcode:
-            try:
-                weather = pywapi.get_weather_from_yahoo(self.zipcode)
-            except Exception, e:
-                self.log(repr(e))
+            self._get_weather(self.zipcode)
+        elif self.location:
+            best_location_id = self.get_location_id(self.location)
+            if best_location_id:
+                self._get_weather(best_location_id)
+
         self.cached_weather = weather
         self.cached_weather_at = datetime.now()
         return self.cached_weather
+
+    def get_location_id(self, location):
+        city = location.split(',')[0].strip()
+        smallest_discance = 100
+        best_location_id = None
+        location_ids = pywapi.get_location_ids(city)
+        for location_id, name in location_ids.items():
+            distance = levenshtein(name.lower(), location.lower())
+            if distance < smallest_discance:
+                best_location_id, smallest_discance = location_id, distance
+        return best_location_id
+
+    def _get_weather(self, location):
+        try:
+            weather = pywapi.get_weather_from_yahoo(location)
+        except Exception, e:
+            self.log(repr(e))
 
     def construct_filenames_search(self, filenames):
         s = self.player_construct_files_search(filenames)
@@ -940,3 +959,24 @@ class AutoQueueBase(object):
         return [
             {'score': score, 'filename': song.get_filename()} for
             score, song in songs]
+
+
+def levenshtein(s1, s2):
+    if len(s1) < len(s2):
+        return levenshtein(s2, s1)
+
+    # len(s1) >= len(s2)
+    if len(s2) == 0:
+        return len(s1)
+
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+
+    return previous_row[-1]
