@@ -194,9 +194,9 @@ class GaiaAnalysis(Thread):
     def queue_sigfile(self, sig_file):
         """Add the name of the sigfile to the queue file."""
         with open(self.gaia_queue_path, 'a') as queue:
+            key = '.'.join(sig_file.split('.')[:-1])
             queue.write(
-                '"%s": "%s"\n' % (
-                    '.'.join(sig_file.split('.')[:-1]), sig_file))
+                yaml.dump({key: sig_file}, default_flow_style=False))
 
     def process_queue(self, db, path):
         """Process and flush the queue file."""
@@ -204,29 +204,28 @@ class GaiaAnalysis(Thread):
             return
         for name, sigfile in yaml.load(
                 open(self.gaia_queue_path).read()).items():
-            name_encoded = name.encode('utf-8')
-            sigfile_encoded = sigfile.encode('utf-8')
-            if not db.contains(name_encoded):
-                print "adding %s" % name_encoded
-                if not os.path.isfile(sigfile_encoded):
+            if not db.contains(name):
+                print "adding %s" % name
+                if not os.path.isfile(sigfile):
                     continue
                 point = Point()
                 try:
-                    point.load(sigfile_encoded)
+                    point.load(sigfile)
                 except Exception as e:
                     print repr(e)
                     continue
-                point.setName(name_encoded)
+                point.setName(name)
                 try:
                     db.addPoint(point)
+                    os.remove(sigfile)
                 except Exception as e:
                     print repr(e)
                     continue
             else:
-                print "removing %s" % name_encoded
-                if os.path.isfile(sigfile_encoded):
-                    os.remove(sigfile_encoded)
-                db.removePoint(name_encoded)
+                print "removing %s" % name
+                if os.path.isfile(sigfile):
+                    os.remove(sigfile)
+                db.removePoint(name)
         db.save(path)
         os.remove(self.gaia_queue_path)
 

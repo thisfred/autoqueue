@@ -100,6 +100,9 @@ def get_artists_playing_nearby(location_geohash, location):
     nearby_artists = []
     response = requests.get('http://ws.audioscrobbler.com/2.0/', params=params)
     json = response.json()
+    if not 'events' in json:
+        print json
+        return []
     total_pages = int(json['events']['@attr']['totalPages'])
     page = int(json['events']['@attr']['page'])
     while True:
@@ -520,11 +523,11 @@ class AutoQueueBase(object):
                                     self.cached_weather_at + FIVE_MINUTES):
             return self.cached_weather
         if self.zipcode:
-            self._get_weather(self.zipcode)
+            weather = self._get_weather(self.zipcode)
         elif self.location:
             best_location_id = self.get_location_id(self.location)
             if best_location_id:
-                self._get_weather(best_location_id)
+                weather = self._get_weather(best_location_id)
 
         self.cached_weather = weather
         self.cached_weather_at = datetime.now()
@@ -543,8 +546,8 @@ class AutoQueueBase(object):
 
     def _get_weather(self, location):
         try:
-            weather = pywapi.get_weather_from_yahoo(location)
-        except Exception, e:
+            return pywapi.get_weather_from_yahoo(location)
+        except Exception as e:
             self.log(repr(e))
 
     def construct_filenames_search(self, filenames):

@@ -166,8 +166,8 @@ class Context(object):
             if condition:
                 conditions = []
                 unmodified = condition.split()[-1]
-                if unmodified in ('rain', 'drizzle', 'cloudy', 'fog', 'foggy',
-                                  'mist', 'misty'):
+                if unmodified in ('rain', 'rainy', 'drizzle', 'cloudy', 'fog',
+                                  'foggy', 'mist', 'misty'):
                     continue
                 if unmodified not in conditions:
                     conditions.append(unmodified)
