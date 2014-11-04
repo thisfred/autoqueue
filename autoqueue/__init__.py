@@ -100,13 +100,15 @@ def get_artists_playing_nearby(location_geohash, location):
     nearby_artists = []
     response = requests.get('http://ws.audioscrobbler.com/2.0/', params=params)
     json = response.json()
-    if not 'events' in json:
+    if 'events' not in json:
         print json
         return []
     total_pages = int(json['events']['@attr']['totalPages'])
     page = int(json['events']['@attr']['page'])
     while True:
         for event in json['events']['event']:
+            if not isinstance(event, dict):
+                continue
             artists = event['artists']['artist']
             if isinstance(artists, list):
                 nearby_artists.extend(artists)
@@ -447,7 +449,7 @@ class AutoQueueBase(object):
 
     def disallowed(self, song):
         """Check whether a song is not allowed to be queued."""
-        date_search = re.compile(r"(\d{4}-)?%02d-%02d" % (
+        date_search = re.compile("([0-9]{4}-)?%02d-%02d" % (
             self.eoq.month, self.eoq.day))
         for tag in song.get_stripped_tags():
             if date_search.match(tag):
@@ -621,7 +623,7 @@ class AutoQueueBase(object):
         self.found = False
         if results:
             for _ in self.process_filename_results([{'score': match,
-                                                     'filename': filename }
+                                                     'filename': filename}
                                                     for match, filename
                                                     in results]):
                 yield
@@ -831,7 +833,7 @@ class AutoQueueBase(object):
     def adjust_scores(self, results, invert_scores):
         """Adjust scores based on similarity with previous song and context."""
         context = Context(
-            date=self.eoq,
+            context_date=self.eoq,
             location=self.location,
             geohash=self.geohash,
             birthdays=self.birthdays,
@@ -964,21 +966,22 @@ class AutoQueueBase(object):
             score, song in songs]
 
 
-def levenshtein(s1, s2):
-    if len(s1) < len(s2):
-        return levenshtein(s2, s1)
+def levenshtein(string1, string2):
+    """Calculate the Levenshtein distance between two strings."""
+    if len(string1) < len(string2):
+        return levenshtein(string2, string1)
 
     # len(s1) >= len(s2)
-    if len(s2) == 0:
-        return len(s1)
+    if len(string2) == 0:
+        return len(string1)
 
-    previous_row = range(len(s2) + 1)
-    for i, c1 in enumerate(s1):
+    previous_row = range(len(string2) + 1)
+    for i, character1 in enumerate(string1):
         current_row = [i + 1]
-        for j, c2 in enumerate(s2):
+        for j, character2 in enumerate(string2):
             insertions = previous_row[j + 1] + 1
             deletions = current_row[j] + 1
-            substitutions = previous_row[j] + (c1 != c2)
+            substitutions = previous_row[j] + (character1 != character2)
             current_row.append(min(insertions, deletions, substitutions))
         previous_row = current_row
 
