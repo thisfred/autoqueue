@@ -784,7 +784,7 @@ class DatePredicateBase(ExclusivePredicate):
     def build_searches(self):
         super(DatePredicateBase, self).build_searches()
         if self.month and self.day:
-            self.tag_searches.append(
+            self.tag_searches_non_exclusive.append(
                 self.build_tag_search(
                     "([0-9]{4}-)?%02d-%02d" % (self.month, self.day)))
 
@@ -1198,7 +1198,8 @@ class MaundyThursday(EasterBased):
 class GoodFriday(EasterBased):
 
     terms = ('good friday',)
-    non_exclusive_terms = ('crucifixion', 'cross', 'crosses', 'jesus', 'christ')
+    non_exclusive_terms = (
+        'crucifixion', 'cross', 'crosses', 'jesus', 'christ')
     days_after_easter = -2
 
 
