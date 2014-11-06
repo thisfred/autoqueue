@@ -449,6 +449,9 @@ class AutoQueueBase(object):
 
     def disallowed(self, song):
         """Check whether a song is not allowed to be queued."""
+        for qsong in self.get_last_songs():
+            if qsong.get_filename() == song.get_filename():
+                return True
         date_search = re.compile("([0-9]{4}-)?%02d-%02d" % (
             self.eoq.month, self.eoq.day))
         for tag in song.get_stripped_tags():
@@ -456,9 +459,6 @@ class AutoQueueBase(object):
                 return False
         for artist in song.get_artists():
             if artist in self.get_blocked_artists():
-                return True
-        for qsong in self.get_last_songs():
-            if qsong.get_filename() == song.get_filename():
                 return True
         return False
 
