@@ -170,7 +170,8 @@ class Context(object):
             return
         self.predicates.extend([
             Freezing(), Cold(), Hot(), Calm(), Breeze(), Wind(), Storm(),
-            Gale(), Hurricane(), Humid(), Cloudy(), Rain(), Fog()])
+            Gale(), Hurricane(), Humid(), Cloudy(), Rain(), Snow(), Sleet(),
+            Fog()])
         self.predicates.extend(self.get_astronomical_times(self.weather))
         self.predicates.extend(self.get_other_conditions(self.weather))
 
@@ -286,7 +287,7 @@ class Predicate(object):
         return True
 
     def positive_score(self, result):
-        result['score'] /= 3
+        result['score'] /= 3.0
 
     def negative_score(self, result):
         pass
@@ -295,7 +296,7 @@ class Predicate(object):
 class ExclusivePredicate(Predicate):
 
     def negative_score(self, result):
-        result['score'] *= 1.5
+        result['score'] *= 2.0
 
 
 class Period(ExclusivePredicate):
@@ -318,13 +319,13 @@ class Period(ExclusivePredicate):
         return self.get_diff(context.date) < self.decay
 
     def positive_score(self, result):
-        result['score'] /= 1 + (
-            2 - (2 * self.diff.total_seconds() / self.decay.total_seconds()))
+        result['score'] /= 1.0 + (
+            2.0 - (
+                2.0 * self.diff.total_seconds() / self.decay.total_seconds()))
 
     def negative_score(self, result):
         result['score'] *= min(
-            1.5,
-            ((self.diff.total_seconds() / self.decay.total_seconds()) * 1.5))
+            2.0, (self.diff.total_seconds() / self.decay.total_seconds()))
 
 
 class DayPeriod(Period):
@@ -483,6 +484,7 @@ class WeatherPredicate(ExclusivePredicate):
 class Freezing(WeatherPredicate):
 
     terms = ('freezing', 'frozen', 'ice', 'frost')
+    non_exclusive_terms = ('snow',)
 
     def applies_in_context(self, context):
         temperature = self.get_temperature(context)
@@ -704,6 +706,33 @@ class Cloudy(WeatherPredicate):
         conditions = self.get_weather_conditions(context)
         for condition in conditions:
             if 'cloudy' in condition or 'overcast' in condition:
+                return True
+
+        return False
+
+
+class Snow(WeatherPredicate):
+
+    non_exclusive_terms = ('snow',) + Cloudy.terms
+
+    def applies_in_context(self, context):
+        conditions = self.get_weather_conditions(context)
+        for condition in conditions:
+            if 'snow' in condition:
+                return True
+
+        return False
+
+
+class Sleet(WeatherPredicate):
+
+    terms = ('sleet',)
+    non_exclusive_terms = Cloudy.terms
+
+    def applies_in_context(self, context):
+        conditions = self.get_weather_conditions(context)
+        for condition in conditions:
+            if 'sleet' in condition:
                 return True
 
         return False
@@ -1021,7 +1050,7 @@ class Night(DayPeriod):
 
 class Day(DayPeriod):
 
-    terms = ('day',)
+    terms = ('daytime',)
     decay = SIX_HOURS
 
     @classmethod
