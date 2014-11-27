@@ -2,22 +2,8 @@
 
 import re
 from datetime import datetime, timedelta, date, time
-
-EASTERS = {
-    2014: datetime(2014, 4, 20),
-    2015: datetime(2015, 4, 5),
-    2016: datetime(2016, 3, 27),
-    2017: datetime(2017, 4, 16),
-    2018: datetime(2018, 4, 1),
-    2019: datetime(2019, 4, 21),
-    2020: datetime(2020, 4, 12),
-    2021: datetime(2021, 4, 4),
-    2022: datetime(2022, 4, 17)}
-
-MAR21 = lambda year: datetime(year, 3, 21)
-JUN21 = lambda year: datetime(year, 6, 21)
-SEP21 = lambda year: datetime(year, 9, 21)
-DEC21 = lambda year: datetime(year, 12, 21)
+from dateutil.easter import easter
+from dateutil.rrule import TH, YEARLY, rrule
 
 HALF_HOUR = timedelta(minutes=30)
 ONE_HOUR = timedelta(hours=1)
@@ -309,8 +295,10 @@ class Period(ExclusivePredicate):
         self.diff = None
         self.peak = peak
 
-    def get_diff(self, datetime):
-        self.diff = abs(datetime - self.peak)
+    def get_diff(self, context_datetime):
+        if not isinstance(self.peak, datetime):
+            context_datetime = context_datetime.date()
+        self.diff = abs(context_datetime - self.peak)
         if self.diff.total_seconds() > self.period.total_seconds() / 2:
             self.diff = self.period - self.diff
         return self.diff
@@ -847,6 +835,7 @@ class Season(Period):
     decay = TWO_MONTHS
 
     def applies_in_context(self, context):
+        # TODO: this probably doesn't work
         if context.southern_hemisphere:
             original_date = context.date
             context.date += SIX_MONTHS
@@ -862,7 +851,7 @@ class Winter(Season):
 
     @classmethod
     def from_datetime(cls, now):
-        new = cls(peak=DEC21(now.year - 1) + FORTY_FIVE_DAYS)
+        new = cls(peak=datetime(now.year - 1, 12, 21) + FORTY_FIVE_DAYS)
         new.build_searches()
         return new
 
@@ -873,7 +862,7 @@ class Spring(Season):
 
     @classmethod
     def from_datetime(cls, now):
-        new = cls(peak=MAR21(now.year) + FORTY_FIVE_DAYS)
+        new = cls(peak=datetime(now.year, 3, 21) + FORTY_FIVE_DAYS)
         new.build_searches()
         return new
 
@@ -884,7 +873,7 @@ class Summer(Season):
 
     @classmethod
     def from_datetime(cls, now):
-        new = cls(peak=JUN21(now.year) + FORTY_FIVE_DAYS)
+        new = cls(peak=datetime(now.year, 6, 21) + FORTY_FIVE_DAYS)
         new.build_searches()
         return new
 
@@ -896,7 +885,7 @@ class Autumn(Season):
 
     @classmethod
     def from_datetime(cls, now):
-        new = cls(peak=SEP21(now.year) + FORTY_FIVE_DAYS)
+        new = cls(peak=datetime(now.year, 9, 21) + FORTY_FIVE_DAYS)
         new.build_searches()
         return new
 
@@ -1102,10 +1091,27 @@ class Weekend(ExclusivePredicate):
     terms = ('weekend',)
 
     def applies_in_context(self, context):
-        date = context.date
-        weekday = date.isoweekday()
+        context_date = context.date
+        weekday = context_date.isoweekday()
         return weekday == 6 or weekday == 7 or (
-            weekday == 5 and date.hour >= 17)
+            weekday == 5 and context_date.hour >= 17)
+
+
+class Thanksgiving(Period):
+
+    terms = ('thanksgiving',)
+    non_exclusive_terms = (
+        'thanks', 'thank', 'grateful', 'gratitude', 'turkey', 'stuffing',
+        'gluttony', 'eating', 'food')
+    decay = THREE_DAYS
+
+    @classmethod
+    def from_datetime(cls, datetime):
+        thxgiving = rrule(YEARLY, byweekday=TH(4), bymonth=11).after(
+            datetime(datetime.year, 1, 1))
+        new = cls(peak=thxgiving)
+        new.build_searches()
+        return new
 
 
 class Christmas(Period):
@@ -1171,14 +1177,13 @@ class EasterBased(ExclusivePredicate):
 
     def applies_in_context(self, context):
         context_date = context.date
-        easter = EASTERS[context_date.year]
-        if self.easter_offset(context_date, easter):
+        if self.easter_offset(context_date, easter(context_date.year)):
             return True
 
         return False
 
     def easter_offset(self, from_date, easter):
-        return (from_date - easter).days == self.days_after_easter
+        return (from_date.date() - easter).days == self.days_after_easter
 
 
 class Easter(Period):
@@ -1191,7 +1196,7 @@ class Easter(Period):
 
     @classmethod
     def from_datetime(cls, datetime):
-        new = cls(peak=EASTERS[datetime.year])
+        new = cls(peak=easter(datetime.year))
         new.build_searches()
         return new
 

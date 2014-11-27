@@ -98,7 +98,12 @@ def get_artists_playing_nearby(location_geohash, location):
     if location:
         params['location'] = location
     nearby_artists = []
-    response = requests.get('http://ws.audioscrobbler.com/2.0/', params=params)
+    try:
+        response = requests.get(
+            'http://ws.audioscrobbler.com/2.0/', params=params)
+    # TODO: catch connectionerror
+    except:
+        return []
     json = response.json()
     if 'events' not in json:
         print json

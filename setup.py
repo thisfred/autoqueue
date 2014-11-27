@@ -62,7 +62,9 @@ DistUtilsExtra.auto.setup(
     author_email='thisfred@gmail.com',
     url='https://launchpad.net/autoqueue',
     package_data={'mirage': ['res/*']},
-    requires=['scipy', 'ctypes', 'pylast', 'pywapi', 'geohash', 'requests'],
+    requires=[
+        'dateutil', 'scipy', 'ctypes', 'pylast', 'pywapi', 'geohash',
+        'requests'],
     provides=['mirage', 'autoqueue'],
     cmdclass={
         'install': Install,
