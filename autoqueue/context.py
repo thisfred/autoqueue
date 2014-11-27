@@ -206,7 +206,8 @@ class Context(object):
         for predicate in (
                 YearPredicate, Today, Now, Midnight, Noon,
                 Spring, Summer, Autumn, Winter, Evening, Morning, Afternoon,
-                Night, Day, Christmas, NewYear, Halloween, Easter):
+                Night, Day, Christmas, NewYear, Halloween, Easter,
+                Thanksgiving):
             self.predicates.append(predicate.from_datetime(self.date))
 
 
@@ -1106,9 +1107,9 @@ class Thanksgiving(Period):
     decay = THREE_DAYS
 
     @classmethod
-    def from_datetime(cls, datetime):
+    def from_datetime(cls, context_datetime):
         thxgiving = rrule(YEARLY, byweekday=TH(4), bymonth=11).after(
-            datetime(datetime.year, 1, 1))
+            datetime(context_datetime.year, 1, 1))
         new = cls(peak=thxgiving)
         new.build_searches()
         return new
