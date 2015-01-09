@@ -29,7 +29,7 @@ import json
 
 import subprocess
 from threading import Thread
-from Queue import Queue, PriorityQueue, Empty
+from Queue import LifoQueue, Queue, PriorityQueue, Empty
 from time import strptime, time, sleep
 from datetime import datetime, timedelta
 from collections import namedtuple
@@ -76,7 +76,7 @@ Track = namedtuple('Track', 'id filename loved hated artist title')
 
 # XXX: obviously make this configurable
 ESSENTIA_EXTRACTOR_PATH = \
-    '/home/eric/essentia-2.0.1/build/src/examples/streaming_extractor'
+    '/home/eric/github/essentia/build/src/examples/streaming_extractor_music'
 
 DEFAULT_TRACK = Track(
     id=None,
@@ -114,17 +114,22 @@ class GaiaAnalysis(Thread):
         super(GaiaAnalysis, self).__init__()
         self.gaia_db_path = db_path
         self.gaia_db = None
-        self.metric = None
         self.commands = {
             ADD: self._analyze,
             REMOVE: self._remove_point}
         self.queue = queue
+        self.transformed = False
+        self.metric = None
 
     def initialize(self):
         """Handle more expensive initialization."""
         self.gaia_db = self.initialize_gaia_db()
-        self.metric = DistanceFunctionFactory.create(
-            'euclidean', self.gaia_db.layout())
+        try:
+            self.metric = DistanceFunctionFactory.create(
+                'euclidean', self.gaia_db.layout())
+        except Exception as e:
+            print repr(e)
+            self.gaia_db = self.transform(self.gaia_db)
 
     @property
     def gaia_queue_path(self):
@@ -134,41 +139,41 @@ class GaiaAnalysis(Thread):
     def initialize_gaia_db(self):
         """Load or initialize the gaia database."""
         if not os.path.isfile(self.gaia_db_path):
-            ds = self.create_gaia_db()
+            dataset = DataSet()
         else:
-            ds = self.load_gaia_db()
-        print "songs in db before processing queue: %d" % ds.size()
-        self.process_queue(ds, self.gaia_db_path)
-        print "songs in db after processing queue: %d" % ds.size()
-        return ds
+            dataset = self.load_gaia_db()
+            self.transformed = True
+        print "songs in db before processing queue: %d" % dataset.size()
+        self.process_queue(dataset, self.gaia_db_path)
+        print "songs in db after processing queue: %d" % dataset.size()
+        return dataset
 
-    def create_gaia_db(self):
-        """Create a new empty gaia database."""
-        ds = DataSet()
-        ds = transform(ds, 'fixlength')
-        ds = transform(ds, 'cleaner')
-        ds = transform(ds, 'remove', {'descriptorNames': '*mfcc*'})
-        ds = transform(
-            ds, 'remove', {'descriptorNames': '*beats_position*'})
-        ds = transform(
-            ds, 'remove', {'descriptorNames': '*bpm_estimates*'})
-        ds = transform(
-            ds, 'remove', {'descriptorNames': '*bpm_intervals*'})
-        ds = transform(ds, 'remove', {'descriptorNames': '*onset_times*'})
-        ds = transform(ds, 'normalize')
-        ds = transform(
-            ds, 'pca', {
+    def transform(self, dataset):
+        dataset = transform(dataset, 'fixlength')
+        dataset = transform(dataset, 'cleaner')
+        # dataset = transform(dataset, 'remove', {'descriptorNames': '*mfcc*'})
+        for field in ('*beats_position*', '*bpm_estimates*', '*bpm_intervals*',
+                      '*onset_times*', '*oddtoevenharmonicenergyratio*'):
+            try:
+                dataset = transform(
+                    dataset, 'remove', {'descriptorNames': field})
+            except:
+                pass
+        dataset = transform(dataset, 'normalize')
+        dataset = transform(
+            dataset, 'pca', {
                 'dimension': 30,
-                'descriptorNames': ['*.mean', '*.var'],
+                'descriptorNames': ['*'],
                 'resultName': 'pca30'})
-        ds.save(self.gaia_db_path)
-        return ds
+        self.metric = DistanceFunctionFactory.create(
+            'euclidean', dataset.layout())
+        return dataset
 
     def load_gaia_db(self):
         """Load the gaia database from disk."""
-        ds = DataSet()
-        ds.load(self.gaia_db_path)
-        return ds
+        dataset = DataSet()
+        dataset.load(self.gaia_db_path)
+        return dataset
 
     def _analyze(self, filename):
         """Analyze an audio file."""
@@ -183,13 +188,22 @@ class GaiaAnalysis(Thread):
                 subprocess.check_call(['touch', signame])
                 return
         self.queue_sigfile(signame)
-        point = Point()
         try:
-            point.load(signame)
+            point = self.load_point(signame)
             point.setName(encoded)
             self.gaia_db.addPoint(point)
-        except Exception as e:
-            print e
+        except Exception as exc:
+            print exc
+
+    def load_point(self, signame):
+        point = Point()
+        with open(signame, 'r') as sig:
+            jsonsig = json.load(sig)
+            if jsonsig.get('metadata', {}).get('tags'):
+                del jsonsig['metadata']['tags']
+            yamlsig = yaml.dump(jsonsig)
+        point.loadFromString(yamlsig)
+        return point
 
     def queue_sigfile(self, sig_file):
         """Add the name of the sigfile to the queue file."""
@@ -208,9 +222,8 @@ class GaiaAnalysis(Thread):
                 print "adding %s" % name
                 if not os.path.isfile(sigfile):
                     continue
-                point = Point()
                 try:
-                    point.load(sigfile)
+                    point = self.load_point(sigfile)
                 except Exception as e:
                     print repr(e)
                     continue
@@ -248,24 +261,39 @@ class GaiaAnalysis(Thread):
         """Perform essentia analysis of an audio file."""
         try:
             subprocess.check_call(
-                ['timeout', '300', ESSENTIA_EXTRACTOR_PATH, filename, signame])
+                ['timeout', '600', ESSENTIA_EXTRACTOR_PATH, filename, signame])
             return True
         except Exception as e:
             print e
             return False
 
+    def transform_and_save(self, dataset, path):
+        if not self.transformed:
+            dataset = self.transform(dataset)
+            self.transformed = True
+        dataset.save(path)
+        return dataset
+
     def run(self):
         self.initialize()
         print "STARTING GAIA ANALYSIS THREAD"
         while True:
-            cmd, filename = self.queue.get()
             print "%d tracks in queue." % self.queue.qsize()
+            cmd, filename = self.queue.get()
             while filename:
                 self.commands[cmd](filename)
                 try:
-                    cmd, filename = self.queue.get(block=False)
                     print "%d tracks in queue." % self.queue.qsize()
+                    cmd, filename = self.queue.get(block=False)
                 except Empty:
+                    self.gaia_db = self.transform_and_save(
+                        self.gaia_db, self.gaia_db_path)
+                    if os.path.isfile(self.gaia_queue_path):
+                        for _, sigfile in yaml.load(
+                                open(self.gaia_queue_path).read()).items():
+                            if os.path.isfile(sigfile):
+                                os.remove(sigfile)
+                        os.remove(self.gaia_queue_path)
                     break
 
     def get_tracks(self, filename, number, cutoff):
@@ -280,10 +308,16 @@ class GaiaAnalysis(Thread):
 
         view = View(self.gaia_db)
         try:
-            return [
-                (score * 1000, name) for name, score
-                in view.nnSearch(encoded, self.metric).get(number + 1)[1:]
-                if score * 1000 < cutoff]
+            total = view.nnSearch(encoded, self.metric).get(number + 1)[1:]
+            print "total found %d" % len(total)
+            result = [(score * 1000, name) for name, score in total]
+            print result[0][0], result[-1][0]
+            return result
+            # after_cutoff = [
+            #     (score * 1000, name) for name, score in total
+            #     if score * 1000 < cutoff]
+            # print "total found after cutoff %d" % len(after_cutoff)
+            # return after_cutoff
         except Exception as e:
             print e
             return []
@@ -477,7 +511,7 @@ class Similarity(object):
         self.history = []
         self.now_playing = None
         if GAIA:
-            self.gaia_queue = Queue()
+            self.gaia_queue = LifoQueue()
             self.gaia_analyser = GaiaAnalysis(
                 self.gaia_db_path, self.gaia_queue)
             self.gaia_analyser.daemon = True
@@ -751,7 +785,7 @@ class Similarity(object):
         command = self.get_sql_command(sql, priority=priority)
         return command.result_queue.get()
 
-    def get_ordered_gaia_tracks(self, filename, number, cutoff=500):
+    def get_ordered_gaia_tracks(self, filename, number, cutoff=5000):
         """Get neighbours for track."""
         start_time = time()
         tracks = self.gaia_analyser.get_tracks(filename, number, cutoff)
