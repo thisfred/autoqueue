@@ -242,8 +242,14 @@ class SongBase(object):
         geohashes = [
             t.split(':')[1] for t in song_tags if t.startswith('geohash:')]
         if GEOHASH:
-            for h in geohashes[:]:
-                geohashes.extend(geohash.neighbors(h))
+            for ghash in geohashes[:]:
+                try:
+                    geohashes.extend(geohash.neighbors(ghash))
+                except ValueError:
+                    # invalid geohash
+                    print(
+                        "Invalid geohash: %s in %s - %s" % (
+                            ghash, self.get_artist(), self.get_title()))
         return geohashes
 
 
