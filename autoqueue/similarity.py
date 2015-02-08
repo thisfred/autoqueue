@@ -89,6 +89,8 @@ DEFAULT_TRACK = Track(
 ADD = 'add'
 REMOVE = 'remove'
 
+Song = namedtuple('Song', 'filename scms')
+
 
 def cluster_match(cluster1, cluster2):
     """@cluster1 and @cluster2 have matching ends."""
@@ -127,9 +129,12 @@ class GaiaAnalysis(Thread):
         try:
             self.metric = DistanceFunctionFactory.create(
                 'euclidean', self.gaia_db.layout())
-        except Exception as e:
-            print repr(e)
+        except Exception as ex:
+            print repr(ex)
             self.gaia_db = self.transform(self.gaia_db)
+            self.metric = DistanceFunctionFactory.create(
+                'euclidean', self.gaia_db.layout())
+            self.transformed = True
 
     @property
     def gaia_queue_path(self):
@@ -149,6 +154,7 @@ class GaiaAnalysis(Thread):
         return dataset
 
     def transform(self, dataset):
+        """Transform dataset for distance computations."""
         dataset = transform(dataset, 'fixlength')
         dataset = transform(dataset, 'cleaner')
         # dataset = transform(dataset, 'remove', {'descriptorNames': '*mfcc*'})
@@ -157,16 +163,14 @@ class GaiaAnalysis(Thread):
             try:
                 dataset = transform(
                     dataset, 'remove', {'descriptorNames': field})
-            except:
-                pass
+            except Exception as ex:
+                print repr(ex)
         dataset = transform(dataset, 'normalize')
         dataset = transform(
             dataset, 'pca', {
                 'dimension': 30,
                 'descriptorNames': ['*'],
                 'resultName': 'pca30'})
-        self.metric = DistanceFunctionFactory.create(
-            'euclidean', dataset.layout())
         return dataset
 
     def load_gaia_db(self):
@@ -195,7 +199,9 @@ class GaiaAnalysis(Thread):
         except Exception as exc:
             print exc
 
-    def load_point(self, signame):
+    @staticmethod
+    def load_point(signame):
+        """Load point data from JSON file."""
         point = Point()
         with open(signame, 'r') as sig:
             jsonsig = json.load(sig)
@@ -212,13 +218,13 @@ class GaiaAnalysis(Thread):
             queue.write(
                 yaml.dump({key: sig_file}, default_flow_style=False))
 
-    def process_queue(self, db, path):
+    def process_queue(self, dataset, path):
         """Process and flush the queue file."""
         if not os.path.isfile(self.gaia_queue_path):
             return
         for name, sigfile in yaml.load(
                 open(self.gaia_queue_path).read()).items():
-            if not db.contains(name):
+            if not dataset.contains(name):
                 print "adding %s" % name
                 if not os.path.isfile(sigfile):
                     continue
@@ -229,7 +235,7 @@ class GaiaAnalysis(Thread):
                     continue
                 point.setName(name)
                 try:
-                    db.addPoint(point)
+                    dataset.addPoint(point)
                     os.remove(sigfile)
                 except Exception as e:
                     print repr(e)
@@ -238,8 +244,8 @@ class GaiaAnalysis(Thread):
                 print "removing %s" % name
                 if os.path.isfile(sigfile):
                     os.remove(sigfile)
-                db.removePoint(name)
-        db.save(path)
+                dataset.removePoint(name)
+        dataset.save(path)
         os.remove(self.gaia_queue_path)
 
     def _remove_point(self, filename):
@@ -260,21 +266,25 @@ class GaiaAnalysis(Thread):
     def essentia_analyze(self, filename, signame):
         """Perform essentia analysis of an audio file."""
         try:
-            subprocess.check_call(
-                ['timeout', '600', ESSENTIA_EXTRACTOR_PATH, filename, signame])
+            subprocess.check_call([
+                'timeout', '1200', ESSENTIA_EXTRACTOR_PATH, filename, signame])
             return True
         except Exception as e:
             print e
             return False
 
     def transform_and_save(self, dataset, path):
+        """Transform dataset and save to disk."""
         if not self.transformed:
             dataset = self.transform(dataset)
+            self.metric = DistanceFunctionFactory.create(
+                'euclidean', dataset.layout())
             self.transformed = True
         dataset.save(path)
         return dataset
 
     def run(self):
+        """Run main loop for gaia analysis thread."""
         self.initialize()
         print "STARTING GAIA ANALYSIS THREAD"
         while True:
@@ -295,8 +305,39 @@ class GaiaAnalysis(Thread):
                                 os.remove(sigfile)
                         os.remove(self.gaia_queue_path)
                     break
+            print (
+                "songs in db after processing queue: %d" %
+                self.gaia_db.size())
 
-    def get_tracks(self, filename, number, cutoff):
+    def get_miximized_tracks(self, filenames):
+        """Get list of tracks in ideal order."""
+        for filename in filenames:
+            self.queue.put((ADD, filename))
+        while self.queue.qsize():
+            print "waiting for analysis"
+            sleep(.5)
+        encoded = [f.encode('utf-8') for f in filenames]
+        dataset = DataSet()
+        number_of_tracks = len(filenames)
+        for filename in encoded:
+            if not self.gaia_db.contains(filename):
+                continue
+            point = self.gaia_db.point(filename)
+            dataset.addPoint(point)
+        dataset = self.transform(dataset)
+        matrix = {}
+        for filename in encoded:
+            matrix[filename] = {
+                name: score for score, name in self.get_neighbours(
+                    dataset, filename, number_of_tracks)}
+        clusterer = Clusterer(encoded, lambda f1, f2: matrix[f1][f2])
+        clusterer.cluster()
+        result = []
+        for cluster in clusterer.clusters:
+            result.extend([encoded.index(filename) for filename in cluster])
+        return result
+
+    def get_tracks(self, filename, number):
         """Get most similar tracks from the gaia database."""
         while self.gaia_db is None:
             sleep(.1)
@@ -305,22 +346,22 @@ class GaiaAnalysis(Thread):
             print "%s not found in gaia db" % encoded
             self.queue.put((ADD, filename))
             return []
+        neighbours = self.get_neighbours(self.gaia_db, encoded, number)
+        print "total found %d" % len(neighbours)
+        print neighbours[0][0], neighbours[-1][0]
+        return neighbours
 
-        view = View(self.gaia_db)
+    def get_neighbours(self, dataset, encoded_filename, number):
+        """Get a number of nearest neighbours."""
+        view = View(dataset)
         try:
-            total = view.nnSearch(encoded, self.metric).get(number + 1)[1:]
-            print "total found %d" % len(total)
-            result = [(score * 1000, name) for name, score in total]
-            print result[0][0], result[-1][0]
-            return result
-            # after_cutoff = [
-            #     (score * 1000, name) for name, score in total
-            #     if score * 1000 < cutoff]
-            # print "total found after cutoff %d" % len(after_cutoff)
-            # return after_cutoff
+            total = view.nnSearch(
+                encoded_filename, self.metric).get(number + 1)[1:]
         except Exception as e:
             print e
             return []
+
+        return [(score * 1000, name) for name, score in total]
 
 
 class DatabaseWrapper(Thread):
@@ -412,6 +453,7 @@ class Clusterer(object):
             for song2 in songs[songs.index(song1) + 1:]:
                 self.similarities.append(
                     Pair(song1, song2, comparison_function(song1, song2)))
+        # sort in reverse, since we'll be popping off the end
         self.similarities.sort(reverse=True)
 
     def join(self, cluster1, cluster2):
@@ -785,10 +827,10 @@ class Similarity(object):
         command = self.get_sql_command(sql, priority=priority)
         return command.result_queue.get()
 
-    def get_ordered_gaia_tracks(self, filename, number, cutoff=5000):
+    def get_ordered_gaia_tracks(self, filename, number):
         """Get neighbours for track."""
         start_time = time()
-        tracks = self.gaia_analyser.get_tracks(filename, number, cutoff)
+        tracks = self.gaia_analyser.get_tracks(filename, number)
         print "finding gaia matches took %f s" % (time() - start_time,)
         return tracks
 
@@ -827,8 +869,7 @@ class Similarity(object):
                 best.pop()
         return best
 
-    def get_ordered_mirage_tracks(self, filename, excluded_filenames, number,
-                                  cutoff=20000):
+    def get_ordered_mirage_tracks(self, filename, excluded_filenames, number):
         """Get neighbours for track."""
         start_time = time()
         if not excluded_filenames:
@@ -849,9 +890,7 @@ class Similarity(object):
             best.append((dist, filename, 1))
         best.sort()
         print "found results in %f s" % (time() - start_time)
-        if best:
-            cutoff = min(cutoff, best[0][0] * 2)
-        return [r for r in best if r[0] < cutoff]
+        return best
 
     def get_requests(self):
         """Generator of requested songs."""
@@ -1233,9 +1272,15 @@ class Similarity(object):
 
     def miximize(self, filenames):
         """Return ideally ordered list of filenames."""
+        if not GAIA:
+            return self._miximize_mirage(filenames)
+
+        return self.gaia_analyser.get_miximized_tracks(filenames)
+
+    def _miximize_mirage(self, filenames):
+        """Return ideally ordered list of filenames."""
         self.log("mirage analysis")
         songs = []
-        Song = namedtuple('Song', 'filename scms')
         for filename in filenames:
             scms = self.get_scms_from_filename(filename, priority=10)
             if not scms:
@@ -1250,10 +1295,10 @@ class Similarity(object):
         clusterer = Clusterer(
             songs, lambda song1, song2: distance(song1.scms, song2.scms, conf))
         clusterer.cluster()
-        qsongs = []
+        result = []
         for cluster in clusterer.clusters:
-            qsongs.extend([filenames.index(song.filename) for song in cluster])
-        return qsongs
+            result.extend([filenames.index(song.filename) for song in cluster])
+        return result
 
 
 class SimilarityService(dbus.service.Object):

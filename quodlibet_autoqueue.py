@@ -94,7 +94,7 @@ def remove_role(artist):
     """Remove performer role from string."""
     if not artist.endswith(')'):
         return artist
-    return artist.split('(')[0]
+    return artist.split('(')[0].strip()
 
 
 class Song(SongBase):

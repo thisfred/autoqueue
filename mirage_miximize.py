@@ -1,12 +1,10 @@
-"""
-Add selected songs to the queue in ideal order based on acoustic similarity.
-
-"""
+""" Add selected songs to the queue in ideal order."""
 
 import dbus
 from quodlibet import widgets
 from dbus.mainloop.glib import DBusGMainLoop
 from quodlibet.plugins.songsmenu import SongsMenuPlugin
+
 NO_OP = lambda *a, **kw: None
 
 DBusGMainLoop(set_as_default=True)
@@ -18,7 +16,6 @@ try:
 except ImportError:
     from quodlibet.widgets import main
     NEW_QL = False
-
 
 def get_title(song):
     """Return lowercase UNICODE title of song."""
@@ -32,8 +29,8 @@ def get_title(song):
 class MiximizePlugin(SongsMenuPlugin):
     """Add selected songs to the queue in ideal order."""
 
-    PLUGIN_ID = "Miximize"
-    PLUGIN_NAME = _("Miximize")
+    PLUGIN_ID = "MirageMiximize"
+    PLUGIN_NAME = _("Miximize (mirage)")
     PLUGIN_DESC = _("Add selected songs to the queue in ideal order based on"
                     " acoustic similarity.")
     PLUGIN_ICON = "gtk-find-and-replace"
