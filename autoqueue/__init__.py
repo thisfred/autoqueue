@@ -75,7 +75,7 @@ NO_OP = lambda *a, **kw: None
 BANNED_ALBUMS = [
     'ep', 'greatest hits', 'demo', 'the best of', 'the very best of', 'live',
     'demos', 'self titled', 'untitled album', '[non-album tracks]', 'single',
-    'singles', '7"', 'covers', 'album']
+    'singles', '7"', 'covers', 'album', 'split 7"']
 
 
 def escape(the_string):
