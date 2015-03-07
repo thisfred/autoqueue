@@ -69,15 +69,15 @@ class Context(object):
             before_score = result['score']
             if predicate.applies_to_song(song, exclusive=False) and in_context:
                 predicate.positive_score(result)
-                print "%s - %s" % (
-                    song.get_artist(), song.get_title(with_version=False))
+                print "%s - %s " % (
+                    song.get_artist(), song.get_title(with_version=False)),
                 print "%r adjusted positively %d -> %d" % (
                     predicate, before_score, result['score'])
             elif predicate.applies_to_song(song, exclusive=True) \
                     and not in_context:
                 predicate.negative_score(result)
-                print "%s - %s" % (
-                    song.get_artist(), song.get_title(with_version=False))
+                print "%s - %s " % (
+                    song.get_artist(), song.get_title(with_version=False)),
                 print "%r adjusted negatively %d -> %d" % (
                     predicate, before_score, result['score'])
 
