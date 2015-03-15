@@ -1,21 +1,17 @@
-""" Add selected songs to the queue in ideal order."""
+"""Add selected songs to the queue in ideal order."""
 
 import dbus
-from quodlibet import widgets
 from dbus.mainloop.glib import DBusGMainLoop
+from quodlibet import app
 from quodlibet.plugins.songsmenu import SongsMenuPlugin
 
-NO_OP = lambda *a, **kw: None
+
+def no_op(*args, **kwargs):
+    pass
+
 
 DBusGMainLoop(set_as_default=True)
 
-# for backwards compatibility with QL revisions prior to 0d807ac2a1f9
-try:
-    from quodlibet import app
-    NEW_QL = True
-except ImportError:
-    from quodlibet.widgets import main
-    NEW_QL = False
 
 def get_title(song):
     """Return lowercase UNICODE title of song."""
@@ -27,6 +23,7 @@ def get_title(song):
 
 
 class MiximizePlugin(SongsMenuPlugin):
+
     """Add selected songs to the queue in ideal order."""
 
     PLUGIN_ID = "MirageMiximize"
@@ -38,9 +35,7 @@ class MiximizePlugin(SongsMenuPlugin):
 
     def player_enqueue(self, indices):
         """Put the song at the end of the queue."""
-        playlist = NEW_QL and app.window.playlist or main.playlist
-        playlist.enqueue(
-            [self._songs[index] for index in indices])
+        app.window.playlist.enqueue([self._songs[index] for index in indices])
         self._songs = None
 
     def plugin_songs(self, songs):
@@ -55,4 +50,4 @@ class MiximizePlugin(SongsMenuPlugin):
         print [song['~filename'] for song in songs]
         similarity.miximize(
             [song['~filename'] for song in songs],
-            reply_handler=self.player_enqueue, error_handler=NO_OP)
+            reply_handler=self.player_enqueue, error_handler=no_op)
