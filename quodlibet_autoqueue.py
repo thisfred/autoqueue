@@ -1,15 +1,17 @@
-"""AutoQueue: an automatic queueing plugin for Quod Libet.
+"""
+AutoQueue: an automatic queueing plugin for Quod Libet.
+
 version 0.3
 Copyright 2007-2012 Eric Casteleijn <thisfred@gmail.com>
                     Naglis Jonaitis <njonaitis@gmail.com>
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
-published by the Free Software Foundation"""
+published by the Free Software Foundation
+"""
 
 from gi.repository import Gtk, GLib
 from datetime import datetime
 from quodlibet.plugins.events import EventPlugin
-from quodlibet.parse import Query
 from quodlibet import config
 from collections import deque
 from quodlibet.util import copool
@@ -17,13 +19,8 @@ from quodlibet.qltk.entry import ValidatingEntry
 
 from autoqueue import AutoQueueBase, SongBase
 
-# for backwards compatibility with QL revisions prior to 0d807ac2a1f9
-try:
-    from quodlibet import app
-    NEW_QL = True
-except ImportError:
-    from quodlibet.widgets import main
-    NEW_QL = False
+from quodlibet import app
+
 
 INT_SETTINGS = {
     'artist_block_time': {
@@ -82,8 +79,6 @@ STR_SETTINGS = {
         'value': '',
         'label': 'extra context'}}
 
-NO_OP = lambda *a, **kw: None
-
 
 def escape(the_string):
     """Double escape quotes."""
@@ -98,13 +93,15 @@ def remove_role(artist):
 
 
 class Song(SongBase):
+
     """A wrapper object around quodlibet song objects."""
+
     def get_artist(self):
-        """return lowercase UNICODE name of artist"""
+        """Return lowercase UNICODE name of artist."""
         return self.song.comma("artist").lower()
 
     def get_artists(self):
-        """return lowercase UNICODE name of artists and performers."""
+        """Return lowercase UNICODE name of artists and performers."""
         artists = [artist.lower() for artist in self.song.list("artist")]
         performers = [artist.lower() for artist in self.song.list("performer")]
         if hasattr(self.song, '_song'):
@@ -121,7 +118,7 @@ class Song(SongBase):
         return list(set(artists))
 
     def get_title(self, with_version=True):
-        """return lowercase UNICODE title of song"""
+        """Return lowercase UNICODE title of song."""
         title = self.song.comma("title").lower()
         if with_version:
             version = self.song.comma("version").lower()
@@ -130,11 +127,11 @@ class Song(SongBase):
         return title
 
     def get_album(self):
-        """return lowercase UNICODE album of song"""
+        """Return lowercase UNICODE album of song."""
         return self.song.comma("album").lower()
 
     def get_album_artist(self):
-        """return lowercase UNICODE album of song"""
+        """Return lowercase UNICODE album of song."""
         return self.song.comma("albumartist").lower()
 
     def get_musicbrainz_albumid(self):
@@ -153,7 +150,7 @@ class Song(SongBase):
             return 0
 
     def get_discnumber(self):
-        """Get discnumber"""
+        """Get disc number."""
         try:
             return int(self.song('discnumber').split('/')[0])
         except ValueError:
@@ -210,7 +207,9 @@ class Song(SongBase):
 
 
 class AutoQueue(EventPlugin, AutoQueueBase):
-    """The actual plugin class"""
+
+    """The actual plugin class."""
+
     PLUGIN_ID = "AutoQueue"
     PLUGIN_NAME = _("Auto Queue")  # noqa
     PLUGIN_VERSION = "0.2"
@@ -224,12 +223,12 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         self._generators = deque()
 
     def enabled(self):
-        """user enabled the plugin"""
+        """Handle user enabling the plugin."""
         self.log("enabled")
         self.__enabled = True
 
     def disabled(self):
-        """user disabled the plugin"""
+        """Handle user disabling the plugin."""
         self.log("disabled")
         self.__enabled = False
 
@@ -287,7 +286,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             button.set_name(setting)
             button.set_active(
                 config.get(
-                "plugins", "autoqueue_%s" % setting).lower() == 'true')
+                    "plugins", "autoqueue_%s" % setting).lower() == 'true')
             button.connect('toggled', bool_changed)
             table.attach(button, i, i + 1, j, j + 1)
             if i == 1:
@@ -314,7 +313,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         for setting in STR_SETTINGS:
             j += 1
             label = Gtk.Label('%s:' % STR_SETTINGS[setting]['label'])
-            entry = ValidatingEntry(Query.is_valid_color)
+            entry = ValidatingEntry()
             table.attach(
                 label, 0, 1, j, j + 1,
                 xoptions=Gtk.AttachOptions.FILL | Gtk.AttachOptions.SHRINK)
@@ -330,10 +329,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         return table
 
     def player_execute_async(self, method, *args, **kwargs):
-        """Override this if the player has a way to execute methods
-        asynchronously, like the copooling in autoqueue.
-
-        """
+        """Execute a method asynchronously."""
         if 'funcid' not in kwargs:
             kwargs['funcid'] = method.__name__ + str(datetime.now())
         copool.add(method, *args, **kwargs)
@@ -355,9 +351,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         return search
 
     def player_construct_files_search(self, filenames):
-        """Construct a search that looks for songs with any of these filenames.
-
-        """
+        """Construct a search for songs with any of these filenames."""
         return '~filename=|(%s)' % (
             ','.join(['"%s"' % escape(f) for f in filenames]),)
 
@@ -443,19 +437,15 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def player_get_queue_length(self):
         """Get the current length of the queue."""
-        if NEW_QL:
-            if app.window is None:
-                return 0
-            playlist = app.window.playlist
-        else:
-            playlist = main.playlist
+        if app.window is None:
+            return 0
+        playlist = app.window.playlist
         return sum(
             [row.get("~#length", 0) for row in playlist.q.get()])
 
     def player_enqueue(self, song):
         """Put the song at the end of the queue."""
-        playlist = NEW_QL and app.window.playlist or main.playlist
-        playlist.enqueue([song.song])
+        app.window.playlist.enqueue([song.song])
 
     def player_search(self, search):
         """Perform a player search."""
@@ -468,7 +458,6 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def player_get_songs_in_queue(self):
         """Return (wrapped) song objects for the songs in the queue."""
-        playlist = NEW_QL and app.window.playlist or main.playlist
-        if NEW_QL and app.window is None:
+        if app.window is None:
             return []
-        return [Song(song) for song in playlist.q.get()]
+        return [Song(song) for song in app.window.playlist.q.get()]
