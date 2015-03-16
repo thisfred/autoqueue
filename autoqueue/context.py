@@ -24,7 +24,6 @@ TWO_MONTHS = timedelta(days=60)
 SIX_MONTHS = timedelta(days=182)
 ONE_YEAR = timedelta(days=365)
 
-ENGLISH_STOPWORDS = {w for w in stopwords.words('english')} | {'us'}
 POS_MAP = {
     'J': wordnet.ADJ,
     'V': wordnet.VERB,
@@ -472,14 +471,14 @@ class WordsPredicate(Predicate):
 
     def positive_score(self, result):
         song_words = get_words(result['song'])
-        print song_words & self.words
         score = (
             len(song_words & self.words) /
             float(len(song_words | self.words) + 1))
         result['score'] /= 1 + score
 
     def __repr__(self):
-        return '<WordsPredicate %s>' % (','.join(self.words)[:40],)
+        return '<WordsPredicate %s>' % (
+            ','.join([w.split('.')[0] for w in self.words]),)
 
 
 class WeatherPredicate(ExclusivePredicate):
