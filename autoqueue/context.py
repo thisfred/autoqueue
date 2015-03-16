@@ -4,6 +4,13 @@ import re
 from datetime import datetime, timedelta, date, time
 from dateutil.easter import easter
 from dateutil.rrule import TH, YEARLY, rrule
+import nltk
+from nltk.corpus import stopwords, wordnet
+from nltk.tokenize import RegexpTokenizer
+
+nltk.download('wordnet')
+nltk.download('stopwords')
+ENGLISH_STOPWORDS = {w for w in stopwords.words('english')} | {'us'}
 
 HALF_HOUR = timedelta(minutes=30)
 ONE_HOUR = timedelta(hours=1)
@@ -15,6 +22,7 @@ FORTY_FIVE_DAYS = timedelta(days=45)
 TWO_MONTHS = timedelta(days=60)
 SIX_MONTHS = timedelta(days=182)
 ONE_YEAR = timedelta(days=365)
+TOKENIZER = RegexpTokenizer(r'\w+')
 
 
 def escape(the_string):
@@ -22,7 +30,31 @@ def escape(the_string):
     # TODO: move to utils
     return the_string.replace('"', '\\"').replace("'", "\\'")
 
-ALPHANUMSPACE = re.compile(r'([^\s\w]|_)+')
+
+def get_hypernyms(synset):
+    return synset.hypernyms()
+
+
+def expand(word):
+    stemmed = wordnet.morphy(word)
+    if stemmed is None:
+        return {word}
+
+    results = set()
+    for synset in wordnet.synsets(stemmed):
+        results |= {r.name() for r in synset.closure(get_hypernyms)}
+    return results
+
+
+def get_words(song):
+    title_words = {
+        word for word in
+        TOKENIZER.tokenize(song.get_title(with_version=False))}
+    tags = set(song.get_non_geo_tags())
+    expanded = set()
+    for word in (title_words | tags) - ENGLISH_STOPWORDS:
+        expanded |= expand(word)
+    return expanded
 
 
 class Context(object):
@@ -98,14 +130,9 @@ class Context(object):
 
     def add_last_song_predicates(self):
         if self.last_song:
-            words = [
-                word for word in ALPHANUMSPACE.sub(
-                    ' ', self.last_song.get_title(with_version=False)).split()
-                if word]
+            words = get_words(self.last_song)
             if words:
                 self.predicates.append(WordsPredicate(words))
-            self.predicates.append(
-                TagsPredicate(self.last_song.get_non_geo_tags()))
             self.predicates.append(
                 GeohashPredicate(self.last_song.get_geohashes()))
 
@@ -336,26 +363,6 @@ class ArtistPredicate(Predicate):
         return super(ArtistPredicate, self).applies_to_song(song, exclusive)
 
 
-class TagsPredicate(Predicate):
-
-    def __init__(self, tags):
-        self.tags = set(tags)
-        super(TagsPredicate, self).__init__()
-
-    def applies_to_song(self, song, exclusive):
-        return set(song.get_non_geo_tags()) & self.tags
-
-    def positive_score(self, result):
-        song_tags = set(result['song'].get_non_geo_tags())
-        score = (
-            len(song_tags & self.tags) /
-            float(len(song_tags | self.tags) + 1))
-        result['score'] /= 1 + score
-
-    def __repr__(self):
-        return '<TagsPredicate %r>' % self.tags
-
-
 class GeohashPredicate(Predicate):
 
     def __init__(self, geohashes):
@@ -422,22 +429,37 @@ class StringPredicate(Predicate):
         return '<StringPredicate %r>' % self.terms
 
 
+class TagsPredicate(Predicate):
+
+    def __init__(self, tags):
+        self.tags = set(tags)
+        super(TagsPredicate, self).__init__()
+
+    def applies_to_song(self, song, exclusive):
+        return set(song.get_non_geo_tags()) & self.tags
+
+    def positive_score(self, result):
+        song_tags = set(result['song'].get_non_geo_tags())
+        score = (
+            len(song_tags & self.tags) /
+            float(len(song_tags | self.tags) + 1))
+        result['score'] /= 1 + score
+
+    def __repr__(self):
+        return '<TagsPredicate %r>' % self.tags
+
+
 class WordsPredicate(Predicate):
 
     def __init__(self, words):
         self.words = set(words)
         super(WordsPredicate, self).__init__()
 
-    def get_song_words(self, song):
-        return set(
-            word for word in ALPHANUMSPACE.sub(
-                ' ', song.get_title(with_version=False)).split())
-
     def applies_to_song(self, song, exclusive):
-        return self.get_song_words(song) & self.words
+        return get_words(song) & self.words
 
     def positive_score(self, result):
-        song_words = self.get_song_words(result['song'])
+        song_words = get_words(result['song'])
         score = (
             len(song_words & self.words) /
             float(len(song_words | self.words) + 1))

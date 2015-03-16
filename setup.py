@@ -64,7 +64,7 @@ DistUtilsExtra.auto.setup(
     package_data={'mirage': ['res/*']},
     requires=[
         'dateutil', 'scipy', 'ctypes', 'pylast', 'pywapi', 'geohash',
-        'requests'],
+        'requests', 'nltk'],
     provides=['mirage', 'autoqueue'],
     cmdclass={
         'install': Install,
