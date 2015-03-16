@@ -5,12 +5,13 @@ from datetime import datetime, timedelta, date, time
 from dateutil.easter import easter
 from dateutil.rrule import TH, YEARLY, rrule
 import nltk
+from nltk import word_tokenize, pos_tag
 from nltk.corpus import stopwords, wordnet
-from nltk.tokenize import RegexpTokenizer
 
+nltk.download('punkt')
 nltk.download('wordnet')
 nltk.download('stopwords')
-ENGLISH_STOPWORDS = {w for w in stopwords.words('english')} | {'us'}
+nltk.download('maxent_treebank_pos_tagger')
 
 HALF_HOUR = timedelta(minutes=30)
 ONE_HOUR = timedelta(hours=1)
@@ -22,7 +23,13 @@ FORTY_FIVE_DAYS = timedelta(days=45)
 TWO_MONTHS = timedelta(days=60)
 SIX_MONTHS = timedelta(days=182)
 ONE_YEAR = timedelta(days=365)
-TOKENIZER = RegexpTokenizer(r'\w+')
+
+ENGLISH_STOPWORDS = {w for w in stopwords.words('english')} | {'us'}
+POS_MAP = {
+    'J': wordnet.ADJ,
+    'V': wordnet.VERB,
+    'N': wordnet.NOUN,
+    'R': wordnet.ADV}
 
 
 def escape(the_string):
@@ -35,24 +42,29 @@ def get_hypernyms(synset):
     return synset.hypernyms()
 
 
-def expand(word):
-    stemmed = wordnet.morphy(word)
+def get_wordnet_pos(tag):
+    return POS_MAP.get(tag[:1])
+
+
+def expand(word, pos=None):
+    stemmed = wordnet.morphy(word, pos=pos)
     if stemmed is None:
         return {word}
 
     results = set()
-    for synset in wordnet.synsets(stemmed):
+    for synset in wordnet.synsets(stemmed, pos=pos):
+        results.add(synset.name())
         results |= {r.name() for r in synset.closure(get_hypernyms)}
     return results
 
 
 def get_words(song):
-    title_words = {
-        word for word in
-        TOKENIZER.tokenize(song.get_title(with_version=False))}
-    tags = set(song.get_non_geo_tags())
     expanded = set()
-    for word in (title_words | tags) - ENGLISH_STOPWORDS:
+    word_tags = pos_tag(word_tokenize( song.get_title(with_version=False)))
+    for word, tag in word_tags:
+        expanded |= expand(word, get_wordnet_pos(tag))
+    tags = set(song.get_non_geo_tags())
+    for word in tags:
         expanded |= expand(word)
     return expanded
 
@@ -460,13 +472,14 @@ class WordsPredicate(Predicate):
 
     def positive_score(self, result):
         song_words = get_words(result['song'])
+        print song_words & self.words
         score = (
             len(song_words & self.words) /
             float(len(song_words | self.words) + 1))
         result['score'] /= 1 + score
 
     def __repr__(self):
-        return '<WordsPredicate %r>' % self.words
+        return '<WordsPredicate %s>' % (','.join(self.words)[:40],)
 
 
 class WeatherPredicate(ExclusivePredicate):
