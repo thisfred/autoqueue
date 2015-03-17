@@ -1,6 +1,7 @@
 """Context awareness filters."""
 
 import re
+from collections import defaultdict
 from datetime import datetime, timedelta, date, time
 from dateutil.easter import easter
 from dateutil.rrule import TH, YEARLY, rrule
@@ -29,6 +30,7 @@ POS_MAP = {
     'V': wordnet.VERB,
     'N': wordnet.NOUN,
     'R': wordnet.ADV}
+STOPWORDS = set(stopwords.words('english')) | {'us'}
 
 
 def escape(the_string):
@@ -45,27 +47,37 @@ def get_wordnet_pos(tag):
     return POS_MAP.get(tag[:1])
 
 
+def expand_synset(synset, score):
+    yield (synset.name(), score)
+    for synset in synset.hypernyms():
+        for term_weight in expand_synset(synset, score / 2.0):
+            yield term_weight
+
+
 def expand(word, pos=None):
+    if word in STOPWORDS:
+        yield (word, 1)
+        return
+
     stemmed = wordnet.morphy(word, pos=pos)
     if stemmed is None:
-        return {word}
+        yield (word, 1)
+        return
 
-    results = set()
     for synset in wordnet.synsets(stemmed, pos=pos):
-        results.add(synset.name())
-        results |= {r.name() for r in synset.closure(get_hypernyms)}
-    return results
+        for term_weight in expand_synset(synset, 1.0):
+            yield term_weight
 
 
-def get_words(song):
-    expanded = set()
-    word_tags = pos_tag(word_tokenize( song.get_title(with_version=False)))
+def get_weighted_terms(song):
+    weights = defaultdict(float)
+    word_tags = pos_tag(word_tokenize(song.get_title(with_version=False)))
     for word, tag in word_tags:
-        expanded |= expand(word, get_wordnet_pos(tag))
-    tags = set(song.get_non_geo_tags())
-    for word in tags:
-        expanded |= expand(word)
-    return expanded
+        for term, weight in expand(word, get_wordnet_pos(tag)):
+            weights[term] += weight
+    for tag in song.get_non_geo_tags():
+        weights[tag] += 1
+    return weights
 
 
 class Context(object):
@@ -141,9 +153,9 @@ class Context(object):
 
     def add_last_song_predicates(self):
         if self.last_song:
-            words = get_words(self.last_song)
-            if words:
-                self.predicates.append(WordsPredicate(words))
+            weighted = get_weighted_terms(self.last_song)
+            if weighted:
+                self.predicates.append(WeightedTermsPredicate(weighted))
             self.predicates.append(
                 GeohashPredicate(self.last_song.get_geohashes()))
 
@@ -460,48 +472,60 @@ class TagsPredicate(Predicate):
         return '<TagsPredicate %r>' % self.tags
 
 
-class WordsPredicate(Predicate):
+class WeightedTermsPredicate(Predicate):
 
-    def __init__(self, words):
-        self.words = set(words)
-        super(WordsPredicate, self).__init__()
+    def __init__(self, weighted_terms):
+        self.weighted_terms = weighted_terms
+        super(WeightedTermsPredicate, self).__init__()
+
+    def get_intersection_keys(self, song_terms):
+        return set(self.weighted_terms.keys()) & set(song_terms.keys())
 
     def applies_to_song(self, song, exclusive):
-        return get_words(song) & self.words
+        return self.get_intersection_keys(get_weighted_terms(song))
 
     def positive_score(self, result):
-        song_words = get_words(result['song'])
-        score = (
-            len(song_words & self.words) /
-            float(len(song_words | self.words) + 1))
-        result['score'] /= 1 + score
+        song_terms = get_weighted_terms(result['song'])
+        intersection_keys = self.get_intersection_keys(song_terms)
+        intersection_score = sum([
+            self.weighted_terms[k] + song_terms[k] for k in
+            self.get_intersection_keys(song_terms)])
 
-    def __repr__(self):
-        return '<WordsPredicate %s>' % (
-            ','.join([w.split('.')[0] for w in self.words]),)
+        print sorted([
+            (self.weighted_terms[w] + song_terms[w], w.split('.')[0]) for w in
+            intersection_keys], reverse=True)
+
+        score = intersection_score / (
+            1 + sum(self.weighted_terms.values()) + sum(song_terms.values()))
+
+        result['score'] /= 1 + score
 
 
 class WeatherPredicate(ExclusivePredicate):
 
-    def get_weather_conditions(self, context):
+    @staticmethod
+    def get_weather_conditions(context):
         return context.weather.get(
             'condition', {}).get('text', '').lower().strip().split('/')
 
-    def get_temperature(self, context):
+    @staticmethod
+    def get_temperature(context):
         temperature = context.weather.get('condition', {}).get('temp', '')
         if not temperature:
             return None
 
         return int(temperature)
 
-    def get_wind_speed(self, context):
+    @staticmethod
+    def get_wind_speed(context):
         return float(
             context.weather.get('wind', {}).get('speed', '').strip() or '0')
 
-    def get_humidity(self, context):
+    @staticmethod
+    def get_humidity(context):
         return float(
-            context.weather.get('atmosphere', {}).get('humidity', '').strip()
-            or '0')
+            context.weather.get('atmosphere', {}).get(
+                'humidity', '').strip() or '0')
 
 
 class Freezing(WeatherPredicate):
