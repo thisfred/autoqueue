@@ -282,6 +282,7 @@ class AutoQueueBase(object):
         self.song = None
         self.number = 20
         self.restrictions = None
+        self.context = None
         self.extra_context = None
         self.present = []
         self.use_mirage = True
@@ -843,7 +844,7 @@ class AutoQueueBase(object):
 
     def adjust_scores(self, results, invert_scores):
         """Adjust scores based on similarity with previous song and context."""
-        context = Context(
+        self.context = Context(
             context_date=self.eoq,
             location=self.location,
             geohash=self.geohash,
@@ -852,15 +853,16 @@ class AutoQueueBase(object):
             nearby_artists=self.nearby_artists,
             southern_hemisphere=self.southern_hemisphere,
             weather=self.get_weather(),
-            extra_context=self.extra_context)
+            extra_context=self.extra_context,
+            old_context=self.context)
         maximum_score = max(result['score'] for result in results) + 1
         for result in results[:]:
-            if not 'song' in result:
+            if 'song' not in result:
                 results.remove(result)
                 continue
             if invert_scores:
                 result['score'] = maximum_score - result['score']
-            context.adjust_score(result)
+            self.context.adjust_score(result)
             yield
 
     def process_results(self, results, invert_scores=False):

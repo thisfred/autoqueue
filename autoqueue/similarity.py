@@ -266,8 +266,7 @@ class GaiaAnalysis(Thread):
     def essentia_analyze(self, filename, signame):
         """Perform essentia analysis of an audio file."""
         try:
-            subprocess.check_call([
-                'timeout', '1200', ESSENTIA_EXTRACTOR_PATH, filename, signame])
+            subprocess.check_call([ESSENTIA_EXTRACTOR_PATH, filename, signame])
             return True
         except Exception as e:
             print e

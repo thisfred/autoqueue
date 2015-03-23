@@ -69,6 +69,16 @@ def expand(word, pos=None):
             yield term_weight
 
 
+def add_weighted_terms(old_terms, new_terms):
+    if old_terms is None:
+        return new_terms
+    if new_terms is None:
+        return old_terms
+    for key, value in new_terms.items():
+        old_terms[key] += value
+    return old_terms
+
+
 def get_weighted_terms(song):
     weights = defaultdict(float)
     word_tags = pos_tag(word_tokenize(song.get_title(with_version=False)))
@@ -85,7 +95,8 @@ class Context(object):
     """Object representing the current context."""
 
     def __init__(self, context_date, location, geohash, birthdays, last_song,
-                 nearby_artists, southern_hemisphere, weather, extra_context):
+                 nearby_artists, southern_hemisphere, weather, extra_context,
+                 old_context):
         self.date = context_date
         self.location = location
         self.geohash = geohash
@@ -96,7 +107,8 @@ class Context(object):
         self.weather = weather
         self.predicates = []
         self.extra_context = extra_context
-        self.build_predicates()
+        self.weighted_terms_predicate = None
+        self.build_predicates(old_context)
 
     @staticmethod
     def string_to_datetime(time_string):
@@ -136,7 +148,7 @@ class Context(object):
                 print "%r adjusted negatively %d -> %d" % (
                     predicate, before_score, result['score'])
 
-    def build_predicates(self):
+    def build_predicates(self, old_context):
         """Construct predicates to check against the context."""
         self.add_standard_predicates()
         self.add_december_predicate()
@@ -144,18 +156,35 @@ class Context(object):
         self.add_weather_predicates()
         self.add_birthday_predicates()
         self.add_extra_predicates()
-        self.add_last_song_predicates()
+        self.add_last_song_predicates(
+            old_context.weighted_terms_predicate if old_context else None)
         self.add_nearby_artist_predicates()
 
     def add_nearby_artist_predicates(self):
         for artist in self.nearby_artists:
             self.predicates.append(ArtistPredicate(artist))
 
-    def add_last_song_predicates(self):
+    def add_last_song_predicates(self, old_predicate):
+        if old_predicate:
+            old_predicate.decay()
+            old_terms = old_predicate.weighted_terms
+        else:
+            old_terms = None
         if self.last_song:
-            weighted = get_weighted_terms(self.last_song)
-            if weighted:
-                self.predicates.append(WeightedTermsPredicate(weighted))
+            new_terms = get_weighted_terms(self.last_song)
+            weighted = add_weighted_terms(old_terms, new_terms)
+        else:
+            weighted = old_terms
+        print("*** context weighted terms: ***")
+        print(
+            sorted([
+                (value, key.split('.')[0]) for key, value in weighted.items()],
+                reverse=True))
+        print("*******************************")
+        if weighted:
+            predicate = WeightedTermsPredicate(weighted)
+            self.predicates.append(predicate)
+            self.weighted_terms_predicate = predicate
             self.predicates.append(
                 GeohashPredicate(self.last_song.get_geohashes()))
 
@@ -324,7 +353,7 @@ class Predicate(object):
         return True
 
     def positive_score(self, result):
-        result['score'] /= 3.0
+        result['score'] /= 2.0
 
     def negative_score(self, result):
         pass
@@ -359,8 +388,7 @@ class Period(ExclusivePredicate):
 
     def positive_score(self, result):
         result['score'] /= 1.0 + (
-            2.0 - (
-                2.0 * self.diff.total_seconds() / self.decay.total_seconds()))
+            1.0 - (self.diff.total_seconds() / self.decay.total_seconds()))
 
     def negative_score(self, result):
         result['score'] *= min(
@@ -452,31 +480,23 @@ class StringPredicate(Predicate):
         return '<StringPredicate %r>' % self.terms
 
 
-class TagsPredicate(Predicate):
-
-    def __init__(self, tags):
-        self.tags = set(tags)
-        super(TagsPredicate, self).__init__()
-
-    def applies_to_song(self, song, exclusive):
-        return set(song.get_non_geo_tags()) & self.tags
-
-    def positive_score(self, result):
-        song_tags = set(result['song'].get_non_geo_tags())
-        score = (
-            len(song_tags & self.tags) /
-            float(len(song_tags | self.tags) + 1))
-        result['score'] /= 1 + score
-
-    def __repr__(self):
-        return '<TagsPredicate %r>' % self.tags
-
-
 class WeightedTermsPredicate(Predicate):
+
+    _decay = 0.5
 
     def __init__(self, weighted_terms):
         self.weighted_terms = weighted_terms
         super(WeightedTermsPredicate, self).__init__()
+
+    def decay(self):
+        to_delete = []
+        for key, value in self.weighted_terms.items():
+            new_value = value - self._decay
+            self.weighted_terms[key] = new_value
+            if new_value <= 0:
+                to_delete.append(key)
+        for key in to_delete:
+            del self.weighted_terms[key]
 
     def get_intersection_keys(self, song_terms):
         return set(self.weighted_terms.keys()) & set(song_terms.keys())
@@ -486,18 +506,11 @@ class WeightedTermsPredicate(Predicate):
 
     def positive_score(self, result):
         song_terms = get_weighted_terms(result['song'])
-        intersection_keys = self.get_intersection_keys(song_terms)
         intersection_score = sum([
             self.weighted_terms[k] + song_terms[k] for k in
             self.get_intersection_keys(song_terms)])
-
-        print sorted([
-            (self.weighted_terms[w] + song_terms[w], w.split('.')[0]) for w in
-            intersection_keys], reverse=True)
-
         score = intersection_score / (
             1 + sum(self.weighted_terms.values()) + sum(song_terms.values()))
-
         result['score'] /= 1 + score
 
 
@@ -870,16 +883,12 @@ class Today(DatePredicateBase):
     def applies_in_context(self, context):
         return True
 
-    # XXX: remove
     def applies_to_song(self, song, exclusive):
         """Determine whether the predicate applies to the song."""
         title = song.get_title(with_version=False).lower()
         for search in self.get_tag_searches(exclusive=exclusive):
             for tag in song.get_non_geo_tags():
                 if search.match(tag):
-                    print "*" * 50
-                    print search.pattern, tag
-                    print "*" * 50
                     return True
 
         for search in self.get_title_searches(exclusive=exclusive):
