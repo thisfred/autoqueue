@@ -104,14 +104,14 @@ def get_artists_playing_nearby(location_geohash, location):
     # TODO: catch connectionerror
     except:
         return []
-    json = response.json()
-    if 'events' not in json:
-        print json
+    page = response.json()
+    if 'events' not in page:
+        print page
         return []
-    total_pages = int(json['events']['@attr']['totalPages'])
-    page = int(json['events']['@attr']['page'])
+    total_pages = int(page['events']['@attr']['totalPages'])
+    page_number = int(page['events']['@attr']['page'])
     while True:
-        for event in json['events']['event']:
+        for event in page['events']['event']:
             if not isinstance(event, dict):
                 continue
             artists = event['artists']['artist']
@@ -119,13 +119,17 @@ def get_artists_playing_nearby(location_geohash, location):
                 nearby_artists.extend(artists)
             else:
                 nearby_artists.append(artists)
-        if page == total_pages:
+        if page_number == total_pages:
+            from pprint import pprint
+            pprint(nearby_artists)
             return nearby_artists
-        params['page'] = page + 1
+        params['page'] = page_number + 1
         response = requests.get(
             'http://ws.audioscrobbler.com/2.0/', params=params)
-        json = response.json()
-        page = int(json['events']['@attr']['page'])
+        page = response.json()
+        page_number = int(page['events']['@attr']['page'])
+    from pprint import pprint
+    pprint(nearby_artists)
     return nearby_artists
 
 
@@ -233,8 +237,8 @@ class SongBase(object):
         """Get all the song tags unrelated to geotagging."""
         song_tags = self.get_stripped_tags()
         return [
-            t for t in song_tags if not t.startswith('geohash:')
-            and not t == 'geotagged']
+            t for t in song_tags if not t.startswith('geohash:') and
+            not t == 'geotagged']
 
     def get_geohashes(self):
         """Get all the geohashes from this song."""
@@ -269,6 +273,7 @@ def tag_score(song, tags):
 
 
 class AutoQueueBase(object):
+
     """Generic base class for autoqueue plugins."""
 
     def __init__(self):
@@ -929,8 +934,8 @@ class AutoQueueBase(object):
 
     def maybe_enqueue_album(self, song):
         """Determine if a whole album should be queued, and do so."""
-        if (self.whole_albums and song.get_tracknumber() == 1
-                and random.random() > .5):
+        if (self.whole_albums and song.get_tracknumber() == 1 and
+                random.random() > .5):
             album = song.get_album()
             album_artist = song.get_album_artist()
             album_id = song.get_musicbrainz_albumid()

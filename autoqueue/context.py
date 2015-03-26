@@ -30,7 +30,6 @@ POS_MAP = {
     'V': wordnet.VERB,
     'N': wordnet.NOUN,
     'R': wordnet.ADV}
-STOPWORDS = set(stopwords.words('english')) | {'us'}
 
 
 def escape(the_string):
@@ -55,10 +54,6 @@ def expand_synset(synset, score):
 
 
 def expand(word, pos=None):
-    if word in STOPWORDS:
-        yield (word, 1)
-        return
-
     stemmed = wordnet.morphy(word, pos=pos)
     if stemmed is None:
         yield (word, 1)
@@ -69,14 +64,19 @@ def expand(word, pos=None):
             yield term_weight
 
 
+def get_intersection_keys(terms1, terms2):
+    return set(terms1.keys()) & set(terms2.keys())
+
+
 def add_weighted_terms(old_terms, new_terms):
     if old_terms is None:
         return new_terms
     if new_terms is None:
-        return old_terms
-    for key, value in new_terms.items():
-        old_terms[key] += value
-    return old_terms
+        return None
+    for key in new_terms:
+        if key in old_terms:
+            new_terms[key] += old_terms[key]
+    return new_terms
 
 
 def get_weighted_terms(song):
@@ -138,15 +138,17 @@ class Context(object):
                 predicate.positive_score(result)
                 print "%s - %s " % (
                     song.get_artist(), song.get_title(with_version=False)),
-                print "%r adjusted positively %d -> %d" % (
-                    predicate, before_score, result['score'])
+                print "%r adjusted positively %.2f%%" % (
+                    predicate,
+                    100 * ((before_score - result['score']) / before_score))
             elif predicate.applies_to_song(song, exclusive=True) \
                     and not in_context:
                 predicate.negative_score(result)
                 print "%s - %s " % (
                     song.get_artist(), song.get_title(with_version=False)),
-                print "%r adjusted negatively %d -> %d" % (
-                    predicate, before_score, result['score'])
+                print "%r adjusted negatively %.2f" % (
+                    predicate,
+                    100 * ((result['score'] - before_score) / before_score))
 
     def build_predicates(self, old_context):
         """Construct predicates to check against the context."""
@@ -161,12 +163,11 @@ class Context(object):
         self.add_nearby_artist_predicates()
 
     def add_nearby_artist_predicates(self):
-        for artist in self.nearby_artists:
+        for artist in set(self.nearby_artists):
             self.predicates.append(ArtistPredicate(artist))
 
     def add_last_song_predicates(self, old_predicate):
         if old_predicate:
-            old_predicate.decay()
             old_terms = old_predicate.weighted_terms
         else:
             old_terms = None
@@ -404,14 +405,11 @@ class ArtistPredicate(Predicate):
 
     def __init__(self, artist):
         self.artist = artist
-        self.terms = (artist,)
-        super(ArtistPredicate, self).__init__()
 
     def applies_to_song(self, song, exclusive):
-        if self.artist.strip().lower() in [a.strip().lower()
-                                           for a in song.get_artists()]:
+        if self.artist.lower().strip() == song.get_artist().strip():
             return True
-        return super(ArtistPredicate, self).applies_to_song(song, exclusive)
+        return False
 
 
 class GeohashPredicate(Predicate):
@@ -482,8 +480,6 @@ class StringPredicate(Predicate):
 
 class WeightedTermsPredicate(Predicate):
 
-    _decay = 0.5
-
     def __init__(self, weighted_terms):
         self.weighted_terms = weighted_terms
         super(WeightedTermsPredicate, self).__init__()
@@ -499,7 +495,7 @@ class WeightedTermsPredicate(Predicate):
             del self.weighted_terms[key]
 
     def get_intersection_keys(self, song_terms):
-        return set(self.weighted_terms.keys()) & set(song_terms.keys())
+        return get_intersection_keys(self.weighted_terms, song_terms)
 
     def applies_to_song(self, song, exclusive):
         return self.get_intersection_keys(get_weighted_terms(song))
