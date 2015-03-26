@@ -854,8 +854,7 @@ class AutoQueueBase(object):
             nearby_artists=self.nearby_artists,
             southern_hemisphere=self.southern_hemisphere,
             weather=self.get_weather(),
-            extra_context=self.extra_context,
-            old_context=self.context)
+            extra_context=self.extra_context)
         maximum_score = max(result['score'] for result in results) + 1
         for result in results[:]:
             if 'song' not in result:

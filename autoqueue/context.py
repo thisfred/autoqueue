@@ -1,11 +1,10 @@
 """Context awareness filters."""
-
 import re
-from collections import defaultdict
+
+import nltk
 from datetime import datetime, timedelta, date, time
 from dateutil.easter import easter
 from dateutil.rrule import TH, YEARLY, rrule
-import nltk
 from nltk import word_tokenize, pos_tag
 from nltk.corpus import stopwords, wordnet
 
@@ -25,6 +24,10 @@ TWO_MONTHS = timedelta(days=60)
 SIX_MONTHS = timedelta(days=182)
 ONE_YEAR = timedelta(days=365)
 
+TIME = re.compile('^([0-9]{2}):([0-9]{2})$')
+STOPWORDS = {w for w in stopwords.words('english') if len(w) > 2}
+
+
 POS_MAP = {
     'J': wordnet.ADJ,
     'V': wordnet.VERB,
@@ -32,66 +35,53 @@ POS_MAP = {
     'R': wordnet.ADV}
 
 
-def escape(the_string):
-    """Double escape quotes."""
-    # TODO: move to utils
-    return the_string.replace('"', '\\"').replace("'", "\\'")
-
-
-def get_hypernyms(synset):
-    return synset.hypernyms()
-
-
 def get_wordnet_pos(tag):
     return POS_MAP.get(tag[:1])
 
 
 def expand_synset(synset):
-    yield (synset.name(), 1.0)
+    yield synset.name()
     for synset in synset.hypernyms():
-        yield (synset.name(), 0.5)
-        for lemma in synset.lemmas():
-            for form in lemma.derivationally_related_forms():
-                yield (form.synset().name(), 0.5)
-            for pertainym in lemma.pertainyms():
-                yield (pertainym.synset().name(), 0.5)
+        yield synset.name()
+    for lemma in synset.lemmas():
+        for form in lemma.derivationally_related_forms():
+            yield form.synset().name()
+        for pertainym in lemma.pertainyms():
+            yield pertainym.synset().name()
 
 
 def expand(word, pos=None):
+    word = word.replace(' ', '_')
+    if len(word) < 3:
+        yield word
+        return
+    if word in STOPWORDS:
+        yield word
+        return
     stemmed = wordnet.morphy(word, pos=pos)
     if stemmed is None:
-        yield (word, 1)
+        yield word
         return
 
     for synset in wordnet.synsets(stemmed, pos=pos):
-        for term_weight in expand_synset(synset):
-            yield term_weight
+        for term in expand_synset(synset):
+            yield term
 
 
-def get_intersection_keys(terms1, terms2):
-    return set(terms1.keys()) & set(terms2.keys())
+def add_terms(terms, words):
+    for word in words:
+        for term in expand(word):
+            terms.add(term)
 
 
-def add_weighted_terms(old_terms, new_terms):
-    if old_terms is None:
-        return new_terms
-    if new_terms is None:
-        return None
-    for key in new_terms:
-        if key in old_terms:
-            new_terms[key] += old_terms[key]
-    return new_terms
-
-
-def get_weighted_terms(song):
-    weights = defaultdict(float)
+def get_terms(song):
+    terms = set()
     word_tags = pos_tag(word_tokenize(song.get_title(with_version=False)))
     for word, tag in word_tags:
-        for term, weight in expand(word, get_wordnet_pos(tag)):
-            weights[term] += weight
-    for tag in song.get_non_geo_tags():
-        weights[tag] += 1
-    return weights
+        for term in expand(word, get_wordnet_pos(tag)):
+            terms.add(term)
+    add_terms(terms, song.get_non_geo_tags())
+    return terms
 
 
 class Context(object):
@@ -99,8 +89,7 @@ class Context(object):
     """Object representing the current context."""
 
     def __init__(self, context_date, location, geohash, birthdays, last_song,
-                 nearby_artists, southern_hemisphere, weather, extra_context,
-                 old_context):
+                 nearby_artists, southern_hemisphere, weather, extra_context):
         self.date = context_date
         self.location = location
         self.geohash = geohash
@@ -111,8 +100,7 @@ class Context(object):
         self.weather = weather
         self.predicates = []
         self.extra_context = extra_context
-        self.weighted_terms_predicate = None
-        self.build_predicates(old_context)
+        self.build_predicates()
 
     @staticmethod
     def string_to_datetime(time_string):
@@ -150,11 +138,11 @@ class Context(object):
                 predicate.negative_score(result)
                 print "%s - %s " % (
                     song.get_artist(), song.get_title(with_version=False)),
-                print "%r adjusted negatively %.2f" % (
+                print "%r adjusted negatively %.2f%%" % (
                     predicate,
                     100 * ((result['score'] - before_score) / before_score))
 
-    def build_predicates(self, old_context):
+    def build_predicates(self):
         """Construct predicates to check against the context."""
         self.add_standard_predicates()
         self.add_december_predicate()
@@ -162,43 +150,30 @@ class Context(object):
         self.add_weather_predicates()
         self.add_birthday_predicates()
         self.add_extra_predicates()
-        self.add_last_song_predicates(
-            old_context.weighted_terms_predicate if old_context else None)
+        self.add_last_song_predicates()
         self.add_nearby_artist_predicates()
 
     def add_nearby_artist_predicates(self):
         for artist in set(self.nearby_artists):
-            self.predicates.append(ArtistPredicate(artist))
+            self.predicates.append(Artist(artist))
 
-    def add_last_song_predicates(self, old_predicate):
-        if old_predicate:
-            old_terms = old_predicate.weighted_terms
-        else:
-            old_terms = None
-        if self.last_song:
-            new_terms = get_weighted_terms(self.last_song)
-            weighted = add_weighted_terms(old_terms, new_terms)
-        else:
-            weighted = old_terms
-        print("*** context weighted terms: ***")
-        print(
-            sorted([
-                (value, key.split('.')[0]) for key, value in weighted.items()],
-                reverse=True))
-        print("*******************************")
-        if weighted:
-            predicate = WeightedTermsPredicate(weighted)
-            self.predicates.append(predicate)
-            self.weighted_terms_predicate = predicate
-            self.predicates.append(
-                GeohashPredicate(self.last_song.get_geohashes()))
+    def add_last_song_predicates(self):
+        if not self.last_song:
+            return
+        terms = get_terms(self.last_song)
+        print "*** context terms terms: ***"
+        print sorted([term.split('.')[0] for term in terms], reverse=True)
+        print "*******************************"
+        predicate = Terms(ne_expanded_terms=terms)
+        self.predicates.append(predicate)
+        self.predicates.append(Geohash(self.last_song.get_geohashes()))
 
     def add_extra_predicates(self):
         if self.extra_context:
             words = [l.strip().lower() for l in self.extra_context.split(',')]
             if words:
                 self.predicates.extend([
-                    StringPredicate(word) for word in words])
+                    String(word) for word in words])
 
     def add_birthday_predicates(self):
         for name_date in self.birthdays.split(','):
@@ -214,7 +189,7 @@ class Context(object):
                 year, month, day = bdate
                 age = self.date.year - year
                 self.predicates.append(
-                    BirthdayPredicate(
+                    Birthday(
                         year=year, month=month, day=day, name=name, age=age))
 
     def get_astronomical_times(self, weather):
@@ -224,15 +199,15 @@ class Context(object):
         if sunrise and sunset:
             sunrise = self.string_to_datetime(sunrise)
             if sunrise:
-                predicates.append(Dawn.from_datetime(sunrise))
+                predicates.append(Dawn(sunrise))
             sunset = self.string_to_datetime(sunset)
             if sunset:
-                predicates.append(Dusk.from_datetime(sunset))
+                predicates.append(Dusk(sunset))
             predicates.append(
-                Daylight.from_dates(start=sunrise, end=sunset))
+                Daylight(start=sunrise, end=sunset))
             predicates.append(
-                NotDaylight.from_dates(start=sunrise, end=sunset))
-            predicates.append(Sun.from_dates(start=sunrise, end=sunset))
+                NotDaylight(start=sunrise, end=sunset))
+            predicates.append(Sun(start=sunrise, end=sunset))
         return predicates
 
     def add_weather_predicates(self):
@@ -257,7 +232,7 @@ class Context(object):
                 results = []
                 unmodified = condition.split()[-1]
                 if unmodified in ('rain', 'rainy', 'drizzle', 'cloudy', 'fog',
-                                  'foggy', 'mist', 'misty'):
+                                  'foggy', 'mist', 'misty', 'fair'):
                     continue
                 if unmodified not in results:
                     results.append(unmodified)
@@ -268,7 +243,7 @@ class Context(object):
                         results.append(unmodified[:-1])
                 if results:
                     predicates.extend(
-                        [StringPredicate(c) for c in results])
+                        [String(c) for c in results])
         return predicates
 
     def add_location_predicates(self):
@@ -276,128 +251,146 @@ class Context(object):
             locations = [l.lower() for l in self.location.split(',')]
             if locations:
                 self.predicates.extend([
-                    StringPredicate(location) for location in locations])
+                    String(location) for location in locations])
         if self.geohash:
-            self.predicates.append(GeohashPredicate([self.geohash]))
+            self.predicates.append(Geohash([self.geohash]))
 
     def add_december_predicate(self):
         if self.date.month == 12:
             # December is for retrospection
-            self.predicates.append(SongYearPredicate(self.date.year))
+            self.predicates.append(SongYear(self.date.year))
 
     def add_standard_predicates(self):
         self.predicates.extend(STATIC_PREDICATES)
-        for predicate in (
-                YearPredicate, Today, Now, Midnight, Noon,
-                Spring, Summer, Autumn, Winter, Evening, Morning, Afternoon,
-                Night, Day, Christmas, NewYear, Halloween, Easter,
-                Thanksgiving):
-            self.predicates.append(predicate.from_datetime(self.date))
+        for predicate in (Year, Today, Now, Midnight, Noon, Spring, Summer,
+                          Fall, Winter, Evening, Morning, Afternoon, Night,
+                          DayTime, Christmas, NewYear, Halloween, Easter,
+                          Thanksgiving):
+            self.predicates.append(predicate(self.date))
 
 
 class Predicate(object):
 
-    terms = tuple()
-    non_exclusive_terms = tuple()
-    tag_only_terms = tuple()
-    title_searches = None
-    title_searches_non_exclusive = None
-    tag_searches = None
-    tag_searches_non_exclusive = None
-
-    def __init__(self):
-        self.build_searches()
-
-    def build_searches(self):
-        """Construct all the searches for this predicate."""
-        self.title_searches = [
-            self.build_title_search(term) for term in self.terms]
-        self.title_searches_non_exclusive = [
-            self.build_title_search(term) for term in self.non_exclusive_terms]
-        self.tag_searches = [
-            self.build_tag_search(term)
-            for term in self.terms + self.tag_only_terms]
-        self.tag_searches_non_exclusive = [
-            self.build_tag_search(term) for term in self.non_exclusive_terms]
-
-    @staticmethod
-    def _build_search(term):
-        return '%s(e?s)?' % (term,)
-
-    def build_title_search(self, term):
-        return re.compile(r'\b%s\b' % (self._build_search(term),))
-
-    def build_tag_search(self, term):
-        return re.compile(r'^%s$' % (self._build_search(term),))
-
-    def get_title_searches(self, exclusive):
-        """Get title searches for this predicate."""
-        return self.title_searches if exclusive else (
-            self.title_searches + self.title_searches_non_exclusive)
-
-    def get_tag_searches(self, exclusive):
-        """Get tag searches for this predicate."""
-        return self.tag_searches if exclusive else (
-            self.tag_searches + self.tag_searches_non_exclusive)
-
     def applies_to_song(self, song, exclusive):
-        """Determine whether the predicate applies to the song."""
-        title = song.get_title(with_version=False).lower()
-        for search in self.get_tag_searches(exclusive=exclusive):
-            for tag in song.get_non_geo_tags():
-                if search.match(tag):
-                    return True
-
-        for search in self.get_title_searches(exclusive=exclusive):
-            if search.search(title):
-                return True
-
-        return False
+        raise NotImplementedError
 
     def applies_in_context(self, context):
         return True
 
+    def get_factor(self, result, exclusive):
+        return 1.0
+
     def positive_score(self, result):
-        result['score'] /= 2.0
+        result['score'] /= 1 + self.get_factor(result, exclusive=False)
 
     def negative_score(self, result):
         pass
 
 
-class ExclusivePredicate(Predicate):
+class Terms(Predicate):
+
+    terms = tuple()
+    non_exclusive_terms = tuple()
+    regex_terms = tuple()
+
+    def __init__(self, expanded_terms=None, ne_expanded_terms=None):
+        if not (expanded_terms or ne_expanded_terms):
+            self.terms_expanded = set()
+            self.non_exclusive_terms_expanded = set()
+            self.expand_terms()
+        else:
+            self.terms_expanded = expanded_terms or set()
+            self.non_exclusive_terms_expanded = (ne_expanded_terms or set())
+
+    def expand_terms(self):
+        add_terms(self.terms_expanded, self.terms)
+        add_terms(self.non_exclusive_terms_expanded, self.non_exclusive_terms)
+
+    def get_intersection(self, song_terms, exclusive=True):
+        if exclusive:
+            return song_terms & self.terms_expanded
+
+        return song_terms & (
+            self.terms_expanded | self.non_exclusive_terms_expanded)
+
+    def applies_to_song(self, song, exclusive):
+        return (
+            self.regex_terms_match(song) or
+            self.get_intersection(get_terms(song), exclusive))
+
+    def regex_terms_match(self, song):
+        """Determine whether the predicate applies to the song."""
+        for search in self.regex_terms:
+            for tag in song.get_non_geo_tags():
+                if search.match(tag):
+                    return True
+
+        return False
+
+    def get_factor(self, result, exclusive=False):
+        expanded = (
+            self.terms_expanded if exclusive
+            else self.terms_expanded | self.non_exclusive_terms_expanded)
+        if not expanded:
+            return 1
+        song_terms = get_terms(result['song'])
+        intersection = self.get_intersection(song_terms, exclusive)
+        print "  %d / %d" % (len(intersection), len(expanded))
+        factor = float(len(intersection)) / float(len(expanded))
+        return factor
+
+
+class ExclusiveTerms(Terms):
 
     def negative_score(self, result):
-        result['score'] *= 2.0
+        result['score'] *= 1 + self.get_factor(result, exclusive=True)
 
 
-class Period(ExclusivePredicate):
+class Period(ExclusiveTerms):
 
     period = ONE_YEAR
     decay = None
 
-    def __init__(self, peak):
-        super(Period, self).__init__()
+    def __init__(self, peak, *args, **kwargs):
         self.diff = None
         self.peak = peak
+        super(Period, self).__init__(*args, **kwargs)
 
-    def get_diff(self, context_datetime):
-        if not isinstance(self.peak, datetime):
+    def get_peak(self, context):
+        return self.peak
+
+    def get_diff(self, context):
+        context_datetime = context.date
+        peak = self.get_peak(context)
+        return self.get_diff_between_dates(context_datetime, peak)
+
+    def get_diff_between_dates(self, context_datetime, peak):
+        if not isinstance(peak, datetime):
             context_datetime = context_datetime.date()
-        self.diff = abs(context_datetime - self.peak)
+        self.diff = abs(context_datetime - peak)
         if self.diff.total_seconds() > self.period.total_seconds() / 2:
             self.diff = self.period - self.diff
         return self.diff
 
     def applies_in_context(self, context):
-        return self.get_diff(context.date) < self.decay
+        return self.get_diff(context) < self.decay
 
-    def positive_score(self, result):
-        result['score'] /= 1.0 + (
-            1.0 - (self.diff.total_seconds() / self.decay.total_seconds()))
+    def get_factor(self, result, exclusive=False):
+        factor = super(Period, self).get_factor(result, exclusive)
+        if exclusive:
+            return factor
 
-    def negative_score(self, result):
-        result['score'] *= min(
-            2.0, (self.diff.total_seconds() / self.decay.total_seconds()))
+        print "  *", (
+            1.0 - min(
+                1,
+                float(self.diff.total_seconds()) /
+                float(self.decay.total_seconds())))
+
+        return factor * (
+            1.0 - min(
+                1,
+                float(self.diff.total_seconds()) /
+                float(self.decay.total_seconds())))
 
 
 class DayPeriod(Period):
@@ -405,7 +398,7 @@ class DayPeriod(Period):
     period = ONE_DAY
 
 
-class ArtistPredicate(Predicate):
+class Artist(Predicate):
 
     def __init__(self, artist):
         self.artist = artist
@@ -415,12 +408,14 @@ class ArtistPredicate(Predicate):
             return True
         return False
 
+    def get_factor(self, result, exclusive):
+        return 1.0
 
-class GeohashPredicate(Predicate):
+
+class Geohash(Predicate):
 
     def __init__(self, geohashes):
         self.geohashes = geohashes
-        super(GeohashPredicate, self).__init__()
 
     def applies_to_song(self, song, exclusive):
         for self_hash in self.geohashes:
@@ -431,9 +426,9 @@ class GeohashPredicate(Predicate):
         return False
 
     def __repr__(self):
-        return '<GeohashPredicate %r>' % self.geohashes
+        return '<Geohash %r>' % self.geohashes
 
-    def positive_score(self, result):
+    def get_factor(self, result, exclusive):
         longest_common = 0
         for self_hash in self.geohashes:
             for other_hash in result['song'].get_geohashes():
@@ -449,72 +444,36 @@ class GeohashPredicate(Predicate):
 
                     if i > longest_common:
                         longest_common = i
-        result['score'] *= 1.0 / (1.1 ** longest_common)
+        return 1.1 ** longest_common
 
 
-class YearPredicate(Predicate):
+class Year(Terms):
+
+    def __init__(self, timestamp):
+        self.terms = (str(timestamp.year),)
+        super(Year, self).__init__()
+
+
+class SongYear(Predicate):
 
     def __init__(self, year):
         self.year = year
-        self.tag_only_terms = (str(year),)
-        super(YearPredicate, self).__init__()
-
-    @classmethod
-    def from_datetime(cls, datetime):
-        new = cls(datetime.year)
-        new.build_searches()
-        return new
-
-
-class SongYearPredicate(YearPredicate):
 
     def applies_to_song(self, song, exclusive):
         return self.year == song.get_year()
 
 
-class StringPredicate(Predicate):
+class String(Terms):
 
     def __init__(self, term):
         self.terms = (term,)
-        super(StringPredicate, self).__init__()
+        super(String, self).__init__()
 
     def __repr__(self):
-        return '<StringPredicate %r>' % self.terms
+        return '<String %r>' % self.terms
 
 
-class WeightedTermsPredicate(Predicate):
-
-    def __init__(self, weighted_terms):
-        self.weighted_terms = weighted_terms
-        super(WeightedTermsPredicate, self).__init__()
-
-    def decay(self):
-        to_delete = []
-        for key, value in self.weighted_terms.items():
-            new_value = value - self._decay
-            self.weighted_terms[key] = new_value
-            if new_value <= 0:
-                to_delete.append(key)
-        for key in to_delete:
-            del self.weighted_terms[key]
-
-    def get_intersection_keys(self, song_terms):
-        return get_intersection_keys(self.weighted_terms, song_terms)
-
-    def applies_to_song(self, song, exclusive):
-        return self.get_intersection_keys(get_weighted_terms(song))
-
-    def positive_score(self, result):
-        song_terms = get_weighted_terms(result['song'])
-        intersection_score = sum([
-            self.weighted_terms[k] + song_terms[k] for k in
-            self.get_intersection_keys(song_terms)])
-        score = intersection_score / max(
-            1, sum(self.weighted_terms.values()) + sum(song_terms.values()))
-        result['score'] /= 1 + score
-
-
-class WeatherPredicate(ExclusivePredicate):
+class Weather(ExclusiveTerms):
 
     @staticmethod
     def get_weather_conditions(context):
@@ -541,10 +500,17 @@ class WeatherPredicate(ExclusivePredicate):
                 'humidity', '').strip() or '0')
 
 
-class Freezing(WeatherPredicate):
+class Freezing(Weather):
 
-    terms = ('freezing', 'frozen', 'ice', 'frost')
-    non_exclusive_terms = ('snow',)
+    def __init__(self):
+        super(Freezing, self).__init__(
+            expanded_terms={
+                u'frost.n.03', u'frost.n.01', u'ice.n.01', u'ice.n.02',
+                u'frost.v.02', u'frost.v.03', u'frost.v.01', u'frost.v.04',
+                u'freeze.v.10', u'freeze.n.02', u'freeze.n.01', u'freeze.v.06',
+                u'freeze.v.07', u'freeze.v.04', u'freeze.v.02',
+                u'freeze.v.08'},
+            ne_expanded_terms={u'snow.n.01', u'snow.n.02'})
 
     def applies_in_context(self, context):
         temperature = self.get_temperature(context)
@@ -557,9 +523,18 @@ class Freezing(WeatherPredicate):
         return True
 
 
-class Cold(WeatherPredicate):
+class Cold(Weather):
 
     terms = ('cold', 'chill', 'chilly')
+
+    def __init__(self):
+        super(Cold, self).__init__(
+            expanded_terms={
+                u'coldness.n.03', u'cold.a.01', u'cold.a.02', u'chill.n.01',
+                u'chilliness.n.01', u'cold.s.11', u'cold.s.10', u'cold.s.13',
+                u'cold.s.12', u'chilly.s.03', u'cold.s.08', u'chilly.s.01',
+                u'cold.s.03', u'cold.n.03', u'cold.s.07', u'cold.s.04',
+                u'cold.s.05'})
 
     def applies_in_context(self, context):
         temperature = self.get_temperature(context)
@@ -572,9 +547,17 @@ class Cold(WeatherPredicate):
         return True
 
 
-class Hot(WeatherPredicate):
+class Hot(Weather):
 
-    terms = ('hot', 'heat')
+    def __init__(self):
+        super(Hot, self).__init__(
+            expanded_terms={
+                u'hot.s.21', u'hot.a.01', u'hot.a.03', u'hotness.n.01',
+                u'hot.s.19', u'hot.s.18', u'hot.s.15', u'hot.s.14',
+                u'hot.s.17', u'hot.s.16', u'hot.s.11', u'hot.s.10',
+                u'hot.s.13', u'hot.s.12', u'heat.n.01', u'blistering.s.03',
+                u'heat.n.03', u'hot.s.08', u'hot.s.02', u'hot.s.06',
+                u'hot.s.04', u'hot.s.05'})
 
     def applies_in_context(self, context):
         temperature = self.get_temperature(context)
@@ -587,58 +570,82 @@ class Hot(WeatherPredicate):
         return True
 
 
-class Calm(WeatherPredicate):
+class Calm(Weather):
 
-    terms = ('calm',)
+    def __init__(self):
+        super(Calm, self).__init__(
+            expanded_terms={
+                u'calm.a.02', u'calm_air.n.01', u'calmness.n.02',
+                u'calm.s.01'})
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) < 1
 
 
-class Breeze(WeatherPredicate):
+class Breeze(Weather):
 
-    terms = ('breeze', 'breezy')
+    def __init__(self):
+        super(Breeze, self).__init__(
+            expanded_terms={
+                'breeze.n.01', u'breeze.v.02', u'breeziness.n.01',
+                u'breezy.s.01'},
+            ne_expanded_terms={u'blow.v.02'})
 
     def applies_in_context(self, context):
         speed = self.get_wind_speed(context)
-        return speed <= 30 and speed > 0
+        return speed > 0
 
 
-class Wind(WeatherPredicate):
+class Wind(Weather):
 
-    terms = ('wind', 'windy')
+    def __init__(self):
+        super(Wind, self).__init__(
+            expanded_terms={
+                u'wind.n.01', u'gust.n.01', u'windy.s.03'},
+            ne_expanded_terms={u'blowy.s.01'})
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 30
 
 
-class Gale(WeatherPredicate):
+class Gale(Weather):
 
-    terms = ('gale',)
+    def __init__(self):
+        super(Gale, self).__init__(expanded_terms={'gale.n.01'})
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 38
 
 
-class Storm(WeatherPredicate):
+class Storm(Weather):
 
-    terms = ('storm', 'stormy')
+    def __init__(self):
+        super(Storm, self).__init__(
+            expanded_terms={
+                u'stormy.s.02', u'stormy.a.01', u'storminess.n.02',
+                u'storminess.n.01', u'storm.n.01', u'storm.n.02'})
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 54
 
 
-class Hurricane(WeatherPredicate):
+class Hurricane(Weather):
 
-    terms = ('hurricane',)
+    def __init__(self):
+        super(Hurricane, self).__init__(
+            expanded_terms={
+                'cyclonic.a.01', u'cyclonic.a.02', u'cyclone.n.02',
+                u'hurricane.n.01'})
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 72
 
 
-class Humid(WeatherPredicate):
+class Humid(Weather):
 
-    terms = ('humid', 'humidity')
+    def __init__(self):
+        super(Humid, self).__init__(
+            expanded_terms={'humid.s.01', u'humidity.n.01'})
 
     def applies_in_context(self, context):
         return self.get_humidity(context) > 65
@@ -646,30 +653,21 @@ class Humid(WeatherPredicate):
 
 class Now(DayPeriod):
 
-    time_tag = re.compile('^([0-9]{2}):([0-9]{2})$')
     decay = HALF_HOUR
-
-    def applies_in_context(self, context):
-        return True
 
     def applies_to_song(self, song, exclusive):
         song_tags = song.get_non_geo_tags()
         for tag in song_tags:
-            match = self.time_tag.match(tag)
+            match = TIME.match(tag)
             if match:
                 hour, minute = match.groups()
-                song_date = datetime.now().replace(
+                song_datetime = datetime.now().replace(
                     hour=int(hour), minute=int(minute))
-                if self.get_diff(song_date) < self.decay:
+                if self.get_diff_between_dates(song_datetime,
+                                               self.peak) < self.decay:
                     return True
 
         return False
-
-    @classmethod
-    def from_datetime(cls, datetime):
-        new = cls(peak=datetime)
-        new.build_searches()
-        return new
 
     def __repr__(self):
         return '<Now %s>' % (self.peak,)
@@ -677,23 +675,15 @@ class Now(DayPeriod):
 
 class TimePredicate(DayPeriod):
 
-    time_tag = re.compile('^([0-9]{2}):([0-9]{2})$')
     decay = HALF_HOUR
 
-    @classmethod
-    def from_datetime(cls, datetime):
-        new = cls(peak=datetime)
-        new.build_searches()
-        return new
 
-    def __repr__(self):
-        return '<TimePredicate %s>' % (self.peak,)
+class TimeRange(ExclusiveTerms):
 
-
-class TimeRangePredicate(ExclusivePredicate):
-
-    start = None
-    end = None
+    def __init__(self, start, end, *args, **kwargs):
+        self.start = start
+        self.end = end
+        super(TimeRange, self).__init__(*args, **kwargs)
 
     def applies_in_context(self, context):
         if self.start and context.date < self.start:
@@ -704,35 +694,38 @@ class TimeRangePredicate(ExclusivePredicate):
 
         return True
 
-    @classmethod
-    def from_dates(cls, start=None, end=None):
-        new = cls()
-        new.start = start
-        new.end = end
-        new.build_searches()
-        return new
+
+class Daylight(TimeRange):
+
+    def __init__(self, start, end):
+        super(Daylight, self).__init__(
+            start=start, end=end, expanded_terms={'daylight.n.02'})
 
 
-class Daylight(TimeRangePredicate):
-
-    terms = ('daylight',)
-
-
-class NegativeTimeRangePredicate(TimeRangePredicate):
+class NegativeTimeRange(TimeRange):
 
     def applies_in_context(self, context):
         return not super(
-            NegativeTimeRangePredicate, self).applies_in_context(context)
+            NegativeTimeRange, self).applies_in_context(context)
 
 
-class NotDaylight(NegativeTimeRangePredicate):
+class NotDaylight(NegativeTimeRange):
 
-    terms = ('dark', 'darkness')
+    def __init__(self, start, end):
+        super(NotDaylight, self).__init__(
+            start=start, end=end, expanded_terms={
+                'dark.s.03', u'dark.s.05', u'dark.s.08', u'dark.a.02',
+                u'dark.a.01', u'dark.n.05', u'dark.n.01', u'dark.s.11',
+                u'darkness.n.05', u'darkness.n.02'})
 
 
-class Sun(TimeRangePredicate, WeatherPredicate):
+class Sun(TimeRange, Weather):
 
-    terms = ('sun', 'sunny', 'sunlight', 'sunshine', 'blue sky', 'blue skies')
+    def __init__(self, start, end):
+        super(Sun, self).__init__(
+            start=start, end=end, expanded_terms={
+                u'sun.v.01', u'sun.v.02', u'sunlight.n.01',
+                u'fair_weather.n.01', u'sun.n.04', u'sun.n.01'})
 
     def applies_in_context(self, context):
         if super(Sun, self).applies_in_context(context):
@@ -744,9 +737,14 @@ class Sun(TimeRangePredicate, WeatherPredicate):
         return False
 
 
-class Fog(WeatherPredicate):
+class Fog(Weather):
 
-    terms = ('mist', 'misty', 'fog', 'foggy')
+    def __init__(self):
+        super(Fog, self).__init__(
+            expanded_terms={
+                u'confused.s.03', u'brumous.s.01', u'fogged.s.01',
+                u'haze.n.01', u'mist.v.03', u'mist.n.01', u'misty.s.02',
+                u'haziness.n.02', u'fog.n.01', u'fog.n.02', u'mist.v.01'})
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -758,9 +756,16 @@ class Fog(WeatherPredicate):
         return False
 
 
-class Cloudy(WeatherPredicate):
+class Cloudy(Weather):
 
-    terms = ('cloud', 'cloudy', 'overcast', 'gloom', 'gloomy')
+    expanded_terms = {
+        u'overcast.v.01', u'cloud.n.01', u'cloud.n.02', u'cloud-covered.s.01',
+        u'cloudiness.n.02', u'cloudiness.n.01', u'gloom.n.01',
+        u'cloudiness.n.03', u'cloudy.a.02', u'cloudy.s.03', u'cloudy.s.01'}
+
+    def __init__(self):
+        super(Cloudy, self).__init__(
+            expanded_terms=self.expanded_terms)
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -771,9 +776,14 @@ class Cloudy(WeatherPredicate):
         return False
 
 
-class Snow(WeatherPredicate):
+class Snow(Weather):
 
-    non_exclusive_terms = ('snow',) + Cloudy.terms
+    def __init__(self):
+        super(Snow, self).__init__(
+            ne_expanded_terms={
+                u'snow.n.01', u'snow.n.02', u'snow.n.03',
+                u'precipitation.n.03', u'precipitation.n.01',
+                u'precipitate.v.03', u'snow.v.01'} | Cloudy.expanded_terms)
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -784,10 +794,14 @@ class Snow(WeatherPredicate):
         return False
 
 
-class Sleet(WeatherPredicate):
+class Sleet(Weather):
 
-    terms = ('sleet',)
-    non_exclusive_terms = Cloudy.terms
+    def __init__(self):
+        super(Sleet, self).__init__(
+            expanded_terms={'sleet.n.01', u'sleet.v.01'},
+            ne_expanded_terms={
+                u'precipitation.n.03', u'precipitation.n.01',
+                u'precipitate.v.03'} | Cloudy.expanded_terms)
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -798,10 +812,19 @@ class Sleet(WeatherPredicate):
         return False
 
 
-class Rain(WeatherPredicate):
+class Rain(Weather):
 
-    terms = ('rain', 'rainy', 'shower', 'drizzle', 'raining', 'raindrop')
-    non_exclusive_terms = Cloudy.terms
+    def __init__(self):
+        super(Rain, self).__init__(
+            expanded_terms={
+                u'drizzle.n.01', u'drizzle.v.01', u'drizzle.v.02',
+                u'rain.n.01', u'rain.n.02', u'rain.n.03', u'rain.v.01',
+                u'raindrop.n.01', u'shower.v.04', u'showery.s.01',
+                u'shower.n.03'},
+            ne_expanded_terms={
+                u'drop.n.02', u'droplet.n.01', u'precipitate.v.03',
+                u'precipitation.n.01',
+                u'precipitation.n.03'} | Cloudy.expanded_terms)
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -816,231 +839,190 @@ class Rain(WeatherPredicate):
 class Dawn(TimePredicate):
 
     decay = ONE_HOUR
-    terms = (
-        'sunrise', 'dawn', 'aurora', 'break of day', 'dawning', 'daybreak',
-        'sunup')
+
+    def __init__(self, moment):
+        super(Dawn, self).__init__(
+            peak=moment,
+            expanded_terms={
+                u'sunrise.n.03', u'sunrise.n.02', u'aurora.n.03', u'dawn.v.03',
+                u'dawn.v.02', u'sunrise.s.01', u'aurora.n.02', u'dawn.n.01',
+                u'dawn.n.03', u'dawn.n.02'})
 
 
 class Dusk(TimePredicate):
 
     decay = ONE_HOUR
-    terms = (
-        'sunset', 'dusk', 'gloaming', 'nightfall', 'sundown', 'twilight',
-        'eventide', 'close of day')
+
+    def __init__(self, now):
+        super(Dusk, self).__init__(
+            peak=now,
+            expanded_terms={
+                u'sunset.s.01', u'sunset.s.02', u'sunset.n.03', u'sunset.n.02',
+                u'sunset.n.01', u'twilight.n.03', u'twilight.n.02',
+                u'twilight.n.01', u'dusky.s.01', u'dusk.v.01'})
 
 
 class Noon(TimePredicate):
 
-    terms = ('noon',)
-
-    @classmethod
-    def from_datetime(cls, date):
-        new = cls(peak=date.replace(hour=12, minute=0, second=0))
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Noon, self).__init__(
+            peak=now.replace(hour=12, minute=0, second=0),
+            expanded_terms={'noon.n.01'})
 
 
 class Midnight(TimePredicate):
 
-    terms = ('midnight',)
-
-    @classmethod
-    def from_datetime(cls, date):
-        new = cls(peak=date.replace(hour=0, minute=0, second=0))
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Midnight, self).__init__(
+            peak=now.replace(hour=0, minute=0, second=0),
+            expanded_terms={'midnight.n.01'})
 
 
-class DatePredicateBase(ExclusivePredicate):
+class Date(ExclusiveTerms):
 
-    day = None
-    month = None
-
-    @classmethod
-    def from_datetime(cls, date):
-        """Construct a DatePredicate from a datetime object."""
-        new = cls()
-        new.month = date.month
-        new.day = date.day
-        new.build_searches()
-        return new
+    def __init__(self, expanded_terms=None, ne_expanded_terms=None):
+        self.regex_terms = (
+            re.compile(r"^([0-9]{4}-)?%02d-%02d$" % (self.month, self.day)),)
+        super(Date, self).__init__(
+            expanded_terms=expanded_terms, ne_expanded_terms=ne_expanded_terms)
 
     def applies_in_context(self, context):
         context_date = context.date
         return (
             context_date.day == self.day and context_date.month == self.month)
 
-    def build_searches(self):
-        super(DatePredicateBase, self).build_searches()
-        if self.month and self.day:
-            self.tag_searches_non_exclusive.append(
-                self.build_tag_search(
-                    "([0-9]{4}-)?%02d-%02d" % (self.month, self.day)))
 
+class Today(Date):
 
-class Today(DatePredicateBase):
-
-    def applies_in_context(self, context):
-        return True
-
-    def applies_to_song(self, song, exclusive):
-        """Determine whether the predicate applies to the song."""
-        title = song.get_title(with_version=False).lower()
-        for search in self.get_tag_searches(exclusive=exclusive):
-            for tag in song.get_non_geo_tags():
-                if search.match(tag):
-                    return True
-
-        for search in self.get_title_searches(exclusive=exclusive):
-            if search.search(title):
-                return True
-
-        return False
+    def __init__(self, moment):
+        self.month = moment.month
+        self.day = moment.day
+        super(Today, self).__init__()
 
 
 class Season(Period):
 
     decay = TWO_MONTHS
 
-    def applies_in_context(self, context):
-        # TODO: this probably doesn't work
+    def __init__(self, peak):
+        super(Season, self).__init__(
+            peak=peak,
+            expanded_terms={'%s.n.01' % self.__class__.__name__.lower()})
+
+    def get_peak(self, context):
         if context.southern_hemisphere:
-            original_date = context.date
-            context.date += SIX_MONTHS
-        result = super(Season, self).applies_in_context(context)
-        if context.southern_hemisphere:
-            context.date = original_date
-        return result
+            return self.peak + SIX_MONTHS
+
+        return self.peak
 
 
 class Winter(Season):
 
-    terms = ('winter', 'wintertime')
-
-    @classmethod
-    def from_datetime(cls, now):
-        new = cls(peak=datetime(now.year - 1, 12, 21) + FORTY_FIVE_DAYS)
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Winter, self).__init__(
+            peak=datetime(now.year - 1, 12, 21) + FORTY_FIVE_DAYS)
 
 
 class Spring(Season):
 
-    terms = ('spring', 'springtime')
-
-    @classmethod
-    def from_datetime(cls, now):
-        new = cls(peak=datetime(now.year, 3, 21) + FORTY_FIVE_DAYS)
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Spring, self).__init__(
+            peak=datetime(now.year, 3, 21) + FORTY_FIVE_DAYS)
 
 
 class Summer(Season):
 
-    terms = ('summer', 'summertime')
-
-    @classmethod
-    def from_datetime(cls, now):
-        new = cls(peak=datetime(now.year, 6, 21) + FORTY_FIVE_DAYS)
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Summer, self).__init__(
+            peak=datetime(now.year, 6, 21) + FORTY_FIVE_DAYS)
 
 
-class Autumn(Season):
+class Fall(Season):
 
-    terms = ('autumn',)
-    tag_only_terms = ('fall',)
-
-    @classmethod
-    def from_datetime(cls, now):
-        new = cls(peak=datetime(now.year, 9, 21) + FORTY_FIVE_DAYS)
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Fall, self).__init__(
+            peak=datetime(now.year, 9, 21) + FORTY_FIVE_DAYS)
 
 
-class MonthPredicate(ExclusivePredicate):
+class Month(ExclusiveTerms):
 
     month = 0
+
+    def __init__(self):
+        super(Month, self).__init__(
+            expanded_terms={'%s.n.01' % self.__class__.__name__.lower()})
 
     def applies_in_context(self, context):
         return context.date.month == self.month
 
 
-class January(MonthPredicate):
+class January(Month):
 
     month = 1
-    terms = ('january',)
 
 
-class February(MonthPredicate):
+class February(Month):
 
     month = 2
-    terms = ('february',)
 
 
-class March(MonthPredicate):
+class March(Month):
 
     month = 3
-    tag_only_terms = ('march',)
 
 
-class April(MonthPredicate):
+class April(Month):
 
     month = 4
-    terms = ('april',)
 
 
-class May(MonthPredicate):
+class May(Month):
 
     month = 5
-    tag_only_terms = ('may',)
 
 
-class June(MonthPredicate):
+class June(Month):
 
     month = 6
-    terms = ('june',)
 
 
-class July(MonthPredicate):
+class July(Month):
 
     month = 7
-    terms = ('july',)
 
 
-class August(MonthPredicate):
+class August(Month):
 
     month = 8
-    terms = ('august',)
 
 
-class September(MonthPredicate):
+class September(Month):
 
     month = 9
-    terms = ('september',)
 
 
-class October(MonthPredicate):
+class October(Month):
 
     month = 10
-    terms = ('october',)
 
 
-class November(MonthPredicate):
+class November(Month):
 
     month = 11
-    terms = ('november',)
 
 
-class December(MonthPredicate):
+class December(Month):
 
     month = 12
-    terms = ('december',)
 
 
-class DayPredicate(ExclusivePredicate):
+class Day(ExclusiveTerms):
 
     day_index = 0
+
+    def __init__(self):
+        super(Day, self).__init__(
+            expanded_terms={'%s.n.01' % self.__class__.__name__.lower()})
 
     def applies_in_context(self, context):
         return (
@@ -1050,84 +1032,70 @@ class DayPredicate(ExclusivePredicate):
                 context.date.hour < 4)
 
 
-class Monday(DayPredicate):
+class Monday(Day):
 
     day_index = 1
-    terms = ('monday',)
 
 
-class Tuesday(DayPredicate):
+class Tuesday(Day):
 
     day_index = 2
-    terms = ('tuesday',)
 
 
-class Wednesday(DayPredicate):
+class Wednesday(Day):
 
     day_index = 3
-    terms = ('wednesday',)
 
 
-class Thursday(DayPredicate):
+class Thursday(Day):
 
     day_index = 4
-    terms = ('thursday',)
 
 
-class Friday(DayPredicate):
+class Friday(Day):
 
     day_index = 5
-    terms = ('friday',)
 
 
-class Saturday(DayPredicate):
+class Saturday(Day):
 
     day_index = 6
-    terms = ('saturday',)
 
 
-class Sunday(DayPredicate):
+class Sunday(Day):
 
     day_index = 7
-    terms = ('sunday',)
 
 
 class Night(DayPeriod):
 
-    terms = ('night',)
     decay = SIX_HOURS
 
-    @classmethod
-    def from_datetime(cls, datetime):
-        new = cls(
-            peak=datetime.replace(hour=0, minute=0, second=0, microsecond=0))
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Night, self).__init__(
+            peak=now.replace(hour=0, minute=0, second=0, microsecond=0),
+            expanded_terms={
+                'night.n.01', 'night.n.02', 'night.n.03', 'night.n.07'})
 
 
-class Day(DayPeriod):
+class DayTime(DayPeriod):
 
-    terms = ('daytime',)
     decay = SIX_HOURS
 
-    @classmethod
-    def from_datetime(cls, datetime):
-        new = cls(
-            peak=datetime.replace(hour=12, minute=0, second=0, microsecond=0))
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(DayTime, self).__init__(
+            peak=now.replace(hour=12, minute=0, second=0, microsecond=0),
+            expanded_terms={'day.n.04'})
 
 
 class Evening(DayPeriod):
 
-    terms = ('evening',)
     decay = THREE_HOURS
 
-    @classmethod
-    def from_datetime(cls, datetime):
-        new = cls(peak=datetime.replace(hour=20))
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Evening, self).__init__(
+            peak=now.replace(hour=20),
+            expanded_terms={'evening.n.01', 'evening.n.02', 'evening.n.03'})
 
 
 class Morning(DayPeriod):
@@ -1135,28 +1103,25 @@ class Morning(DayPeriod):
     terms = ('morning',)
     decay = THREE_HOURS
 
-    @classmethod
-    def from_datetime(cls, datetime):
-        new = cls(peak=datetime.replace(hour=9))
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Morning, self).__init__(
+            peak=now.replace(hour=9), expanded_terms={'morning.n.01'})
 
 
 class Afternoon(DayPeriod):
 
-    terms = ('afternoon',)
     decay = THREE_HOURS
 
-    @classmethod
-    def from_datetime(cls, datetime):
-        new = cls(peak=datetime.replace(hour=15))
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Afternoon, self).__init__(
+            peak=now.replace(hour=15), expanded_terms={'afternoon.n.01'})
 
 
-class Weekend(ExclusivePredicate):
+class Weekend(ExclusiveTerms):
 
-    terms = ('weekend',)
+    def __init__(self):
+        super(Weekend, self).__init__(
+            expanded_terms={u'weekend.n.01', u'weekend.v.01'})
 
     def applies_in_context(self, context):
         context_date = context.date
@@ -1167,79 +1132,132 @@ class Weekend(ExclusivePredicate):
 
 class Thanksgiving(Period):
 
-    terms = ('thanksgiving',)
-    non_exclusive_terms = (
-        'thanks', 'thank', 'grateful', 'gratitude', 'turkey', 'stuffing',
-        'gluttony', 'eating', 'food')
     decay = THREE_DAYS
 
-    @classmethod
-    def from_datetime(cls, context_datetime):
-        thxgiving = rrule(YEARLY, byweekday=TH(4), bymonth=11).after(
-            datetime(context_datetime.year, 1, 1))
-        new = cls(peak=thxgiving)
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Thanksgiving, self).__init__(
+            peak=rrule(YEARLY, byweekday=TH(4), bymonth=11).after(
+                datetime(now.year, 1, 1)),
+            expanded_terms={'thanksgiving.n.01'},
+            ne_expanded_terms={
+                u'grateful.a.01', u'acknowledgment.n.03', u'thank.v.01',
+                u'eating.n.01', u'gluttony.n.01', u'gluttony.n.02',
+                u'consumption.n.01', u'gratefulness.n.01', u'turkey.n.01',
+                u'turkey.n.04', u'gratitude.n.01', u'stuffing.n.01',
+                u'stuffing.n.02', u'grateful.s.02', u'gorge.v.01',
+                u'acknowledge.v.06', u'acknowledge.v.04', u'food.n.03',
+                u'food.n.02', u'food.n.01', u'eat.v.01', u'eat.v.02',
+                u'thanks.n.01', u'thanks.n.02'})
 
 
 class Christmas(Period):
 
-    terms = ('christmas', 'santa claus', 'xmas')
-    non_exclusive_terms = (
-        'reindeer', 'sled', 'santa', 'snow', 'bell', 'jesus', 'eggnoc',
-        'mistletoe', 'carol', 'nativity', 'mary', 'joseph', 'manger')
     decay = THREE_DAYS
 
-    @classmethod
-    def from_datetime(cls, datetime):
-        new = cls(peak=datetime.replace(day=25, month=12))
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Christmas, self).__init__(
+            peak=now.replace(day=25, month=12),
+            expanded_terms={'christmas.n.01', u'christmas.n.02'},
+            ne_expanded_terms={
+                'santa_claus.n.01', 'mistletoe.n.02', u'mistletoe.n.03',
+                u'mistletoe.n.01', u'birth.n.02', u'bell.n.03', u'bell.n.01',
+                u'joseph.n.03', u'sled.n.01', u'joseph.n.02', u'carol.v.01',
+                u'mary.n.01', u'snow.n.01', u'snow.n.02', u'snow.n.03',
+                u'sled.v.01', u'christian.a.02', u'christian.a.01',
+                u'virgin_birth.n.02', u'bell.v.01', u'carol.n.01',
+                u'carol.n.02', 'caribou.n.01', u'manger.n.01', u'jesus.n.01',
+                u'snow.v.01'})
 
 
-class Kwanzaa(ExclusivePredicate):
+class Kwanzaa(ExclusiveTerms):
 
-    terms = ('kwanzaa',)
+    def __init__(self):
+        super(Kwanzaa, self).__init__(
+            expanded_terms={'kwanzaa.n.01'},
+            ne_expanded_terms={'kwanzaa.n.01', 'festival.n.02'})
 
     def applies_in_context(self, context):
-        date = context.date
-        return (date.month == 12 and date.day >= 26) or (
-            date.month == 1 and date.day == 1)
+        context_date = context.date
+        return (context_date.month == 12 and context_date.day >= 26) or (
+            context_date.month == 1 and context_date.day == 1)
 
 
 class NewYear(Period):
 
-    terms = ('new year',)
     decay = THREE_DAYS
 
-    @classmethod
-    def from_datetime(cls, datetime):
-        new = cls(peak=datetime.replace(day=31, month=12))
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(NewYear, self).__init__(
+            peak=now.replace(day=31, month=12),
+            expanded_terms={'new_year.n.01', "new_year's_eve.n.01"},
+            ne_expanded_terms={
+                'champagne.n.01', u'sparkling_wine.n.01', u'champagne.n.02',
+                'new.a.01', u'newness.n.01', u'fresh.s.04', u'novelty.n.02',
+                u'new.s.04', u'new.s.05', u'new.a.06', u'new.s.08',
+                u'new.s.10', u'new.s.11', u'newly.r.01', u'year.n.01',
+                u'year.n.02', u'year.n.03', 'resolution.n.01',
+                u'resolution.n.04', u'resolution.n.06', u'resolution.n.07',
+                u'resolution.n.08', u'resolution.n.09', u'resolution.n.11',
+                u'decision.n.01'})
 
 
 class Halloween(Period):
 
-    terms = ('halloween', 'hallowe\'en', 'all hallow\'s')
-    non_exclusive_terms = (
-        'haunt', 'haunting', 'haunted', 'ghost', 'monster', 'horror', 'devil',
-        'witch', 'pumkin', 'bone', 'skeleton', 'ghosts', 'zombie', 'werewolf',
-        'werewolves', 'vampire', 'evil', 'scare', 'scary', 'scaring', 'fear',
-        'fright', 'frightening', 'blood', 'bat', 'dracula', 'spider',
-        'costume', 'satan', 'hell', 'undead', 'dead', 'death', 'grave',
-        'skull', 'terror', 'coffin', 'tomb', 'creepy', 'wicked', 'lantern',
-        'pumpkin', 'trick', 'treat')
     decay = THREE_DAYS
 
-    @classmethod
-    def from_datetime(cls, datetime):
-        new = cls(peak=datetime.replace(day=31, month=10))
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Halloween, self).__init__(
+            peak=now.replace(day=31, month=10),
+            expanded_terms={'halloween.n.01'},
+            ne_expanded_terms={
+                u'bone.s.01', u'evil.s.02', u'dead.n.01', u'grave.n.01',
+                u'grave.n.02', u'evil.a.01', u'mischief.n.01',
+                u'frighten.v.01', u'frighten.v.02', u'apparition.n.03',
+                u'dead.a.01', u'satanic.a.02', u'trick.n.01', u'delusive.s.01',
+                u'haunt.v.01', u'haunt.v.02', u'creepy.s.01', u'wicked.a.01',
+                u'dead_person.n.01', u'spell.n.04', u'creepy.s.02',
+                u'scare.n.02', u'delusion.n.02', u'delusion.n.03',
+                u'delusion.n.01', u'dead.s.14', u'dead.s.17', u'dead.s.16',
+                u'dead.s.11', u'dead.s.10', u'dead.s.13', u'dead.s.12',
+                u'satan.n.01', u'mutant.n.01', u'scaremonger.n.01',
+                u'kill.v.10', u'coffin.n.01', u'bone.n.01', u'bone.n.02',
+                u'killing.n.02', u'panic.n.02', u'panic.n.01', u'spider.n.01',
+                u'fear.v.01', u'fear.v.03', u'fear.v.02', u'fear.v.04',
+                u'bony.a.03', u'zombi.n.03', u'hellion.n.01', 'undead',
+                u'shock.v.02', u'enchantress.n.02', u'devil.n.02',
+                u'malefic.s.01', u'dracula.n.01', u'dracula.n.02', u'hag.n.01',
+                u'zombi.n.01', u'wiccan.n.01', u'fearful.s.01',
+                u'costume.n.01', u'costume.n.03', u'costume.n.04',
+                u'occultism.n.01', u'death.n.02', u'occultism.n.02',
+                u'die.v.01', u'death.n.01', u'blood.n.01', u'horror.n.01',
+                u'horror.n.02', u'death.n.08', u'skeleton.n.04', u'daunt.v.01',
+                u'costume.n.02', u'haunt.n.01', u'apprehension.n.01',
+                u'dead.s.06', u'dead.s.07', u'dead.s.04', u'dead.s.05',
+                u'sin.n.06', u'dead.s.08', u'dead.s.09', u'monster.n.01',
+                u'monster.n.04', u'dead.a.02', u'zombie.n.05',
+                u'impishness.n.01', u'ghost.n.03', u'ghost.n.01',
+                u'pagan.n.02', u'devilish.s.02', u'fear.n.01', u'fear.n.03',
+                u'hell.n.01', u'hell.n.02', u'hell.n.03', u'hell.n.04',
+                u'zombi.n.02', u'hell.n.06', u'psychic.s.01', u'evil.n.01',
+                u'evil.n.03', u'evil.n.02', u'die.v.02', u'spirit.n.04',
+                u'mischievous.s.02', u'malevolence.n.02', u'shadowy.s.03',
+                u'soul.n.01', u'terror.n.03', u'terror.n.02', u'pumpkin.n.02',
+                u'pumpkin.n.01', u'trick.n.03', u'trick.n.02', u'lamp.n.01',
+                u'terror.n.04', u'trick.n.07', u'die.v.10', u'hex.v.01',
+                u'mythical_monster.n.01', u'occultist.n.01',
+                u'nefariousness.n.01', u'werewolf.n.01', u'mutant.a.01',
+                u'death.n.03', u'death.n.06', u'death.n.04', u'death.n.05',
+                u'apparitional.s.01', u'deadness.n.02', u'deadness.n.03',
+                u'witch.n.02', u'creepiness.n.01', u'malignity.n.02',
+                u'chilling.s.01', u'magic_trick.n.01', u'imp.n.02',
+                u'lantern.n.01', u'freak.n.01', u'prankishness.n.01',
+                u'kill.v.01', u'creep.n.01', u'unholiness.n.01',
+                u'evil_spirit.n.01', u'vampire.n.01', u'bat.n.05', u'bat.n.01',
+                u'terrorization.n.01', u'transgression.n.01', u'kill.v.04',
+                u'kill.v.09', u'skull.n.01'})
 
 
-class EasterBased(ExclusivePredicate):
+class EasterBased(ExclusiveTerms):
 
     days_after_easter = 0
 
@@ -1250,149 +1268,235 @@ class EasterBased(ExclusivePredicate):
 
         return False
 
-    def easter_offset(self, from_date, easter):
-        return (from_date.date() - easter).days == self.days_after_easter
+    def easter_offset(self, from_date, easter_date):
+        return (from_date.date() - easter_date).days == self.days_after_easter
 
 
 class Easter(Period):
 
-    terms = ('easter',)
-    non_exclusive_terms = (
-        'resurrect', 'resurrection', 'jesus', 'egg', 'bunny', 'bunnies',
-        'rabbit')
     decay = THREE_DAYS
 
-    @classmethod
-    def from_datetime(cls, datetime):
-        new = cls(peak=easter(datetime.year))
-        new.build_searches()
-        return new
+    def __init__(self, now):
+        super(Easter, self).__init__(
+            peak=easter(now.year),
+            expanded_terms={'easter.n.01'},
+            ne_expanded_terms={
+                u'bunny.n.02', u'rabbit.n.01', u'rabbit.n.03', u'return.n.05',
+                u'return.n.02', u'egg.n.02', u'egg.n.01', u'resurrect.v.03',
+                u'resurrect.v.01', u'renewing.s.01', u'return.v.01',
+                u'jesus.n.01', u'revival.n.01', u'resurrection.n.01',
+                u'resurrection.n.02', u'revive.v.04', u'revive.v.03'})
 
 
 class MardiGras(EasterBased):
 
-    terms = ('mardi gras', 'shrove tuesday', 'fat tuesday')
-    non_exclusive_terms = ('pancake',)
     days_after_easter = -47
+
+    def __init__(self):
+        super(MardiGras, self).__init__(
+            expanded_terms={'mardi_gras.n.01', 'mardi_gras.n.02'},
+            ne_expanded_terms={
+                'carnival.n.01', 'pancake.n.01', u'fat.s.05', u'fatness.n.01',
+                u'feast.n.02', u'fat.n.01', u'fete.n.01', u'fat.s.04',
+                u'shrive.v.01', u'fat.s.02', u'party.n.04', u'feast.v.01',
+                u'forgive.v.01', u'party.v.01', u'fat.a.01'})
 
 
 class AshWednesday(EasterBased):
 
-    terms = ('ash wednesday',)
-    non_exclusive_terms = ('ash', 'lent')
     days_after_easter = -46
+
+    def __init__(self):
+        super(AshWednesday, self).__init__(
+            expanded_terms={'ash_wednesday.n.01'},
+            ne_expanded_terms={u'lent.n.01', u'ash.n.01'})
 
 
 class PalmSunday(EasterBased):
 
-    terms = ('palm sunday',)
-    non_exclusive_terms = ('palms', 'jerusalem', 'jesus', 'christ')
     days_after_easter = -7
+
+    def __init__(self):
+        super(PalmSunday, self).__init__(
+            expanded_terms={'palm_sunday.n.01'},
+            ne_expanded_terms={u'palm.n.03', u'jerusalem.n.01', u'jesus.n.01'})
 
 
 class MaundyThursday(EasterBased):
 
-    terms = ('maundy thursday',)
-    non_exclusive_terms = ('last supper', 'apostles', 'jesus', 'christ')
     days_after_easter = -3
+
+    def __init__(self):
+        super(MaundyThursday, self).__init__(
+            expanded_terms={'maundy_thursday.n.01'},
+            ne_expanded_terms={
+                'last_supper.n.01', 'discipleship.n.01', 'disciple.n.01',
+                'jesus.n.01', 'apostle.n.01', 'apostle.n.02', 'apostle.n.03'})
 
 
 class GoodFriday(EasterBased):
 
-    terms = ('good friday',)
-    non_exclusive_terms = (
-        'crucifixion', 'cross', 'crosses', 'jesus', 'christ')
     days_after_easter = -2
+
+    def __init__(self):
+        super(GoodFriday, self).__init__(
+            expanded_terms={'good_friday.n.01'},
+            ne_expanded_terms={
+                u'cross.n.01', u'cross.n.03 ', u'cross.n.04',
+                u'crucifixion.n.01', u'crucifixion.n.03', u'crucifixion.n.02',
+                u'execute.v.01', u'jesus.n.01', u'torture.v.02',
+                u'execution.n.01', u'torture.n.05'})
 
 
 class Ascension(EasterBased):
 
-    terms = ('ascension',)
-    non_exclusive_terms = ('heaven', 'jesus', 'christ')
     days_after_easter = 39
+
+    def __init__(self):
+        super(Ascension, self).__init__(
+            expanded_terms={
+                'ascension.n.03', u'ascension.n.01', u'ascension.n.04'},
+            ne_expanded_terms={
+                'rise.n.02', 'rise.n.04', 'heaven.n.02', 'jesus.n.01'})
 
 
 class Pentecost(EasterBased):
 
-    terms = ('pentecost',)
-    non_exclusive_terms = ('holy spirit',)
     days_after_easter = 49
+
+    def __init__(self):
+        super(Pentecost, self).__init__(
+            expanded_terms={'shavous.n.01', u'pentecost.n.01'},
+            ne_expanded_terms={'holy_ghost.n.01'})
 
 
 class WhitMonday(EasterBased):
 
-    terms = ('whit monday',)
-    non_exclusive_terms = ('holy spirit',)
     days_after_easter = 50
+
+    def __init__(self):
+        super(WhitMonday, self).__init__(
+            expanded_terms={'shavous.n.01', u'pentecost.n.01'},
+            ne_expanded_terms={'holy_ghost.n.01'})
 
 
 class AllSaints(EasterBased):
 
-    terms = ('all saints',)
-    non_exclusive_terms = ('saint',)
     days_after_easter = 56
 
+    def __init__(self):
+        super(AllSaints, self).__init__(
+            expanded_terms={"all_saints'_day.n.01"},
+            ne_expanded_terms={
+                u'venerator.n.01', u'good_person.n.01', u'godly.s.01',
+                u'saint.n.01', u'saint.n.02', u'enshrine.v.02', u'ideal.n.02',
+                u'reverence.v.01', u'model.n.06', u'deify.v.01',
+                u'canonize.v.01', u'reverent.a.01', u'reverence.n.02',
+                u'divine.s.03'})
 
-class VeteransDay(DatePredicateBase):
 
-    terms = ('armistice day', 'veterans day')
-    non_exclusive_terms = ('peace', 'armistice', 'veteran')
+class VeteransDay(Date):
+
     month = 11
     day = 11
 
+    def __init__(self):
+        super(VeteransDay, self).__init__(
+            expanded_terms={'veterans_day.n.01'},
+            ne_expanded_terms={
+                u'armistice.n.01', u'veteran.n.02', u'serviceman.n.01',
+                u'peace.n.02', u'peace.n.03', u'peace.n.01', u'peace.n.04',
+                u'peace.n.05', u'veteran.n.01'})
 
-class Assumption(DatePredicateBase):
 
-    terms = ('assumption',)
-    non_exclusive_terms = ('mary', 'heaven')
+class Assumption(Date):
+
     month = 8
     day = 15
 
+    def __init__(self):
+        super(Assumption, self).__init__(
+            expanded_terms={u'assumption.n.04', u'assumption.n.05'},
+            ne_expanded_terms={
+                u'miracle.n.02', u'heaven.n.02',
+                u'holy_day_of_obligation.n.01', u'mary.n.01'})
 
-class IndependenceDay(DatePredicateBase):
 
-    terms = ('independence day',)
-    non_exclusive_terms = (
-        'independence', 'united states', 'independant', 'usa', 'u.s.a.')
+class IndependenceDay(Date):
+
     month = 7
     day = 4
 
+    def __init__(self):
+        super(IndependenceDay, self).__init__(
+            expanded_terms={'independence_day.n.01'},
+            ne_expanded_terms={
+                u'freedom.n.01', u'independent.s.04', u'independence.n.01',
+                u'independence.n.03', u'independence.n.02', u'autonomous.s.01',
+                u'independent.a.01', u'independent.a.03', u'autonomy.n.01',
+                u'american.a.01'})
 
-class GroundhogDay(DatePredicateBase):
 
-    terms = ('groundhog day',)
-    non_exclusive_terms = ('groundhog',)
+class GroundhogDay(Date):
+
     month = 2
     day = 2
 
+    def __init__(self):
+        super(GroundhogDay, self).__init__(
+            expanded_terms={'groundhog_day.n.01'},
+            ne_expanded_terms={u'marmot.n.01', u'groundhog.n.01'})
 
-class ValentinesDay(DatePredicateBase):
 
-    terms = ('valentine',)
-    non_exclusive_terms = ('heart', 'love')
+class ValentinesDay(Date):
+
     month = 2
     day = 14
 
+    def __init__(self):
+        super(ValentinesDay, self).__init__(
+            expanded_terms={u'valentine.n.02', u'valentine.n.01'},
+            ne_expanded_terms={
+                u'sweetheart.n.01', u'greeting_card.n.01', 'love.v.03',
+                u'love.v.02', u'love.v.01', u'heart.n.06', u'heart.n.07',
+                u'heart.n.01', u'heart.n.02', u'mate.n.03', u'love.n.02',
+                u'love.n.01', u'love.n.04', u'couple.n.02', u'lover.n.01',
+                u'affection.n.01', u'beloved.n.01'})
 
-class AprilFools(DatePredicateBase):
 
-    terms = ('april fool',)
-    non_exclusive_terms = ('prank', 'joke', 'fool', 'hoax')
+class AprilFools(Date):
+
     month = 4
     day = 1
 
+    def __init__(self):
+        super(AprilFools, self).__init__(
+            expanded_terms={"april_fools'.n.01"},
+            ne_expanded_terms={
+                u'butt.n.03', u'stooge.v.02', u'deceptive.s.01',
+                u'humorous.a.01', u'deceive.v.02', u'crafty.s.01',
+                u'deception.n.02', u'trickery.n.02', u'gull.v.02',
+                u'fool.v.01', u'hoax.v.01', u'jest.n.02', u'joke.n.01',
+                u'clown.v.01', u'chump.n.01', u'delusive.s.01', u'fool.n.01',
+                u'misrepresentation.n.01', u'jester.n.01', u'joke.v.02',
+                u'flim-flam.v.01', u'clown.n.02'})
 
-class CincoDeMayo(DatePredicateBase):
 
-    terms = ('cinco de mayo',)
-    non_exclusive_terms = ('mexico',)
+class CincoDeMayo(Date):
+
     month = 5
     day = 5
 
+    def __init__(self):
+        super(CincoDeMayo, self).__init__(
+            expanded_terms={'cinco_de_mayo.n.01'},
+            ne_expanded_terms={u'mexican.a.01', u'mexico.n.01'})
 
-class Solstice(ExclusivePredicate):
 
-    terms = ('solstice',)
+class Solstice(ExclusiveTerms):
+
+    def __init__(self):
+        super(Solstice, self).__init__(expanded_terms={'solstice.n.01'})
 
     def applies_in_context(self, context):
         context_date = context.date
@@ -1400,37 +1504,45 @@ class Solstice(ExclusivePredicate):
             context_date.month == 6 or context_date.month == 12)
 
 
-class Friday13(ExclusivePredicate):
+class Friday13(ExclusiveTerms):
 
-    terms = ('friday the 13th',)
-    non_exclusive_terms = ('bad luck', 'superstition')
+    def __init__(self):
+        super(Friday13, self).__init__(
+            expanded_terms={'friday the 13th'},
+            ne_expanded_terms={
+                'misfortune.n.02', 'bad_luck.n.02', 'misfortune.n.01',
+                'thirteen.n.01', u'superstition.n.01', u'unlucky.a.01',
+                u'doomed.s.03', u'thirteen.s.01'})
 
     def applies_in_context(self, context):
         context_date = context.date
         return context_date.day == 13 and context_date.isoweekday() == 5
 
 
-class BirthdayPredicate(DatePredicateBase):
+class Birthday(Date):
 
     def __init__(self, year, month, day, name, age):
         self.non_exclusive_terms = ('birthday', name, str(year), str(age))
         self.year = year
         self.month = month
         self.day = day
-        self.non_exclusive_terms = (str(year),)
-        super(BirthdayPredicate, self).__init__()
+        super(Birthday, self).__init__()
 
     def applies_to_song(self, song, exclusive):
-        if not exclusive and self.year == song.get_year():
+        if exclusive:
+            return False
+
+        if self.year == song.get_year():
             return True
-        return super(BirthdayPredicate, self).applies_to_song(song, exclusive)
+
+        return super(Birthday, self).applies_to_song(song, exclusive)
 
 
 STATIC_PREDICATES = [
-    Kwanzaa(), MardiGras(), AshWednesday(), PalmSunday(), MaundyThursday(),
-    GoodFriday(), Ascension(), Pentecost(), WhitMonday(), AllSaints(),
-    VeteransDay(), Assumption(), IndependenceDay(), GroundhogDay(),
-    ValentinesDay(), AprilFools(), CincoDeMayo(), Solstice(), Friday13(),
-    January(), February(), March(), April(), May(), June(), July(), August(),
-    September(), October(), November(), December(), Monday(), Tuesday(),
-    Wednesday(), Thursday(), Friday(), Saturday(), Sunday(), Weekend()]
+    AllSaints(), AprilFools(), Ascension(), AshWednesday(), Assumption(),
+    CincoDeMayo(), Friday13(), GoodFriday(), GroundhogDay(), IndependenceDay(),
+    Kwanzaa(), MardiGras(), MaundyThursday(), PalmSunday(), Pentecost(),
+    Solstice(), ValentinesDay(), VeteransDay(), WhitMonday(), January(),
+    February(), March(), April(), May(), June(), July(), August(), September(),
+    October(), November(), December(), Monday(), Tuesday(), Wednesday(),
+    Thursday(), Friday(), Saturday(), Sunday(), Weekend()]
