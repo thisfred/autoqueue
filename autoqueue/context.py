@@ -509,8 +509,8 @@ class WeightedTermsPredicate(Predicate):
         intersection_score = sum([
             self.weighted_terms[k] + song_terms[k] for k in
             self.get_intersection_keys(song_terms)])
-        score = intersection_score / (
-            1 + sum(self.weighted_terms.values()) + sum(song_terms.values()))
+        score = intersection_score / max(
+            1, sum(self.weighted_terms.values()) + sum(song_terms.values()))
         result['score'] /= 1 + score
 
 
