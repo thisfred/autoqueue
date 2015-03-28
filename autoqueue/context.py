@@ -46,11 +46,15 @@ def get_wordnet_pos(tag):
     return POS_MAP.get(tag[:1])
 
 
-def expand_synset(synset, score):
-    yield (synset.name(), score)
+def expand_synset(synset):
+    yield (synset.name(), 1.0)
     for synset in synset.hypernyms():
-        for term_weight in expand_synset(synset, score / 2.0):
-            yield term_weight
+        yield (synset.name(), 0.5)
+        for lemma in synset.lemmas():
+            for form in lemma.derivationally_related_forms():
+                yield (form.synset().name(), 0.5)
+            for pertainym in lemma.pertainyms():
+                yield (pertainym.synset().name(), 0.5)
 
 
 def expand(word, pos=None):
@@ -60,7 +64,7 @@ def expand(word, pos=None):
         return
 
     for synset in wordnet.synsets(stemmed, pos=pos):
-        for term_weight in expand_synset(synset, 1.0):
+        for term_weight in expand_synset(synset):
             yield term_weight
 
 

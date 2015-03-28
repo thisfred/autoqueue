@@ -120,16 +120,12 @@ def get_artists_playing_nearby(location_geohash, location):
             else:
                 nearby_artists.append(artists)
         if page_number == total_pages:
-            from pprint import pprint
-            pprint(nearby_artists)
             return nearby_artists
         params['page'] = page_number + 1
         response = requests.get(
             'http://ws.audioscrobbler.com/2.0/', params=params)
         page = response.json()
         page_number = int(page['events']['@attr']['page'])
-    from pprint import pprint
-    pprint(nearby_artists)
     return nearby_artists
 
 
