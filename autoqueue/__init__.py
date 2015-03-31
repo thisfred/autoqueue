@@ -24,15 +24,14 @@ import os
 import random
 import re
 from abc import ABCMeta, abstractmethod
-from cPickle import Pickler, Unpickler
 from collections import deque
+from cPickle import Pickler, Unpickler
+from datetime import datetime, timedelta
 
 import dbus
-from datetime import datetime, timedelta
 from dbus.mainloop.glib import DBusGMainLoop
 
 from autoqueue.context import Context
-
 
 try:
     import pywapi
@@ -999,3 +998,4 @@ def levenshtein(string1, string2):
         previous_row = current_row
 
     return previous_row[-1]
+

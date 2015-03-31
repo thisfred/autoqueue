@@ -1,11 +1,11 @@
 """Context awareness filters."""
 import re
+from datetime import date, datetime, time, timedelta
 
 import nltk
-from datetime import datetime, timedelta, date, time
 from dateutil.easter import easter
 from dateutil.rrule import TH, YEARLY, rrule
-from nltk import word_tokenize, pos_tag
+from nltk import pos_tag, word_tokenize
 from nltk.corpus import stopwords, wordnet
 
 nltk.download('punkt')
@@ -68,20 +68,16 @@ def expand(word, pos=None):
             yield term
 
 
-def add_terms(terms, words):
-    for word in words:
-        for term in expand(word):
-            terms.add(term)
+def get_terms(words):
+    return {term for word in words for term in expand(word)}
 
 
-def get_terms(song):
-    terms = set()
+def get_terms_from_song(song):
     word_tags = pos_tag(word_tokenize(song.get_title(with_version=False)))
-    for word, tag in word_tags:
-        for term in expand(word, get_wordnet_pos(tag)):
-            terms.add(term)
-    add_terms(terms, song.get_non_geo_tags())
-    return terms
+    return {
+        term for word, tag in word_tags
+        for term in expand(word, get_wordnet_pos(tag))} | get_terms(
+            song.get_non_geo_tags())
 
 
 class Context(object):
@@ -160,11 +156,11 @@ class Context(object):
     def add_last_song_predicates(self):
         if not self.last_song:
             return
-        terms = get_terms(self.last_song)
+        terms = get_terms_from_song(self.last_song)
         print "*** context terms terms: ***"
         print sorted([term.split('.')[0] for term in terms], reverse=True)
         print "*******************************"
-        predicate = Terms(ne_expanded_terms=terms)
+        predicate = Terms(ne_expanded_terms=frozenset(terms))
         self.predicates.append(predicate)
         self.predicates.append(Geohash(self.last_song.get_geohashes()))
 
@@ -292,19 +288,18 @@ class Terms(Predicate):
     terms = tuple()
     non_exclusive_terms = tuple()
     regex_terms = tuple()
+    terms_expanded = frozenset()
+    non_exclusive_terms_expanded = frozenset()
 
-    def __init__(self, expanded_terms=None, ne_expanded_terms=None):
-        if not (expanded_terms or ne_expanded_terms):
-            self.terms_expanded = set()
-            self.non_exclusive_terms_expanded = set()
-            self.expand_terms()
+    def __init__(self, ne_expanded_terms=frozenset()):
+        ne_expanded_terms = (
+            self.non_exclusive_terms_expanded | ne_expanded_terms)
+        if self.terms_expanded or ne_expanded_terms:
+            self.non_exclusive_terms_expanded = ne_expanded_terms
         else:
-            self.terms_expanded = expanded_terms or set()
-            self.non_exclusive_terms_expanded = (ne_expanded_terms or set())
-
-    def expand_terms(self):
-        add_terms(self.terms_expanded, self.terms)
-        add_terms(self.non_exclusive_terms_expanded, self.non_exclusive_terms)
+            self.terms_expanded = frozenset(get_terms(self.terms))
+            self.non_exclusive_terms_expanded = frozenset(get_terms(
+                self.non_exclusive_terms))
 
     def get_intersection(self, song_terms, exclusive=True):
         if exclusive:
@@ -316,7 +311,7 @@ class Terms(Predicate):
     def applies_to_song(self, song, exclusive):
         return (
             self.regex_terms_match(song) or
-            self.get_intersection(get_terms(song), exclusive))
+            self.get_intersection(get_terms_from_song(song), exclusive))
 
     def regex_terms_match(self, song):
         """Determine whether the predicate applies to the song."""
@@ -333,7 +328,7 @@ class Terms(Predicate):
             else self.terms_expanded | self.non_exclusive_terms_expanded)
         if not expanded:
             return 1
-        song_terms = get_terms(result['song'])
+        song_terms = get_terms_from_song(result['song'])
         intersection = self.get_intersection(song_terms, exclusive)
         print "  %d / %d" % (len(intersection), len(expanded))
         factor = float(len(intersection)) / float(len(expanded))
@@ -351,10 +346,10 @@ class Period(ExclusiveTerms):
     period = ONE_YEAR
     decay = None
 
-    def __init__(self, peak, *args, **kwargs):
+    def __init__(self, peak):
         self.diff = None
         self.peak = peak
-        super(Period, self).__init__(*args, **kwargs)
+        super(Period, self).__init__()
 
     def get_peak(self, context):
         return self.peak
@@ -502,15 +497,12 @@ class Weather(ExclusiveTerms):
 
 class Freezing(Weather):
 
-    def __init__(self):
-        super(Freezing, self).__init__(
-            expanded_terms={
-                u'frost.n.03', u'frost.n.01', u'ice.n.01', u'ice.n.02',
-                u'frost.v.02', u'frost.v.03', u'frost.v.01', u'frost.v.04',
-                u'freeze.v.10', u'freeze.n.02', u'freeze.n.01', u'freeze.v.06',
-                u'freeze.v.07', u'freeze.v.04', u'freeze.v.02',
-                u'freeze.v.08'},
-            ne_expanded_terms={u'snow.n.01', u'snow.n.02'})
+    terms_expanded = frozenset([
+        u'frost.n.03', u'frost.n.01', u'ice.n.01', u'ice.n.02', u'frost.v.02',
+        u'frost.v.03', u'frost.v.01', u'frost.v.04', u'freeze.v.10',
+        u'freeze.n.02', u'freeze.n.01', u'freeze.v.06', u'freeze.v.07',
+        u'freeze.v.04', u'freeze.v.02', u'freeze.v.08'])
+    non_exclusive_terms_expanded = frozenset([u'snow.n.01', u'snow.n.02'])
 
     def applies_in_context(self, context):
         temperature = self.get_temperature(context)
@@ -525,16 +517,11 @@ class Freezing(Weather):
 
 class Cold(Weather):
 
-    terms = ('cold', 'chill', 'chilly')
-
-    def __init__(self):
-        super(Cold, self).__init__(
-            expanded_terms={
-                u'coldness.n.03', u'cold.a.01', u'cold.a.02', u'chill.n.01',
-                u'chilliness.n.01', u'cold.s.11', u'cold.s.10', u'cold.s.13',
-                u'cold.s.12', u'chilly.s.03', u'cold.s.08', u'chilly.s.01',
-                u'cold.s.03', u'cold.n.03', u'cold.s.07', u'cold.s.04',
-                u'cold.s.05'})
+    terms_expanded = frozenset([
+        u'coldness.n.03', u'cold.a.01', u'cold.a.02', u'chill.n.01',
+        u'chilliness.n.01', u'cold.s.11', u'cold.s.10', u'cold.s.13',
+        u'cold.s.12', u'chilly.s.03', u'cold.s.08', u'chilly.s.01',
+        u'cold.s.03', u'cold.n.03', u'cold.s.07', u'cold.s.04', u'cold.s.05'])
 
     def applies_in_context(self, context):
         temperature = self.get_temperature(context)
@@ -549,15 +536,12 @@ class Cold(Weather):
 
 class Hot(Weather):
 
-    def __init__(self):
-        super(Hot, self).__init__(
-            expanded_terms={
-                u'hot.s.21', u'hot.a.01', u'hot.a.03', u'hotness.n.01',
-                u'hot.s.19', u'hot.s.18', u'hot.s.15', u'hot.s.14',
-                u'hot.s.17', u'hot.s.16', u'hot.s.11', u'hot.s.10',
-                u'hot.s.13', u'hot.s.12', u'heat.n.01', u'blistering.s.03',
-                u'heat.n.03', u'hot.s.08', u'hot.s.02', u'hot.s.06',
-                u'hot.s.04', u'hot.s.05'})
+    terms_expanded = frozenset([
+        u'hot.s.21', u'hot.a.01', u'hot.a.03', u'hotness.n.01', u'hot.s.19',
+        u'hot.s.18', u'hot.s.15', u'hot.s.14', u'hot.s.17', u'hot.s.16',
+        u'hot.s.11', u'hot.s.10', u'hot.s.13', u'hot.s.12', u'heat.n.01',
+        u'blistering.s.03', u'heat.n.03', u'hot.s.08', u'hot.s.02',
+        u'hot.s.06', u'hot.s.04', u'hot.s.05'])
 
     def applies_in_context(self, context):
         temperature = self.get_temperature(context)
@@ -572,11 +556,8 @@ class Hot(Weather):
 
 class Calm(Weather):
 
-    def __init__(self):
-        super(Calm, self).__init__(
-            expanded_terms={
-                u'calm.a.02', u'calm_air.n.01', u'calmness.n.02',
-                u'calm.s.01'})
+    terms_expanded = frozenset([
+        u'calm.a.02', u'calm_air.n.01', u'calmness.n.02', u'calm.s.01'])
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) < 1
@@ -584,12 +565,9 @@ class Calm(Weather):
 
 class Breeze(Weather):
 
-    def __init__(self):
-        super(Breeze, self).__init__(
-            expanded_terms={
-                'breeze.n.01', u'breeze.v.02', u'breeziness.n.01',
-                u'breezy.s.01'},
-            ne_expanded_terms={u'blow.v.02'})
+    terms_expanded = frozenset([
+        'breeze.n.01', u'breeze.v.02', u'breeziness.n.01', u'breezy.s.01'])
+    non_exclusive_terms_expanded = frozenset([u'blow.v.02'])
 
     def applies_in_context(self, context):
         speed = self.get_wind_speed(context)
@@ -598,11 +576,8 @@ class Breeze(Weather):
 
 class Wind(Weather):
 
-    def __init__(self):
-        super(Wind, self).__init__(
-            expanded_terms={
-                u'wind.n.01', u'gust.n.01', u'windy.s.03'},
-            ne_expanded_terms={u'blowy.s.01'})
+    terms_expanded = frozenset([u'wind.n.01', u'gust.n.01', u'windy.s.03'])
+    non_exclusive_terms_expanded = frozenset([u'blowy.s.01'])
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 30
@@ -610,8 +585,7 @@ class Wind(Weather):
 
 class Gale(Weather):
 
-    def __init__(self):
-        super(Gale, self).__init__(expanded_terms={'gale.n.01'})
+    terms_expanded = frozenset(['gale.n.01'])
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 38
@@ -619,11 +593,9 @@ class Gale(Weather):
 
 class Storm(Weather):
 
-    def __init__(self):
-        super(Storm, self).__init__(
-            expanded_terms={
-                u'stormy.s.02', u'stormy.a.01', u'storminess.n.02',
-                u'storminess.n.01', u'storm.n.01', u'storm.n.02'})
+    terms_expanded = frozenset([
+        u'stormy.s.02', u'stormy.a.01', u'storminess.n.02', u'storminess.n.01',
+        u'storm.n.01', u'storm.n.02'])
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 54
@@ -631,11 +603,8 @@ class Storm(Weather):
 
 class Hurricane(Weather):
 
-    def __init__(self):
-        super(Hurricane, self).__init__(
-            expanded_terms={
-                'cyclonic.a.01', u'cyclonic.a.02', u'cyclone.n.02',
-                u'hurricane.n.01'})
+    terms_expanded = frozenset([
+        'cyclonic.a.01', u'cyclonic.a.02', u'cyclone.n.02', u'hurricane.n.01'])
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 72
@@ -643,9 +612,7 @@ class Hurricane(Weather):
 
 class Humid(Weather):
 
-    def __init__(self):
-        super(Humid, self).__init__(
-            expanded_terms={'humid.s.01', u'humidity.n.01'})
+    terms_expanded = frozenset(['humid.s.01', u'humidity.n.01'])
 
     def applies_in_context(self, context):
         return self.get_humidity(context) > 65
@@ -680,10 +647,10 @@ class TimePredicate(DayPeriod):
 
 class TimeRange(ExclusiveTerms):
 
-    def __init__(self, start, end, *args, **kwargs):
+    def __init__(self, start, end):
         self.start = start
         self.end = end
-        super(TimeRange, self).__init__(*args, **kwargs)
+        super(TimeRange, self).__init__()
 
     def applies_in_context(self, context):
         if self.start and context.date < self.start:
@@ -697,9 +664,7 @@ class TimeRange(ExclusiveTerms):
 
 class Daylight(TimeRange):
 
-    def __init__(self, start, end):
-        super(Daylight, self).__init__(
-            start=start, end=end, expanded_terms={'daylight.n.02'})
+    terms_expanded = frozenset(['daylight.n.02'])
 
 
 class NegativeTimeRange(TimeRange):
@@ -711,21 +676,17 @@ class NegativeTimeRange(TimeRange):
 
 class NotDaylight(NegativeTimeRange):
 
-    def __init__(self, start, end):
-        super(NotDaylight, self).__init__(
-            start=start, end=end, expanded_terms={
-                'dark.s.03', u'dark.s.05', u'dark.s.08', u'dark.a.02',
-                u'dark.a.01', u'dark.n.05', u'dark.n.01', u'dark.s.11',
-                u'darkness.n.05', u'darkness.n.02'})
+    terms_expanded = frozenset([
+        'dark.s.03', u'dark.s.05', u'dark.s.08', u'dark.a.02', u'dark.a.01',
+        u'dark.n.05', u'dark.n.01', u'dark.s.11', u'darkness.n.05',
+        u'darkness.n.02'])
 
 
 class Sun(TimeRange, Weather):
 
-    def __init__(self, start, end):
-        super(Sun, self).__init__(
-            start=start, end=end, expanded_terms={
-                u'sun.v.01', u'sun.v.02', u'sunlight.n.01',
-                u'fair_weather.n.01', u'sun.n.04', u'sun.n.01'})
+    terms_expanded = frozenset([
+        u'sun.v.01', u'sun.v.02', u'sunlight.n.01', u'fair_weather.n.01',
+        u'sun.n.04', u'sun.n.01'])
 
     def applies_in_context(self, context):
         if super(Sun, self).applies_in_context(context):
@@ -739,12 +700,10 @@ class Sun(TimeRange, Weather):
 
 class Fog(Weather):
 
-    def __init__(self):
-        super(Fog, self).__init__(
-            expanded_terms={
-                u'confused.s.03', u'brumous.s.01', u'fogged.s.01',
-                u'haze.n.01', u'mist.v.03', u'mist.n.01', u'misty.s.02',
-                u'haziness.n.02', u'fog.n.01', u'fog.n.02', u'mist.v.01'})
+    terms_expanded = frozenset([
+        u'brumous.s.01', u'fogged.s.01', u'haze.n.01', u'mist.v.03',
+        u'mist.n.01', u'misty.s.02', u'haziness.n.02', u'fog.n.01',
+        u'fog.n.02', u'mist.v.01'])
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -758,14 +717,10 @@ class Fog(Weather):
 
 class Cloudy(Weather):
 
-    expanded_terms = {
+    terms_expanded = frozenset([
         u'overcast.v.01', u'cloud.n.01', u'cloud.n.02', u'cloud-covered.s.01',
         u'cloudiness.n.02', u'cloudiness.n.01', u'gloom.n.01',
-        u'cloudiness.n.03', u'cloudy.a.02', u'cloudy.s.03', u'cloudy.s.01'}
-
-    def __init__(self):
-        super(Cloudy, self).__init__(
-            expanded_terms=self.expanded_terms)
+        u'cloudiness.n.03', u'cloudy.a.02', u'cloudy.s.03', u'cloudy.s.01'])
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -778,12 +733,9 @@ class Cloudy(Weather):
 
 class Snow(Weather):
 
-    def __init__(self):
-        super(Snow, self).__init__(
-            ne_expanded_terms={
-                u'snow.n.01', u'snow.n.02', u'snow.n.03',
-                u'precipitation.n.03', u'precipitation.n.01',
-                u'precipitate.v.03', u'snow.v.01'} | Cloudy.expanded_terms)
+    non_exclusive_terms_expanded = Cloudy.terms_expanded | frozenset([
+        u'snow.n.01', u'snow.n.02', u'snow.n.03', u'precipitation.n.03',
+        u'precipitation.n.01', u'precipitate.v.03', u'snow.v.01'])
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -796,12 +748,9 @@ class Snow(Weather):
 
 class Sleet(Weather):
 
-    def __init__(self):
-        super(Sleet, self).__init__(
-            expanded_terms={'sleet.n.01', u'sleet.v.01'},
-            ne_expanded_terms={
-                u'precipitation.n.03', u'precipitation.n.01',
-                u'precipitate.v.03'} | Cloudy.expanded_terms)
+    terms_expanded = frozenset(['sleet.n.01', u'sleet.v.01'])
+    non_exclusive_terms_expanded = Cloudy.terms_expanded | frozenset([
+        u'precipitation.n.03', u'precipitation.n.01', u'precipitate.v.03'])
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -814,17 +763,13 @@ class Sleet(Weather):
 
 class Rain(Weather):
 
-    def __init__(self):
-        super(Rain, self).__init__(
-            expanded_terms={
-                u'drizzle.n.01', u'drizzle.v.01', u'drizzle.v.02',
-                u'rain.n.01', u'rain.n.02', u'rain.n.03', u'rain.v.01',
-                u'raindrop.n.01', u'shower.v.04', u'showery.s.01',
-                u'shower.n.03'},
-            ne_expanded_terms={
-                u'drop.n.02', u'droplet.n.01', u'precipitate.v.03',
-                u'precipitation.n.01',
-                u'precipitation.n.03'} | Cloudy.expanded_terms)
+    terms_expanded = frozenset([
+        u'drizzle.n.01', u'drizzle.v.01', u'drizzle.v.02', u'rain.n.01',
+        u'rain.n.02', u'rain.n.03', u'rain.v.01', u'raindrop.n.01',
+        u'shower.v.04', u'showery.s.01', u'shower.n.03'])
+    non_exclusive_terms_expanded = Cloudy.terms_expanded | frozenset([
+        u'drop.n.02', u'droplet.n.01', u'precipitate.v.03',
+        u'precipitation.n.01', u'precipitation.n.03'])
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -840,51 +785,46 @@ class Dawn(TimePredicate):
 
     decay = ONE_HOUR
 
-    def __init__(self, moment):
-        super(Dawn, self).__init__(
-            peak=moment,
-            expanded_terms={
-                u'sunrise.n.03', u'sunrise.n.02', u'aurora.n.03', u'dawn.v.03',
-                u'dawn.v.02', u'sunrise.s.01', u'aurora.n.02', u'dawn.n.01',
-                u'dawn.n.03', u'dawn.n.02'})
+    terms_expanded = frozenset([
+        u'sunrise.n.03', u'sunrise.n.02', u'aurora.n.03', u'dawn.v.03',
+        u'dawn.v.02', u'sunrise.s.01', u'aurora.n.02', u'dawn.n.01',
+        u'dawn.n.03', u'dawn.n.02'])
 
 
 class Dusk(TimePredicate):
 
     decay = ONE_HOUR
 
-    def __init__(self, now):
-        super(Dusk, self).__init__(
-            peak=now,
-            expanded_terms={
-                u'sunset.s.01', u'sunset.s.02', u'sunset.n.03', u'sunset.n.02',
-                u'sunset.n.01', u'twilight.n.03', u'twilight.n.02',
-                u'twilight.n.01', u'dusky.s.01', u'dusk.v.01'})
+    terms_expanded = frozenset([
+        u'sunset.s.01', u'sunset.s.02', u'sunset.n.03', u'sunset.n.02',
+        u'sunset.n.01', u'twilight.n.03', u'twilight.n.02', u'twilight.n.01',
+        u'dusky.s.01', u'dusk.v.01'])
 
 
 class Noon(TimePredicate):
 
+    terms_expanded = frozenset(['noon.n.01'])
+
     def __init__(self, now):
         super(Noon, self).__init__(
-            peak=now.replace(hour=12, minute=0, second=0),
-            expanded_terms={'noon.n.01'})
+            peak=now.replace(hour=12, minute=0, second=0))
 
 
 class Midnight(TimePredicate):
 
+    terms_expanded = frozenset(['midnight.n.01'])
+
     def __init__(self, now):
         super(Midnight, self).__init__(
-            peak=now.replace(hour=0, minute=0, second=0),
-            expanded_terms={'midnight.n.01'})
+            peak=now.replace(hour=0, minute=0, second=0))
 
 
 class Date(ExclusiveTerms):
 
-    def __init__(self, expanded_terms=None, ne_expanded_terms=None):
+    def __init__(self):
         self.regex_terms = (
             re.compile(r"^([0-9]{4}-)?%02d-%02d$" % (self.month, self.day)),)
-        super(Date, self).__init__(
-            expanded_terms=expanded_terms, ne_expanded_terms=ne_expanded_terms)
+        super(Date, self).__init__()
 
     def applies_in_context(self, context):
         context_date = context.date
@@ -905,9 +845,9 @@ class Season(Period):
     decay = TWO_MONTHS
 
     def __init__(self, peak):
-        super(Season, self).__init__(
-            peak=peak,
-            expanded_terms={'%s.n.01' % self.__class__.__name__.lower()})
+        self.terms_expanded = frozenset([
+            '%s.n.01' % self.__class__.__name__.lower()])
+        super(Season, self).__init__(peak=peak)
 
     def get_peak(self, context):
         if context.southern_hemisphere:
@@ -949,8 +889,9 @@ class Month(ExclusiveTerms):
     month = 0
 
     def __init__(self):
-        super(Month, self).__init__(
-            expanded_terms={'%s.n.01' % self.__class__.__name__.lower()})
+        self.terms_expanded = frozenset([
+            '%s.n.01' % self.__class__.__name__.lower()])
+        super(Month, self).__init__()
 
     def applies_in_context(self, context):
         return context.date.month == self.month
@@ -1021,8 +962,9 @@ class Day(ExclusiveTerms):
     day_index = 0
 
     def __init__(self):
-        super(Day, self).__init__(
-            expanded_terms={'%s.n.01' % self.__class__.__name__.lower()})
+        self.terms_expanded = frozenset([
+            '%s.n.01' % self.__class__.__name__.lower()])
+        super(Day, self).__init__()
 
     def applies_in_context(self, context):
         return (
@@ -1070,58 +1012,55 @@ class Sunday(Day):
 class Night(DayPeriod):
 
     decay = SIX_HOURS
+    terms_expanded = frozenset([
+        'night.n.01', 'night.n.02', 'night.n.03', 'night.n.07'])
 
     def __init__(self, now):
         super(Night, self).__init__(
-            peak=now.replace(hour=0, minute=0, second=0, microsecond=0),
-            expanded_terms={
-                'night.n.01', 'night.n.02', 'night.n.03', 'night.n.07'})
+            peak=now.replace(hour=0, minute=0, second=0, microsecond=0))
 
 
 class DayTime(DayPeriod):
 
     decay = SIX_HOURS
+    terms_expanded = frozenset(['day.n.04'])
 
     def __init__(self, now):
         super(DayTime, self).__init__(
-            peak=now.replace(hour=12, minute=0, second=0, microsecond=0),
-            expanded_terms={'day.n.04'})
+            peak=now.replace(hour=12, minute=0, second=0, microsecond=0))
 
 
 class Evening(DayPeriod):
 
     decay = THREE_HOURS
+    terms_expanded = frozenset([
+        'evening.n.01', 'evening.n.02', 'evening.n.03'])
 
     def __init__(self, now):
-        super(Evening, self).__init__(
-            peak=now.replace(hour=20),
-            expanded_terms={'evening.n.01', 'evening.n.02', 'evening.n.03'})
+        super(Evening, self).__init__(peak=now.replace(hour=20))
 
 
 class Morning(DayPeriod):
 
-    terms = ('morning',)
     decay = THREE_HOURS
+    terms_expanded = frozenset(['morning.n.01'])
 
     def __init__(self, now):
-        super(Morning, self).__init__(
-            peak=now.replace(hour=9), expanded_terms={'morning.n.01'})
+        super(Morning, self).__init__(peak=now.replace(hour=9))
 
 
 class Afternoon(DayPeriod):
 
     decay = THREE_HOURS
+    terms_expanded = frozenset(['afternoon.n.01'])
 
     def __init__(self, now):
-        super(Afternoon, self).__init__(
-            peak=now.replace(hour=15), expanded_terms={'afternoon.n.01'})
+        super(Afternoon, self).__init__(peak=now.replace(hour=15))
 
 
 class Weekend(ExclusiveTerms):
 
-    def __init__(self):
-        super(Weekend, self).__init__(
-            expanded_terms={u'weekend.n.01', u'weekend.v.01'})
+    terms_expanded = frozenset([u'weekend.n.01', u'weekend.v.01'])
 
     def applies_in_context(self, context):
         context_date = context.date
@@ -1133,48 +1072,43 @@ class Weekend(ExclusiveTerms):
 class Thanksgiving(Period):
 
     decay = THREE_DAYS
+    terms_expanded = frozenset(['thanksgiving.n.01'])
+    non_exclusive_terms_expanded = frozenset([
+        u'grateful.a.01', u'acknowledgment.n.03', u'thank.v.01',
+        u'eating.n.01', u'gluttony.n.01', u'gluttony.n.02',
+        u'consumption.n.01', u'gratefulness.n.01', u'turkey.n.01',
+        u'turkey.n.04', u'gratitude.n.01', u'stuffing.n.01', u'stuffing.n.02',
+        u'grateful.s.02', u'gorge.v.01', u'acknowledge.v.06',
+        u'acknowledge.v.04', u'food.n.03', u'food.n.02', u'food.n.01',
+        u'eat.v.01', u'eat.v.02', u'thanks.n.01', u'thanks.n.02'])
 
     def __init__(self, now):
         super(Thanksgiving, self).__init__(
             peak=rrule(YEARLY, byweekday=TH(4), bymonth=11).after(
-                datetime(now.year, 1, 1)),
-            expanded_terms={'thanksgiving.n.01'},
-            ne_expanded_terms={
-                u'grateful.a.01', u'acknowledgment.n.03', u'thank.v.01',
-                u'eating.n.01', u'gluttony.n.01', u'gluttony.n.02',
-                u'consumption.n.01', u'gratefulness.n.01', u'turkey.n.01',
-                u'turkey.n.04', u'gratitude.n.01', u'stuffing.n.01',
-                u'stuffing.n.02', u'grateful.s.02', u'gorge.v.01',
-                u'acknowledge.v.06', u'acknowledge.v.04', u'food.n.03',
-                u'food.n.02', u'food.n.01', u'eat.v.01', u'eat.v.02',
-                u'thanks.n.01', u'thanks.n.02'})
+                datetime(now.year, 1, 1)))
 
 
 class Christmas(Period):
 
     decay = THREE_DAYS
+    terms_expanded = frozenset(['christmas.n.01', u'christmas.n.02'])
+    non_exclusive_terms_expanded = frozenset([
+        'santa_claus.n.01', 'mistletoe.n.02', u'mistletoe.n.03',
+        u'mistletoe.n.01', u'birth.n.02', u'bell.n.03', u'bell.n.01',
+        u'joseph.n.03', u'sled.n.01', u'joseph.n.02', u'carol.v.01',
+        u'mary.n.01', u'snow.n.01', u'snow.n.02', u'snow.n.03', u'sled.v.01',
+        u'christian.a.02', u'christian.a.01', u'virgin_birth.n.02',
+        u'bell.v.01', u'carol.n.01', u'carol.n.02', 'caribou.n.01',
+        u'manger.n.01', u'jesus.n.01', u'snow.v.01'])
 
     def __init__(self, now):
-        super(Christmas, self).__init__(
-            peak=now.replace(day=25, month=12),
-            expanded_terms={'christmas.n.01', u'christmas.n.02'},
-            ne_expanded_terms={
-                'santa_claus.n.01', 'mistletoe.n.02', u'mistletoe.n.03',
-                u'mistletoe.n.01', u'birth.n.02', u'bell.n.03', u'bell.n.01',
-                u'joseph.n.03', u'sled.n.01', u'joseph.n.02', u'carol.v.01',
-                u'mary.n.01', u'snow.n.01', u'snow.n.02', u'snow.n.03',
-                u'sled.v.01', u'christian.a.02', u'christian.a.01',
-                u'virgin_birth.n.02', u'bell.v.01', u'carol.n.01',
-                u'carol.n.02', 'caribou.n.01', u'manger.n.01', u'jesus.n.01',
-                u'snow.v.01'})
+        super(Christmas, self).__init__(peak=now.replace(day=25, month=12))
 
 
 class Kwanzaa(ExclusiveTerms):
 
-    def __init__(self):
-        super(Kwanzaa, self).__init__(
-            expanded_terms={'kwanzaa.n.01'},
-            ne_expanded_terms={'kwanzaa.n.01', 'festival.n.02'})
+    terms_expanded = frozenset(['kwanzaa.n.01'])
+    non_exclusive_terms_expanded = frozenset(['kwanzaa.n.01', 'festival.n.02'])
 
     def applies_in_context(self, context):
         context_date = context.date
@@ -1186,75 +1120,66 @@ class NewYear(Period):
 
     decay = THREE_DAYS
 
+    terms_expanded = frozenset(['new_year.n.01', "new_year's_eve.n.01"])
+    non_exclusive_terms_expanded = frozenset([
+        'champagne.n.01', u'sparkling_wine.n.01', u'champagne.n.02',
+        'new.a.01', u'newness.n.01', u'fresh.s.04', u'novelty.n.02',
+        u'new.s.04', u'new.s.05', u'new.a.06', u'new.s.08', u'new.s.10',
+        u'new.s.11', u'newly.r.01', u'year.n.01', u'year.n.02', u'year.n.03',
+        'resolution.n.01', u'resolution.n.04', u'resolution.n.06',
+        u'resolution.n.07', u'resolution.n.08', u'resolution.n.09',
+        u'resolution.n.11', u'decision.n.01'])
+
     def __init__(self, now):
-        super(NewYear, self).__init__(
-            peak=now.replace(day=31, month=12),
-            expanded_terms={'new_year.n.01', "new_year's_eve.n.01"},
-            ne_expanded_terms={
-                'champagne.n.01', u'sparkling_wine.n.01', u'champagne.n.02',
-                'new.a.01', u'newness.n.01', u'fresh.s.04', u'novelty.n.02',
-                u'new.s.04', u'new.s.05', u'new.a.06', u'new.s.08',
-                u'new.s.10', u'new.s.11', u'newly.r.01', u'year.n.01',
-                u'year.n.02', u'year.n.03', 'resolution.n.01',
-                u'resolution.n.04', u'resolution.n.06', u'resolution.n.07',
-                u'resolution.n.08', u'resolution.n.09', u'resolution.n.11',
-                u'decision.n.01'})
+        super(NewYear, self).__init__(peak=now.replace(day=31, month=12))
 
 
 class Halloween(Period):
 
     decay = THREE_DAYS
+    terms_expanded = frozenset(['halloween.n.01'])
+    non_exclusive_terms_expanded = frozenset([
+        u'bone.s.01', u'evil.s.02', u'dead.n.01', u'grave.n.01', u'grave.n.02',
+        u'evil.a.01', u'mischief.n.01', u'frighten.v.01', u'frighten.v.02',
+        u'apparition.n.03', u'dead.a.01', u'satanic.a.02', u'trick.n.01',
+        u'delusive.s.01', u'haunt.v.01', u'haunt.v.02', u'creepy.s.01',
+        u'wicked.a.01', u'dead_person.n.01', u'spell.n.04', u'creepy.s.02',
+        u'scare.n.02', u'delusion.n.02', u'delusion.n.03', u'delusion.n.01',
+        u'dead.s.14', u'dead.s.17', u'dead.s.16', u'dead.s.11', u'dead.s.10',
+        u'dead.s.13', u'dead.s.12', u'satan.n.01', u'mutant.n.01',
+        u'scaremonger.n.01', u'kill.v.10', u'coffin.n.01', u'bone.n.01',
+        u'bone.n.02', u'killing.n.02', u'panic.n.02', u'panic.n.01',
+        u'spider.n.01', u'fear.v.01', u'fear.v.03', u'fear.v.02', u'fear.v.04',
+        u'bony.a.03', u'zombi.n.03', u'hellion.n.01', 'undead', u'shock.v.02',
+        u'enchantress.n.02', u'devil.n.02', u'malefic.s.01', u'dracula.n.01',
+        u'dracula.n.02', u'hag.n.01', u'zombi.n.01', u'wiccan.n.01',
+        u'fearful.s.01', u'costume.n.01', u'costume.n.03', u'costume.n.04',
+        u'occultism.n.01', u'death.n.02', u'occultism.n.02', u'die.v.01',
+        u'death.n.01', u'blood.n.01', u'horror.n.01', u'horror.n.02',
+        u'death.n.08', u'skeleton.n.04', u'daunt.v.01', u'costume.n.02',
+        u'haunt.n.01', u'apprehension.n.01', u'dead.s.06', u'dead.s.07',
+        u'dead.s.04', u'dead.s.05', u'sin.n.06', u'dead.s.08', u'dead.s.09',
+        u'monster.n.01', u'monster.n.04', u'dead.a.02', u'zombie.n.05',
+        u'impishness.n.01', u'ghost.n.03', u'ghost.n.01', u'pagan.n.02',
+        u'devilish.s.02', u'fear.n.01', u'fear.n.03', u'hell.n.01',
+        u'hell.n.02', u'hell.n.03', u'hell.n.04', u'zombi.n.02', u'hell.n.06',
+        u'psychic.s.01', u'evil.n.01', u'evil.n.03', u'evil.n.02', u'die.v.02',
+        u'spirit.n.04', u'mischievous.s.02', u'malevolence.n.02',
+        u'shadowy.s.03', u'soul.n.01', u'terror.n.03', u'terror.n.02',
+        u'pumpkin.n.02', u'pumpkin.n.01', u'trick.n.03', u'trick.n.02',
+        u'lamp.n.01', u'terror.n.04', u'trick.n.07', u'die.v.10', u'hex.v.01',
+        u'mythical_monster.n.01', u'occultist.n.01', u'nefariousness.n.01',
+        u'werewolf.n.01', u'mutant.a.01', u'death.n.03', u'death.n.06',
+        u'death.n.04', u'death.n.05', u'apparitional.s.01', u'deadness.n.02',
+        u'deadness.n.03', u'witch.n.02', u'creepiness.n.01', u'malignity.n.02',
+        u'chilling.s.01', u'magic_trick.n.01', u'imp.n.02', u'lantern.n.01',
+        u'freak.n.01', u'prankishness.n.01', u'kill.v.01', u'creep.n.01',
+        u'unholiness.n.01', u'evil_spirit.n.01', u'vampire.n.01', u'bat.n.05',
+        u'bat.n.01', u'terrorization.n.01', u'transgression.n.01',
+        u'kill.v.04', u'kill.v.09', u'skull.n.01'])
 
     def __init__(self, now):
-        super(Halloween, self).__init__(
-            peak=now.replace(day=31, month=10),
-            expanded_terms={'halloween.n.01'},
-            ne_expanded_terms={
-                u'bone.s.01', u'evil.s.02', u'dead.n.01', u'grave.n.01',
-                u'grave.n.02', u'evil.a.01', u'mischief.n.01',
-                u'frighten.v.01', u'frighten.v.02', u'apparition.n.03',
-                u'dead.a.01', u'satanic.a.02', u'trick.n.01', u'delusive.s.01',
-                u'haunt.v.01', u'haunt.v.02', u'creepy.s.01', u'wicked.a.01',
-                u'dead_person.n.01', u'spell.n.04', u'creepy.s.02',
-                u'scare.n.02', u'delusion.n.02', u'delusion.n.03',
-                u'delusion.n.01', u'dead.s.14', u'dead.s.17', u'dead.s.16',
-                u'dead.s.11', u'dead.s.10', u'dead.s.13', u'dead.s.12',
-                u'satan.n.01', u'mutant.n.01', u'scaremonger.n.01',
-                u'kill.v.10', u'coffin.n.01', u'bone.n.01', u'bone.n.02',
-                u'killing.n.02', u'panic.n.02', u'panic.n.01', u'spider.n.01',
-                u'fear.v.01', u'fear.v.03', u'fear.v.02', u'fear.v.04',
-                u'bony.a.03', u'zombi.n.03', u'hellion.n.01', 'undead',
-                u'shock.v.02', u'enchantress.n.02', u'devil.n.02',
-                u'malefic.s.01', u'dracula.n.01', u'dracula.n.02', u'hag.n.01',
-                u'zombi.n.01', u'wiccan.n.01', u'fearful.s.01',
-                u'costume.n.01', u'costume.n.03', u'costume.n.04',
-                u'occultism.n.01', u'death.n.02', u'occultism.n.02',
-                u'die.v.01', u'death.n.01', u'blood.n.01', u'horror.n.01',
-                u'horror.n.02', u'death.n.08', u'skeleton.n.04', u'daunt.v.01',
-                u'costume.n.02', u'haunt.n.01', u'apprehension.n.01',
-                u'dead.s.06', u'dead.s.07', u'dead.s.04', u'dead.s.05',
-                u'sin.n.06', u'dead.s.08', u'dead.s.09', u'monster.n.01',
-                u'monster.n.04', u'dead.a.02', u'zombie.n.05',
-                u'impishness.n.01', u'ghost.n.03', u'ghost.n.01',
-                u'pagan.n.02', u'devilish.s.02', u'fear.n.01', u'fear.n.03',
-                u'hell.n.01', u'hell.n.02', u'hell.n.03', u'hell.n.04',
-                u'zombi.n.02', u'hell.n.06', u'psychic.s.01', u'evil.n.01',
-                u'evil.n.03', u'evil.n.02', u'die.v.02', u'spirit.n.04',
-                u'mischievous.s.02', u'malevolence.n.02', u'shadowy.s.03',
-                u'soul.n.01', u'terror.n.03', u'terror.n.02', u'pumpkin.n.02',
-                u'pumpkin.n.01', u'trick.n.03', u'trick.n.02', u'lamp.n.01',
-                u'terror.n.04', u'trick.n.07', u'die.v.10', u'hex.v.01',
-                u'mythical_monster.n.01', u'occultist.n.01',
-                u'nefariousness.n.01', u'werewolf.n.01', u'mutant.a.01',
-                u'death.n.03', u'death.n.06', u'death.n.04', u'death.n.05',
-                u'apparitional.s.01', u'deadness.n.02', u'deadness.n.03',
-                u'witch.n.02', u'creepiness.n.01', u'malignity.n.02',
-                u'chilling.s.01', u'magic_trick.n.01', u'imp.n.02',
-                u'lantern.n.01', u'freak.n.01', u'prankishness.n.01',
-                u'kill.v.01', u'creep.n.01', u'unholiness.n.01',
-                u'evil_spirit.n.01', u'vampire.n.01', u'bat.n.05', u'bat.n.01',
-                u'terrorization.n.01', u'transgression.n.01', u'kill.v.04',
-                u'kill.v.09', u'skull.n.01'})
+        super(Halloween, self).__init__(peak=now.replace(day=31, month=10))
 
 
 class EasterBased(ExclusiveTerms):
@@ -1275,228 +1200,176 @@ class EasterBased(ExclusiveTerms):
 class Easter(Period):
 
     decay = THREE_DAYS
+    terms_expanded = frozenset(['easter.n.01'])
+    non_exclusive_terms_expanded = frozenset([
+        u'bunny.n.02', u'rabbit.n.01', u'rabbit.n.03', u'return.n.05',
+        u'return.n.02', u'egg.n.02', u'egg.n.01', u'resurrect.v.03',
+        u'resurrect.v.01', u'renewing.s.01', u'return.v.01', u'jesus.n.01',
+        u'revival.n.01', u'resurrection.n.01', u'resurrection.n.02',
+        u'revive.v.04', u'revive.v.03'])
 
     def __init__(self, now):
-        super(Easter, self).__init__(
-            peak=easter(now.year),
-            expanded_terms={'easter.n.01'},
-            ne_expanded_terms={
-                u'bunny.n.02', u'rabbit.n.01', u'rabbit.n.03', u'return.n.05',
-                u'return.n.02', u'egg.n.02', u'egg.n.01', u'resurrect.v.03',
-                u'resurrect.v.01', u'renewing.s.01', u'return.v.01',
-                u'jesus.n.01', u'revival.n.01', u'resurrection.n.01',
-                u'resurrection.n.02', u'revive.v.04', u'revive.v.03'})
+        super(Easter, self).__init__(peak=easter(now.year))
 
 
 class MardiGras(EasterBased):
 
     days_after_easter = -47
-
-    def __init__(self):
-        super(MardiGras, self).__init__(
-            expanded_terms={'mardi_gras.n.01', 'mardi_gras.n.02'},
-            ne_expanded_terms={
-                'carnival.n.01', 'pancake.n.01', u'fat.s.05', u'fatness.n.01',
-                u'feast.n.02', u'fat.n.01', u'fete.n.01', u'fat.s.04',
-                u'shrive.v.01', u'fat.s.02', u'party.n.04', u'feast.v.01',
-                u'forgive.v.01', u'party.v.01', u'fat.a.01'})
+    terms_expanded = frozenset(['mardi_gras.n.01', 'mardi_gras.n.02'])
+    non_exclusive_terms_expanded = frozenset([
+        'carnival.n.01', 'pancake.n.01', u'fat.s.05', u'fatness.n.01',
+        u'feast.n.02', u'fat.n.01', u'fete.n.01', u'fat.s.04', u'shrive.v.01',
+        u'fat.s.02', u'party.n.04', u'feast.v.01', u'forgive.v.01',
+        u'party.v.01', u'fat.a.01'])
 
 
 class AshWednesday(EasterBased):
 
     days_after_easter = -46
-
-    def __init__(self):
-        super(AshWednesday, self).__init__(
-            expanded_terms={'ash_wednesday.n.01'},
-            ne_expanded_terms={u'lent.n.01', u'ash.n.01'})
+    terms_expanded = frozenset(['ash_wednesday.n.01'])
+    non_exclusive_terms_expanded = frozenset([u'lent.n.01', u'ash.n.01'])
 
 
 class PalmSunday(EasterBased):
 
     days_after_easter = -7
-
-    def __init__(self):
-        super(PalmSunday, self).__init__(
-            expanded_terms={'palm_sunday.n.01'},
-            ne_expanded_terms={u'palm.n.03', u'jerusalem.n.01', u'jesus.n.01'})
+    terms_expanded = frozenset(['palm_sunday.n.01'])
+    non_exclusive_terms_expanded = frozenset([
+        u'palm.n.03', u'jerusalem.n.01', u'jesus.n.01'])
 
 
 class MaundyThursday(EasterBased):
 
     days_after_easter = -3
-
-    def __init__(self):
-        super(MaundyThursday, self).__init__(
-            expanded_terms={'maundy_thursday.n.01'},
-            ne_expanded_terms={
-                'last_supper.n.01', 'discipleship.n.01', 'disciple.n.01',
-                'jesus.n.01', 'apostle.n.01', 'apostle.n.02', 'apostle.n.03'})
+    terms_expanded = frozenset(['maundy_thursday.n.01'])
+    non_exclusive_terms_expanded = frozenset([
+        'last_supper.n.01', 'discipleship.n.01', 'disciple.n.01', 'jesus.n.01',
+        'apostle.n.01', 'apostle.n.02', 'apostle.n.03'])
 
 
 class GoodFriday(EasterBased):
 
     days_after_easter = -2
-
-    def __init__(self):
-        super(GoodFriday, self).__init__(
-            expanded_terms={'good_friday.n.01'},
-            ne_expanded_terms={
-                u'cross.n.01', u'cross.n.03 ', u'cross.n.04',
-                u'crucifixion.n.01', u'crucifixion.n.03', u'crucifixion.n.02',
-                u'execute.v.01', u'jesus.n.01', u'torture.v.02',
-                u'execution.n.01', u'torture.n.05'})
+    terms_expanded = frozenset(['good_friday.n.01'])
+    non_exclusive_terms_expanded = frozenset([
+        u'cross.n.01', u'cross.n.03 ', u'cross.n.04', u'crucifixion.n.01',
+        u'crucifixion.n.03', u'crucifixion.n.02', u'execute.v.01',
+        u'jesus.n.01', u'torture.v.02', u'execution.n.01', u'torture.n.05'])
 
 
 class Ascension(EasterBased):
 
     days_after_easter = 39
-
-    def __init__(self):
-        super(Ascension, self).__init__(
-            expanded_terms={
-                'ascension.n.03', u'ascension.n.01', u'ascension.n.04'},
-            ne_expanded_terms={
-                'rise.n.02', 'rise.n.04', 'heaven.n.02', 'jesus.n.01'})
+    terms_expanded = frozenset([
+        'ascension.n.03', u'ascension.n.01', u'ascension.n.04'])
+    non_exclusive_terms_expanded = frozenset([
+        'rise.n.02', 'rise.n.04', 'heaven.n.02', 'jesus.n.01'])
 
 
 class Pentecost(EasterBased):
 
     days_after_easter = 49
-
-    def __init__(self):
-        super(Pentecost, self).__init__(
-            expanded_terms={'shavous.n.01', u'pentecost.n.01'},
-            ne_expanded_terms={'holy_ghost.n.01'})
+    terms_expanded = frozenset(['shavous.n.01', u'pentecost.n.01'])
+    non_exclusive_terms_expanded = frozenset(['holy_ghost.n.01'])
 
 
 class WhitMonday(EasterBased):
 
     days_after_easter = 50
-
-    def __init__(self):
-        super(WhitMonday, self).__init__(
-            expanded_terms={'shavous.n.01', u'pentecost.n.01'},
-            ne_expanded_terms={'holy_ghost.n.01'})
+    terms_expanded = frozenset(['shavous.n.01', u'pentecost.n.01'])
+    non_exclusive_terms_expanded = frozenset(['holy_ghost.n.01'])
 
 
 class AllSaints(EasterBased):
 
     days_after_easter = 56
-
-    def __init__(self):
-        super(AllSaints, self).__init__(
-            expanded_terms={"all_saints'_day.n.01"},
-            ne_expanded_terms={
-                u'venerator.n.01', u'good_person.n.01', u'godly.s.01',
-                u'saint.n.01', u'saint.n.02', u'enshrine.v.02', u'ideal.n.02',
-                u'reverence.v.01', u'model.n.06', u'deify.v.01',
-                u'canonize.v.01', u'reverent.a.01', u'reverence.n.02',
-                u'divine.s.03'})
+    terms_expanded = frozenset(["all_saints'_day.n.01"])
+    non_exclusive_terms_expanded = frozenset([
+        u'venerator.n.01', u'good_person.n.01', u'godly.s.01', u'saint.n.01',
+        u'saint.n.02', u'enshrine.v.02', u'ideal.n.02', u'reverence.v.01',
+        u'model.n.06', u'deify.v.01', u'canonize.v.01', u'reverent.a.01',
+        u'reverence.n.02', u'divine.s.03'])
 
 
 class VeteransDay(Date):
 
     month = 11
     day = 11
-
-    def __init__(self):
-        super(VeteransDay, self).__init__(
-            expanded_terms={'veterans_day.n.01'},
-            ne_expanded_terms={
-                u'armistice.n.01', u'veteran.n.02', u'serviceman.n.01',
-                u'peace.n.02', u'peace.n.03', u'peace.n.01', u'peace.n.04',
-                u'peace.n.05', u'veteran.n.01'})
+    terms_expanded = frozenset(['veterans_day.n.01'])
+    non_exclusive_terms_expanded = frozenset([
+        u'armistice.n.01', u'veteran.n.02', u'serviceman.n.01', u'peace.n.02',
+        u'peace.n.03', u'peace.n.01', u'peace.n.04', u'peace.n.05',
+        u'veteran.n.01'])
 
 
 class Assumption(Date):
 
     month = 8
     day = 15
-
-    def __init__(self):
-        super(Assumption, self).__init__(
-            expanded_terms={u'assumption.n.04', u'assumption.n.05'},
-            ne_expanded_terms={
-                u'miracle.n.02', u'heaven.n.02',
-                u'holy_day_of_obligation.n.01', u'mary.n.01'})
+    terms_expanded = frozenset([u'assumption.n.04', u'assumption.n.05'])
+    non_exclusive_terms_expanded = frozenset([
+        u'miracle.n.02', u'heaven.n.02', u'holy_day_of_obligation.n.01',
+        u'mary.n.01'])
 
 
 class IndependenceDay(Date):
 
     month = 7
     day = 4
-
-    def __init__(self):
-        super(IndependenceDay, self).__init__(
-            expanded_terms={'independence_day.n.01'},
-            ne_expanded_terms={
-                u'freedom.n.01', u'independent.s.04', u'independence.n.01',
-                u'independence.n.03', u'independence.n.02', u'autonomous.s.01',
-                u'independent.a.01', u'independent.a.03', u'autonomy.n.01',
-                u'american.a.01'})
+    terms_expanded = frozenset(['independence_day.n.01'])
+    non_exclusive_terms_expanded = frozenset([
+        u'freedom.n.01', u'independent.s.04', u'independence.n.01',
+        u'independence.n.03', u'independence.n.02', u'autonomous.s.01',
+        u'independent.a.01', u'independent.a.03', u'autonomy.n.01',
+        u'american.a.01'])
 
 
 class GroundhogDay(Date):
 
     month = 2
     day = 2
-
-    def __init__(self):
-        super(GroundhogDay, self).__init__(
-            expanded_terms={'groundhog_day.n.01'},
-            ne_expanded_terms={u'marmot.n.01', u'groundhog.n.01'})
+    terms_expanded = frozenset(['groundhog_day.n.01'])
+    non_exclusive_terms_expanded = frozenset([
+        u'marmot.n.01', u'groundhog.n.01'])
 
 
 class ValentinesDay(Date):
 
     month = 2
     day = 14
-
-    def __init__(self):
-        super(ValentinesDay, self).__init__(
-            expanded_terms={u'valentine.n.02', u'valentine.n.01'},
-            ne_expanded_terms={
-                u'sweetheart.n.01', u'greeting_card.n.01', 'love.v.03',
-                u'love.v.02', u'love.v.01', u'heart.n.06', u'heart.n.07',
-                u'heart.n.01', u'heart.n.02', u'mate.n.03', u'love.n.02',
-                u'love.n.01', u'love.n.04', u'couple.n.02', u'lover.n.01',
-                u'affection.n.01', u'beloved.n.01'})
+    terms_expanded = frozenset([u'valentine.n.02', u'valentine.n.01'])
+    non_exclusive_terms_expanded = frozenset([
+        u'sweetheart.n.01', u'greeting_card.n.01', 'love.v.03', u'love.v.02',
+        u'love.v.01', u'heart.n.06', u'heart.n.07', u'heart.n.01',
+        u'heart.n.02', u'mate.n.03', u'love.n.02', u'love.n.01', u'love.n.04',
+        u'couple.n.02', u'lover.n.01', u'affection.n.01', u'beloved.n.01'])
 
 
 class AprilFools(Date):
 
     month = 4
     day = 1
-
-    def __init__(self):
-        super(AprilFools, self).__init__(
-            expanded_terms={"april_fools'.n.01"},
-            ne_expanded_terms={
-                u'butt.n.03', u'stooge.v.02', u'deceptive.s.01',
-                u'humorous.a.01', u'deceive.v.02', u'crafty.s.01',
-                u'deception.n.02', u'trickery.n.02', u'gull.v.02',
-                u'fool.v.01', u'hoax.v.01', u'jest.n.02', u'joke.n.01',
-                u'clown.v.01', u'chump.n.01', u'delusive.s.01', u'fool.n.01',
-                u'misrepresentation.n.01', u'jester.n.01', u'joke.v.02',
-                u'flim-flam.v.01', u'clown.n.02'})
+    terms_expanded = frozenset(["april_fools'.n.01"])
+    non_exclusive_terms_expanded = frozenset([
+        u'butt.n.03', u'stooge.v.02', u'deceptive.s.01', u'humorous.a.01',
+        u'deceive.v.02', u'crafty.s.01', u'deception.n.02', u'trickery.n.02',
+        u'gull.v.02', u'fool.v.01', u'hoax.v.01', u'jest.n.02', u'joke.n.01',
+        u'clown.v.01', u'chump.n.01', u'delusive.s.01', u'fool.n.01',
+        u'misrepresentation.n.01', u'jester.n.01', u'joke.v.02',
+        u'flim-flam.v.01', u'clown.n.02'])
 
 
 class CincoDeMayo(Date):
 
     month = 5
     day = 5
-
-    def __init__(self):
-        super(CincoDeMayo, self).__init__(
-            expanded_terms={'cinco_de_mayo.n.01'},
-            ne_expanded_terms={u'mexican.a.01', u'mexico.n.01'})
+    terms_expanded = frozenset(['cinco_de_mayo.n.01'])
+    non_exclusive_terms_expanded = frozenset([u'mexican.a.01', u'mexico.n.01'])
 
 
 class Solstice(ExclusiveTerms):
 
-    def __init__(self):
-        super(Solstice, self).__init__(expanded_terms={'solstice.n.01'})
+    terms_expanded = frozenset(['solstice.n.01'])
 
     def applies_in_context(self, context):
         context_date = context.date
@@ -1506,13 +1379,11 @@ class Solstice(ExclusiveTerms):
 
 class Friday13(ExclusiveTerms):
 
-    def __init__(self):
-        super(Friday13, self).__init__(
-            expanded_terms={'friday the 13th'},
-            ne_expanded_terms={
-                'misfortune.n.02', 'bad_luck.n.02', 'misfortune.n.01',
-                'thirteen.n.01', u'superstition.n.01', u'unlucky.a.01',
-                u'doomed.s.03', u'thirteen.s.01'})
+    terms_expanded = frozenset(['friday the 13th'])
+    non_exclusive_terms_expanded = frozenset([
+        'misfortune.n.02', 'bad_luck.n.02', 'misfortune.n.01', 'thirteen.n.01',
+        u'superstition.n.01', u'unlucky.a.01', u'doomed.s.03',
+        u'thirteen.s.01'])
 
     def applies_in_context(self, context):
         context_date = context.date
