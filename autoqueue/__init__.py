@@ -29,9 +29,9 @@ from cPickle import Pickler, Unpickler
 from datetime import datetime, timedelta
 
 import dbus
-from dbus.mainloop.glib import DBusGMainLoop
-
+import requests
 from autoqueue.context import Context
+from dbus.mainloop.glib import DBusGMainLoop
 
 try:
     import pywapi
@@ -53,11 +53,6 @@ try:
 except ImportError:
     XDG = False
 
-try:
-    import requests
-    REQUESTS = True
-except ImportError:
-    REQUESTS = False
 
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) last.fm api key from here:
@@ -69,18 +64,14 @@ THRESHOLD = .5
 TIMEOUT = 3000
 FIVE_MINUTES = timedelta(minutes=5)
 
-NO_OP = lambda *a, **kw: None
-
 BANNED_ALBUMS = [
     'ep', 'greatest hits', 'demo', 'the best of', 'the very best of', 'live',
     'demos', 'self titled', 'untitled album', '[non-album tracks]', 'single',
     'singles', '7"', 'covers', 'album', 'split 7"']
 
 
-def escape(the_string):
-    """Double escape quotes."""
-    # TODO: move to utils
-    return the_string.replace('"', '\\"').replace("'", "\\'")
+def no_op(*args, **kwargs):
+    pass
 
 
 def get_artists_playing_nearby(location_geohash, location):
@@ -284,11 +275,8 @@ class AutoQueueBase(object):
         self.restrictions = None
         self.context = None
         self.extra_context = None
-        self.present = []
-        self.use_mirage = True
         self.use_gaia = True
         self.whole_albums = True
-        self.contextualize = True
         self.southern_hemisphere = False
         self.use_lastfm = True
         self.use_groupings = True
@@ -307,17 +295,12 @@ class AutoQueueBase(object):
             follow_name_owner_changes=True)
         self.similarity = dbus.Interface(
             sim, dbus_interface='org.autoqueue.SimilarityInterface')
-        self.has_mirage = self.similarity.has_mirage()
         self.has_gaia = self.similarity.has_gaia()
         self.player_set_variables_from_config()
-        self.set_presence()
         if self.location or self.geohash:
             self.nearby_artists = get_artists_playing_nearby(
                 self.geohash, self.location)
-
-    def set_presence(self):
-        for user in self.present.split(','):
-            self.similarity.join(user.strip(), timeout=TIMEOUT)
+        self.found = False
 
     def log(self, msg):
         """Print debug messages."""
@@ -402,37 +385,24 @@ class AutoQueueBase(object):
                 self._blocked_artists.popleft(),
                 self._blocked_artists_times.popleft()))
 
-    def get_artists_track_filenames(self, artist_names):
-        """Get all known file ids for this artist."""
-        filenames = []
-        for artist_name in artist_names:
-            search = self.player_construct_artist_search(artist_name)
-            filenames.extend([
-                song.get_filename() for song in self.player_search(search)])
-        return filenames
-
     def player_construct_album_search(self, album, album_artist=None,
                                       album_id=None, restrictions=None):
-        """Construct a search that looks for songs from this album."""
+        """Construct a search for songs from this album."""
 
     def player_construct_file_search(self, filename, restrictions=None):
-        """Construct a search that looks for songs with this filename."""
+        """Construct a search for songs with this filename."""
 
     def player_construct_files_search(self, filenames):
-        """Construct a search that looks for songs with any of these filenames.
-
-        """
+        """Construct search for songs with any of these filenames."""
 
     def player_construct_track_search(self, artist, title, restrictions=None):
-        """Construct a search that looks for songs with this artist and title.
-
-        """
+        """Construct a search for songs with this artist and title."""
 
     def player_construct_artist_search(self, artist, restrictions=None):
-        """Construct a search that looks for songs with this artist."""
+        """Construct a search for songs with this artist."""
 
     def player_construct_tag_search(self, tags, restrictions=None):
-        """Construct a search that looks for songs with these tags."""
+        """Construct a search for songs with these tags."""
 
     def player_set_variables_from_config(self):
         """Initialize user settings from the configuration storage."""
@@ -449,14 +419,16 @@ class AutoQueueBase(object):
     def player_get_songs_in_queue(self):
         """Return (wrapped) song objects for the songs in the queue."""
 
-    def player_execute_async(self, method, *args, **kwargs):
-        """Override this if the player has a way to execute methods
-        asynchronously, like the copooling in autoqueue.
+    @staticmethod
+    def player_execute_async(method, *args, **kwargs):
+        """Override this if the player can execute methods asynchronously.
+
+        such as copooling in autoqueue.
 
         """
         if 'funcid' in kwargs:
             del kwargs['funcid']
-        for dummy in method(*args, **kwargs):
+        for _ in method(*args, **kwargs):
             pass
 
     def disallowed(self, song):
@@ -499,10 +471,6 @@ class AutoQueueBase(object):
         if song is None:
             return
         self.song = song
-        if self.has_mirage and self.use_mirage:
-            artist = song.get_artist()
-            self.similarity.start_song(
-                song.get_filename(), artist, song.get_title(), timeout=TIMEOUT)
         if self.running:
             return
         if self.desired_queue_length == 0 or self.queue_needs_songs():
@@ -510,14 +478,14 @@ class AutoQueueBase(object):
         self.unblock_artists()
 
     def on_removed(self, songs):
-        if not self.has_mirage and self.use_mirage:
+        if not self.has_gaia and self.use_gaia:
             return
         for song in songs:
             filename = song.get_filename()
             self.log('Remove similarity for %s' % filename)
             self.similarity.remove_track_by_filename(
-                filename, reply_handler=NO_OP,
-                error_handler=NO_OP, timeout=TIMEOUT)
+                filename, reply_handler=no_op,
+                error_handler=no_op, timeout=TIMEOUT)
 
     def queue_needs_songs(self):
         """Determine whether the queue needs more songs added."""
@@ -547,7 +515,8 @@ class AutoQueueBase(object):
         self.cached_weather_at = datetime.now()
         return self.cached_weather
 
-    def get_location_id(self, location):
+    @staticmethod
+    def get_location_id(location):
         city = location.split(',')[0].strip()
         smallest_discance = 100
         best_location_id = None
@@ -598,13 +567,13 @@ class AutoQueueBase(object):
         try:
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
-            if self.has_mirage and self.use_mirage:
+            if self.has_gaia and self.use_gaia:
                 self.log('Analyzing: %s' % filename)
                 self.similarity.analyze_track(
-                    filename, 3, reply_handler=self.analyzed,
+                    filename, reply_handler=self.analyzed,
                     error_handler=self.error_handler, timeout=TIMEOUT)
             else:
-                self.mirage_reply_handler([])
+                self.gaia_reply_handler([])
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
 
@@ -626,9 +595,8 @@ class AutoQueueBase(object):
             self.gaia_reply_handler([])
 
     def gaia_reply_handler(self, results):
-        """Handler for (mirage) similar tracks returned from dbus."""
-        self.player_execute_async(
-            self._gaia_reply_handler, results=results)
+        """Handler for (gaia) similar tracks returned from dbus."""
+        self.player_execute_async(self._gaia_reply_handler, results=results)
 
     def _gaia_reply_handler(self, results=None):
         """Exexute processing asynchronous."""
@@ -645,70 +613,9 @@ class AutoQueueBase(object):
                 return
             self.queue_song()
             return
-        song = self.last_song
-        excluded_filenames = []
-        for other in self.get_artists_track_filenames(song.get_artists()):
-            if isinstance(other, unicode):
-                excluded_filenames.append(other)
-            else:
-                try:
-                    excluded_filenames.append(unicode(other, 'utf-8'))
-                except UnicodeDecodeError:
-                    self.log('Could not decode filename: %r' % other)
-        filename = song.get_filename()
-        try:
-            if not isinstance(filename, unicode):
-                filename = unicode(filename, 'utf-8')
-            if self.has_mirage and self.use_mirage:
-                self.log('Get similar tracks for: %s' % filename)
-                self.similarity.get_ordered_mirage_tracks(
-                    filename, excluded_filenames, self.number,
-                    reply_handler=self.mirage_reply_handler,
-                    error_handler=self.error_handler, timeout=TIMEOUT)
-            else:
-                self.mirage_reply_handler([])
-        except UnicodeDecodeError:
-            self.log('Could not decode filename: %r' % filename)
-
-    def done(self):
-        """Analyze the last song and stop."""
-        song = self.get_last_songs()[-1]
-        filename = song.get_filename()
-        try:
-            if not isinstance(filename, unicode):
-                filename = unicode(filename, 'utf-8')
-            self.log('Analyzing: %s' % filename)
-            if self.has_mirage and self.use_mirage:
-                self.similarity.analyze_track(
-                    filename, 3, reply_handler=NO_OP, error_handler=NO_OP,
-                    timeout=TIMEOUT)
-        except UnicodeDecodeError:
-            self.log('Could not decode filename: %r' % filename)
-        self.running = False
-
-    def mirage_reply_handler(self, results):
-        """Handler for (mirage) similar tracks returned from dbus."""
-        self.player_execute_async(
-            self._mirage_reply_handler, results=results)
-
-    def _mirage_reply_handler(self, results=None):
-        """Exexute processing asynchronous."""
-        self.found = False
-        if results:
-            for _ in self.process_filename_results([{'score': match,
-                                                     'filename': filename,
-                                                     'loved': l}
-                                                    for match, filename, l
-                                                    in results]):
-                yield
-        if self.found:
-            if not self.queue_needs_songs():
-                self.done()
-                return
-            self.queue_song()
-            return
-        artist_name = self.last_song.get_artist()
-        title = self.last_song.get_title()
+        last_song = self.last_song
+        artist_name = last_song.get_artist()
+        title = last_song.get_title()
         if self.use_lastfm:
             if artist_name and title:
                 self.log(
@@ -721,6 +628,22 @@ class AutoQueueBase(object):
                 self.similar_tracks_handler([])
         else:
             self.similar_artists_handler([])
+
+    def done(self):
+        """Analyze the last song and stop."""
+        song = self.get_last_songs()[-1]
+        filename = song.get_filename()
+        try:
+            if not isinstance(filename, unicode):
+                filename = unicode(filename, 'utf-8')
+            self.log('Analyzing: %s' % filename)
+            if self.has_gaia and self.use_gaia:
+                self.similarity.analyze_track(
+                    filename, reply_handler=no_op, error_handler=no_op,
+                    timeout=TIMEOUT)
+        except UnicodeDecodeError:
+            self.log('Could not decode filename: %r' % filename)
+        self.running = False
 
     def similar_tracks_handler(self, results):
         """Handler for similar tracks returned from dbus."""
@@ -786,16 +709,17 @@ class AutoQueueBase(object):
             if not isinstance(filename, unicode):
                 filename = unicode(filename, 'utf-8')
             self.log('Analyzing: %s' % filename)
-            if self.has_mirage and self.use_mirage:
+            if self.has_gaia and self.use_gaia:
                 self.similarity.analyze_track(
-                    filename, 3, reply_handler=self.analyzed,
+                    filename, reply_handler=self.analyzed,
                     error_handler=self.error_handler, timeout=TIMEOUT)
             else:
-                self.mirage_reply_handler([])
+                self.gaia_reply_handler([])
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
 
-    def satisfies(self, song, criteria):
+    @staticmethod
+    def satisfies(song, criteria):
         """Check whether the song satisfies any of the criteria."""
         filename = criteria.get('filename')
         if filename:
@@ -804,16 +728,15 @@ class AutoQueueBase(object):
         artist = criteria.get('artist')
         if title:
             return (
-                song.get_title().lower() == title.lower()
-                and song.get_artist().lower() == artist.lower())
+                song.get_title().lower() == title.lower() and
+                song.get_artist().lower() == artist.lower())
         if artist:
             return artist.lower() in [a.lower() for a in song.get_artists()]
         tags = criteria.get('tags')
         song_tags = song.get_tags()
         for tag in tags:
-            if (tag in song_tags
-                    or 'artist:%s' % (tag,) in song_tags
-                    or 'album:%s' % (tag,) in song_tags):
+            if (tag in song_tags or 'artist:%s' % (tag,) in song_tags or
+                    'album:%s' % (tag,) in song_tags):
                 return True
         return False
 
@@ -998,4 +921,3 @@ def levenshtein(string1, string2):
         previous_row = current_row
 
     return previous_row[-1]
-

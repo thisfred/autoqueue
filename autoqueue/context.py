@@ -330,7 +330,7 @@ class Terms(Predicate):
             return 1
         song_terms = get_terms_from_song(result['song'])
         intersection = self.get_intersection(song_terms, exclusive)
-        print "  %d / %d" % (len(intersection), len(expanded))
+        print intersection
         factor = float(len(intersection)) / float(len(expanded))
         return factor
 

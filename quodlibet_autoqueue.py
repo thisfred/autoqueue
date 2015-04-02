@@ -9,18 +9,15 @@ it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation
 """
 
-from gi.repository import Gtk, GLib
-from datetime import datetime
-from quodlibet.plugins.events import EventPlugin
-from quodlibet import config
 from collections import deque
-from quodlibet.util import copool
-from quodlibet.qltk.entry import ValidatingEntry
+from datetime import datetime
 
 from autoqueue import AutoQueueBase, SongBase
-
-from quodlibet import app
-
+from gi.repository import GLib, Gtk
+from quodlibet import app, config
+from quodlibet.plugins.events import EventPlugin
+from quodlibet.qltk.entry import ValidatingEntry
+from quodlibet.util import copool
 
 INT_SETTINGS = {
     'artist_block_time': {
@@ -37,9 +34,9 @@ BOOL_SETTINGS = {
     'verbose': {
         'value': False,
         'label': 'log to console'},
-    'use_mirage': {
+    'use_gaia': {
         'value': True,
-        'label': 'use mirage similarity'},
+        'label': 'use gaia similarity'},
     'use_lastfm': {
         'value': True,
         'label': 'use last.fm similarity'},
@@ -72,9 +69,6 @@ STR_SETTINGS = {
     'geohash': {
         'value': '',
         'label': 'geohash (see geohash.org)'},
-    'present': {
-        'value': '',
-        'label': 'who is here'},
     'extra_context': {
         'value': '',
         'label': 'extra context'}}
@@ -461,3 +455,4 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         if app.window is None:
             return []
         return [Song(song) for song in app.window.playlist.q.get()]
+

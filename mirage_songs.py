@@ -1,12 +1,15 @@
-"""Mirage songs plugin."""
+"""Acoustic analysis songs plugin."""
 
 import dbus
+from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
 from quodlibet.plugins.songsmenu import SongsMenuPlugin
-from dbus.mainloop.glib import DBusGMainLoop
+
 DBusGMainLoop(set_as_default=True)
 
-NO_OP = lambda *a, **kw: None
+
+def no_op(*args, **kwargs):
+    pass
 
 
 def get_title(song):
@@ -18,12 +21,13 @@ def get_title(song):
     return title
 
 
-class MirageSongsPlugin(SongsMenuPlugin):
-    """Mirage songs analysis."""
+class AnalyzeSongsPlugin(SongsMenuPlugin):
 
-    PLUGIN_ID = "Mirage Analysis"
-    PLUGIN_NAME = _("Mirage Analysis")  # noqa
-    PLUGIN_DESC = _("Perform Mirage Analysis of the selected songs.")  # noqa
+    """Acoustic song analysis."""
+
+    PLUGIN_ID = "Acoustic Analysis"
+    PLUGIN_NAME = _("Acoustic Analysis")  # noqa
+    PLUGIN_DESC = _("Perform acoustic analysis of the selected songs.")  # noqa
     PLUGIN_ICON = "gtk-find-and-replace"
     PLUGIN_VERSION = "0.1"
 
@@ -51,4 +55,4 @@ class MirageSongsPlugin(SongsMenuPlugin):
                     continue
             filenames.append(filename)
         self.similarity.analyze_tracks(
-            filenames, 10, reply_handler=NO_OP, error_handler=NO_OP)
+            filenames, reply_handler=no_op, error_handler=no_op)
