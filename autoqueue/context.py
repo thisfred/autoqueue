@@ -157,9 +157,6 @@ class Context(object):
         if not self.last_song:
             return
         terms = get_terms_from_song(self.last_song)
-        print "*** context terms terms: ***"
-        print sorted([term.split('.')[0] for term in terms], reverse=True)
-        print "*******************************"
         predicate = Terms(ne_expanded_terms=frozenset(terms))
         self.predicates.append(predicate)
         self.predicates.append(Geohash(self.last_song.get_geohashes()))
@@ -273,11 +270,11 @@ class Predicate(object):
     def applies_in_context(self, context):
         return True
 
-    def get_factor(self, result, exclusive):
+    def get_factor(self, song, exclusive):
         return 1.0
 
     def positive_score(self, result):
-        result['score'] /= 1 + self.get_factor(result, exclusive=False)
+        result['score'] /= 1 + self.get_factor(result['song'], exclusive=False)
 
     def negative_score(self, result):
         pass
@@ -310,11 +307,14 @@ class Terms(Predicate):
 
     def applies_to_song(self, song, exclusive):
         return (
-            self.regex_terms_match(song) or
+            self.regex_terms_match(song, exclusive) or
             self.get_intersection(get_terms_from_song(song), exclusive))
 
-    def regex_terms_match(self, song):
+    def regex_terms_match(self, song, exclusive):
         """Determine whether the predicate applies to the song."""
+        if exclusive:
+            return False
+
         for search in self.regex_terms:
             for tag in song.get_non_geo_tags():
                 if search.match(tag):
@@ -322,23 +322,25 @@ class Terms(Predicate):
 
         return False
 
-    def get_factor(self, result, exclusive=False):
+    def get_factor(self, song, exclusive=False):
+        if self.regex_terms_match(song, exclusive):
+            return 1
         expanded = (
             self.terms_expanded if exclusive
             else self.terms_expanded | self.non_exclusive_terms_expanded)
         if not expanded:
             return 1
-        song_terms = get_terms_from_song(result['song'])
+        song_terms = get_terms_from_song(song)
         intersection = self.get_intersection(song_terms, exclusive)
-        print intersection
-        factor = float(len(intersection)) / float(len(expanded))
-        return factor
+        print "  %s" % intersection
+        shortest = min(len(song_terms), len(expanded))
+        return len(intersection) / float(shortest)
 
 
 class ExclusiveTerms(Terms):
 
     def negative_score(self, result):
-        result['score'] *= 1 + self.get_factor(result, exclusive=True)
+        result['score'] *= 1 + self.get_factor(result['song'], exclusive=True)
 
 
 class Period(ExclusiveTerms):
@@ -370,8 +372,8 @@ class Period(ExclusiveTerms):
     def applies_in_context(self, context):
         return self.get_diff(context) < self.decay
 
-    def get_factor(self, result, exclusive=False):
-        factor = super(Period, self).get_factor(result, exclusive)
+    def get_factor(self, song, exclusive=False):
+        factor = super(Period, self).get_factor(song, exclusive)
         if exclusive:
             return factor
 
@@ -403,7 +405,7 @@ class Artist(Predicate):
             return True
         return False
 
-    def get_factor(self, result, exclusive):
+    def get_factor(self, song, exclusive):
         return 1.0
 
 
@@ -423,13 +425,14 @@ class Geohash(Predicate):
     def __repr__(self):
         return '<Geohash %r>' % self.geohashes
 
-    def get_factor(self, result, exclusive):
-        longest_common = 0
+    def get_factor(self, song, exclusive):
+        best_score = 0
         for self_hash in self.geohashes:
-            for other_hash in result['song'].get_geohashes():
+            for other_hash in song.get_geohashes():
                 if self_hash[0] != other_hash[0]:
                     continue
 
+                shortest = float(min(len(self_hash), len(other_hash)))
                 for i, character in enumerate(self_hash):
                     if i >= len(other_hash):
                         break
@@ -437,9 +440,11 @@ class Geohash(Predicate):
                     if character != other_hash[i]:
                         break
 
-                    if i > longest_common:
-                        longest_common = i
-        return 1.1 ** longest_common
+                    score = i / shortest
+                    if score > best_score:
+                        best_score = score
+
+        return best_score
 
 
 class Year(Terms):
