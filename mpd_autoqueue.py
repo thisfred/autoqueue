@@ -3,6 +3,9 @@
 
 Copyright (c) 2008-2011 Rick van Hattem, Eric Casteleijn
 """
+from __future__ import print_function
+from builtins import str
+from builtins import object
 
 import os
 import sys
@@ -93,7 +96,7 @@ class Song(autoqueue.SongBase):
 
     def get_artist(self):
         """Return lowercase UNICODE name of artist."""
-        return unicode(self.artist.lower(), 'utf-8')
+        return str(self.artist.lower(), 'utf-8')
 
     def get_artists(self):
         """Get list of artists and performers for the song."""
@@ -101,7 +104,7 @@ class Song(autoqueue.SongBase):
 
     def get_title(self):
         """Return lowercase UNICODE title of song."""
-        return unicode(self.title.lower(), 'utf-8')
+        return str(self.title.lower(), 'utf-8')
 
     def get_tags(self):
         """Return a list of tags for the song."""
@@ -204,7 +207,7 @@ class Search(object):
         >>> search.parameters
         {'artist': set(['test1']), 'title': set(['test2'])}
         """
-        [self.add_parameter(k, v) for k, v in parameters.iteritems()]
+        [self.add_parameter(k, v) for k, v in parameters.items()]
 
     def add_parameter(self, field, value):
         """
@@ -227,8 +230,8 @@ class Search(object):
         if field in self.ALLOWED_FIELDS:
             self.parameters.setdefault(field, set()).add(value.lower().strip())
         else:
-            raise TypeError, '"%s" is not a valid field, please choose ' \
-                'on from ALLOWED_FIELDS' % field
+            raise TypeError('"%s" is not a valid field, please choose ' \
+                'on from ALLOWED_FIELDS' % field)
 
     def get_parameters(self):
         """
@@ -246,11 +249,11 @@ class Search(object):
         ValueError: Empty search queries are not allowed
         """
         ret = []
-        for k, vs in self.parameters.iteritems():
+        for k, vs in self.parameters.items():
             ret += [[k, v.encode('utf-8')] for v in vs]
 
         if not ret:
-            raise ValueError, 'Empty search queries are not allowed'
+            raise ValueError('Empty search queries are not allowed')
         return sum(ret, [])
 
 
@@ -285,9 +288,9 @@ class Daemon(object):
         """Delete pid file."""
         try:
             os.unlink(self._pid_file)
-            print >> sys.stderr, 'Removed PID file'
+            print('Removed PID file', file=sys.stderr)
         except OSError:
-            print >> sys.stderr, 'Trying to remove non-existing PID file'
+            print('Trying to remove non-existing PID file', file=sys.stderr)
 
     pid_file = property(get_pid_file, set_pid_file, del_pid_file,
         'The PID file will be written when set and deleted when unset')
@@ -308,7 +311,7 @@ class Daemon(object):
         try:
             os.kill(pid, signal.SIG_DFL)
             return True
-        except OSError, err:
+        except OSError as err:
             return err.errno == errno.EPERM
 
     @classmethod
@@ -320,7 +323,7 @@ class Daemon(object):
             pid = None
 
         if cls.is_running(pid):
-            print >> sys.stderr, 'Sending TERM signal to process %d' % pid
+            print('Sending TERM signal to process %d' % pid, file=sys.stderr)
             os.kill(pid, signal.SIGTERM)
             i = KILL_TIMEOUT
             while i > 0 and cls.is_running(pid):
@@ -328,17 +331,17 @@ class Daemon(object):
                 time.sleep(KILL_CHECK_DELAY)
 
             if cls.is_running(pid):
-                print >> sys.stderr, 'Sending KILL signal to process %d' % pid
+                print('Sending KILL signal to process %d' % pid, file=sys.stderr)
                 os.kill(pid, signal.SIGKILL)
 
             time.sleep(1)
             if cls.is_running(pid):
-                print >> sys.stderr, 'Unable to kill process %d, still running'
+                print('Unable to kill process %d, still running', file=sys.stderr)
         else:
             if isinstance(pid, int):
-                print >> sys.stderr, 'Process %d not running' % pid
+                print('Process %d not running' % pid, file=sys.stderr)
             if pid_file:
-                print >> sys.stderr, 'Removing stale PID file'
+                print('Removing stale PID file', file=sys.stderr)
                 os.unlink(pid_file)
 
     @classmethod
@@ -355,8 +358,8 @@ class Daemon(object):
             pid = os.fork()
             if pid > 0:
                 sys.exit(0)
-        except OSError, e:
-            print >> sys.stderr, 'Unable to fork: %s' % e
+        except OSError as e:
+            print('Unable to fork: %s' % e, file=sys.stderr)
             sys.exit(1)
 
         os.chdir('/')
@@ -367,8 +370,8 @@ class Daemon(object):
             pid = os.fork()
             if pid > 0:
                 sys.exit(0)
-        except OSError, e:
-            print >> sys.stderr, 'Unable to fork: %s' % e
+        except OSError as e:
+            print('Unable to fork: %s' % e, file=sys.stderr)
             sys.exit(1)
 
         # Redirect stdout, stderr and stdin
@@ -411,12 +414,12 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
                         int(self.player_get_queue_length()) - QUEUE_MARGIN)
                     running = True
                 except mpd.ConnectionError:
-                    print "disconnecting"
+                    print("disconnecting")
                     self.running = False
                     running = False
                     self.disconnect()
             else:
-                print "reconnecting"
+                print("reconnecting")
                 running = True
                 self.connect()
             time.sleep(interval)
@@ -474,13 +477,13 @@ class AutoQueuePlugin(autoqueue.AutoQueueBase, Daemon):
 
         # Make all search results lowercase and strip whitespace
         for result in results:
-            for key, value in result.items():
-                if isinstance(value, basestring):
-                    result['%s_search' % key] = unicode(
+            for key, value in list(result.items()):
+                if isinstance(value, str):
+                    result['%s_search' % key] = str(
                         value, 'utf-8').strip().lower()
 
         # Filter all non-exact matches
-        for key, values in search.parameters.iteritems():
+        for key, values in search.parameters.items():
             for value in values:
                 results = [
                     r for r in results if r.get('%s_search' % key) == value]
@@ -554,25 +557,25 @@ def main():
             pid = open(options.pid_file).readline()
             pid = int(pid)
         except (ValueError, TypeError):
-            print >>sys.stderr, 'PID "%s" invalid, ignoring' % pid
+            print('PID "%s" invalid, ignoring' % pid, file=sys.stderr)
             pid = None
 
         if Daemon.is_running(pid) and not options.kill:
-            print >>sys.stderr, '%s already running (PID: %d)' % (sys.argv[0], pid)
+            print('%s already running (PID: %d)' % (sys.argv[0], pid), file=sys.stderr)
             sys.exit(2)
         else:
             Daemon.kill(pid, options.pid_file)
             if options.kill:
                 sys.exit(0)
     elif options.kill:
-        print >>sys.stderr, 'No PID file found, unable to kill'
+        print('No PID file found, unable to kill', file=sys.stderr)
         sys.exit(3)
 
     try:
         file(options.pid_file, 'a')
         os.unlink(options.pid_file)
-    except IOError, e:
-        print >>sys.stderr, 'Error: PID file "%s" not writable: %s' % (options.pid_file, e)
+    except IOError as e:
+        print('Error: PID file "%s" not writable: %s' % (options.pid_file, e), file=sys.stderr)
         sys.exit(3)
 
     if options.daemonic:

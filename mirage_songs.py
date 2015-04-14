@@ -1,4 +1,6 @@
 """Acoustic analysis songs plugin."""
+from __future__ import print_function
+from builtins import str
 
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
@@ -47,11 +49,11 @@ class AnalyzeSongsPlugin(SongsMenuPlugin):
         filenames = []
         for song in songs:
             filename = song('~filename')
-            if not isinstance(filename, unicode):
+            if not isinstance(filename, str):
                 try:
-                    filename = unicode(filename, 'utf-8')
+                    filename = str(filename, 'utf-8')
                 except:
-                    print "Could not decode filename: %r" % song('~filename')
+                    print("Could not decode filename: %r" % song('~filename'))
                     continue
             filenames.append(filename)
         self.similarity.analyze_tracks(

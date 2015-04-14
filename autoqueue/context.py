@@ -1,5 +1,8 @@
 """Context awareness filters."""
+from __future__ import division, print_function, absolute_import
+
 import re
+from builtins import object, str
 from datetime import date, datetime, time, timedelta
 
 import nltk
@@ -27,12 +30,16 @@ ONE_YEAR = timedelta(days=365)
 TIME = re.compile('^([0-9]{2}):([0-9]{2})$')
 STOPWORDS = {w for w in stopwords.words('english') if len(w) > 2}
 
-
 POS_MAP = {
     'J': wordnet.ADJ,
     'V': wordnet.VERB,
     'N': wordnet.NOUN,
     'R': wordnet.ADV}
+
+# remove problematic synsets
+EXCLUSIONS = {
+    'sun': {'sunday.n.01'},
+    'night': {'twilight.n.01'}}
 
 
 def get_wordnet_pos(tag):
@@ -41,8 +48,8 @@ def get_wordnet_pos(tag):
 
 def expand_synset(synset):
     yield synset.name()
-    for synset in synset.hypernyms():
-        yield synset.name()
+    for hyper in synset.hypernyms():
+        yield hyper.name()
     for lemma in synset.lemmas():
         for form in lemma.derivationally_related_forms():
             yield form.synset().name()
@@ -55,17 +62,20 @@ def expand(word, pos=None):
     if len(word) < 3:
         yield word
         return
+
     if word in STOPWORDS:
         yield word
         return
+
     stemmed = wordnet.morphy(word, pos=pos)
     if stemmed is None:
         yield word
         return
 
     for synset in wordnet.synsets(stemmed, pos=pos):
-        for term in expand_synset(synset):
-            yield term
+        if not synset.name() in EXCLUSIONS.get(word, []):
+            for term in expand_synset(synset):
+                yield term
 
 
 def get_terms(words):
@@ -124,19 +134,23 @@ class Context(object):
             before_score = result['score']
             if predicate.applies_to_song(song, exclusive=False) and in_context:
                 predicate.positive_score(result)
-                print "%s - %s " % (
-                    song.get_artist(), song.get_title(with_version=False)),
-                print "%r adjusted positively %.2f%%" % (
+                print(
+                    "%s - %s " % (
+                        song.get_artist(), song.get_title(with_version=False)),
+                    end='')
+                print("%r adjusted positively %.2f%%" % (
                     predicate,
-                    100 * ((before_score - result['score']) / before_score))
+                    100 * ((before_score - result['score']) / before_score)))
             elif predicate.applies_to_song(song, exclusive=True) \
                     and not in_context:
                 predicate.negative_score(result)
-                print "%s - %s " % (
-                    song.get_artist(), song.get_title(with_version=False)),
-                print "%r adjusted negatively %.2f%%" % (
+                print(
+                    "%s - %s " % (
+                        song.get_artist(), song.get_title(with_version=False)),
+                    end='')
+                print("%r adjusted negatively %.2f%%" % (
                     predicate,
-                    100 * ((result['score'] - before_score) / before_score))
+                    100 * (((result['score'] - before_score) / before_score))))
 
     def build_predicates(self):
         """Construct predicates to check against the context."""
@@ -332,9 +346,9 @@ class Terms(Predicate):
             return 1
         song_terms = get_terms_from_song(song)
         intersection = self.get_intersection(song_terms, exclusive)
-        print "  %s" % intersection
+        print("  %s" % intersection)
         shortest = min(len(song_terms), len(expanded))
-        return len(intersection) / float(shortest)
+        return len(intersection) / shortest
 
 
 class ExclusiveTerms(Terms):
@@ -365,7 +379,7 @@ class Period(ExclusiveTerms):
         if not isinstance(peak, datetime):
             context_datetime = context_datetime.date()
         self.diff = abs(context_datetime - peak)
-        if self.diff.total_seconds() > self.period.total_seconds() / 2:
+        if self.diff.total_seconds() > (self.period.total_seconds() / 2):
             self.diff = self.period - self.diff
         return self.diff
 
@@ -377,17 +391,14 @@ class Period(ExclusiveTerms):
         if exclusive:
             return factor
 
-        print "  *", (
+        print("  %.2f * %.2f" % (
+            factor,
             1.0 - min(
-                1,
-                float(self.diff.total_seconds()) /
-                float(self.decay.total_seconds())))
+                1, (self.diff.total_seconds() / self.decay.total_seconds()))))
 
         return factor * (
             1.0 - min(
-                1,
-                float(self.diff.total_seconds()) /
-                float(self.decay.total_seconds())))
+                1, (self.diff.total_seconds() / self.decay.total_seconds())))
 
 
 class DayPeriod(Period):
@@ -432,7 +443,7 @@ class Geohash(Predicate):
                 if self_hash[0] != other_hash[0]:
                     continue
 
-                shortest = float(min(len(self_hash), len(other_hash)))
+                shortest = min(len(self_hash), len(other_hash))
                 for i, character in enumerate(self_hash):
                     if i >= len(other_hash):
                         break

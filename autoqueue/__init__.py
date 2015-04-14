@@ -20,18 +20,26 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
+from __future__ import division, print_function, absolute_import
+
 import os
 import random
 import re
 from abc import ABCMeta, abstractmethod
+from builtins import object, range, str
 from collections import deque
-from cPickle import Pickler, Unpickler
 from datetime import datetime, timedelta
+from pickle import Pickler, Unpickler
 
 import dbus
 import requests
 from autoqueue.context import Context
 from dbus.mainloop.glib import DBusGMainLoop
+from future import standard_library
+from future.utils import with_metaclass
+
+standard_library.install_aliases()
+
 
 try:
     import pywapi
@@ -96,7 +104,7 @@ def get_artists_playing_nearby(location_geohash, location):
         return []
     page = response.json()
     if 'events' not in page:
-        print page
+        print(page)
         return []
     total_pages = int(page['events']['@attr']['totalPages'])
     page_number = int(page['events']['@attr']['page'])
@@ -119,11 +127,9 @@ def get_artists_playing_nearby(location_geohash, location):
     return nearby_artists
 
 
-class SongBase(object):
+class SongBase(with_metaclass(ABCMeta, object)):
 
     """A wrapper object around player specific song objects."""
-
-    __metaclass__ = ABCMeta
 
     def __init__(self, song):
         self.song = song
@@ -203,7 +209,7 @@ class SongBase(object):
             return 0
         now = datetime.now()
         days = float(max((now - datetime.fromtimestamp(last_started)).days, 1))
-        return 1.0 / days
+        return 1 / days
 
     def get_stripped_tags(self):
         """Return a set of stripped tags."""
@@ -251,9 +257,7 @@ def tag_score(song, tags):
     if not song_tags:
         return 0
     if song_tags or tags:
-        score = (
-            len(song_tags & tags) /
-            float(len(song_tags | tags) + 1))
+        score = len(song_tags & tags) / (len(song_tags | tags) + 1)
         return score
     return 0
 
@@ -308,9 +312,9 @@ class AutoQueueBase(object):
         if not self.verbose:
             return
         try:
-            print "[autoqueue]", msg.encode('utf-8')
+            print("[autoqueue] %s" % (msg.encode('utf-8'),))
         except UnicodeDecodeError:
-            print "[autoqueue]", msg
+            print("[autoqueue] %s" % (msg,))
 
     def error_handler(self, *args, **kwargs):
         """Log errors when calling D-Bus methods in a async way."""
@@ -351,14 +355,14 @@ class AutoQueueBase(object):
         except IOError:
             pass
 
-    def block_artist(self, artist_name):
-        """Block songs by artist from being played for a while."""
+    def _add_to_blocked(self, artist_name):
         now = datetime.now()
         self._blocked_artists.append(artist_name)
         self._blocked_artists_times.append(now)
         self.log("Blocked artist: %s (%s)" % (
-            artist_name,
-            len(self._blocked_artists)))
+            artist_name, len(self._blocked_artists)))
+
+    def _dump_blocked(self):
         dump = os.path.join(
             self.get_cache_dir(), "autoqueue_block_cache")
         try:
@@ -369,17 +373,21 @@ class AutoQueueBase(object):
             return
         pickle_file = open(dump, 'w')
         pickler = Pickler(pickle_file, -1)
-        to_dump = (self._blocked_artists,
-                   self._blocked_artists_times)
+        to_dump = (self._blocked_artists, self._blocked_artists_times)
         pickler.dump(to_dump)
         pickle_file.close()
+
+    def block_artist(self, artist_name):
+        """Block songs by artist from being played for a while."""
+        self._add_to_blocked(artist_name)
+        self._dump_blocked()
 
     def unblock_artists(self):
         """Unblock expired blocked artists."""
         now = datetime.now()
         while self._blocked_artists_times:
-            if self._blocked_artists_times[
-                    0] + timedelta(self.artist_block_time) > now:
+            if self._blocked_artists_times[0] + timedelta(
+                    self.artist_block_time) > now:
                 break
             self.log("Unblocked %s (%s)" % (
                 self._blocked_artists.popleft(),
@@ -521,7 +529,7 @@ class AutoQueueBase(object):
         smallest_discance = 100
         best_location_id = None
         location_ids = pywapi.get_location_ids(city)
-        for location_id, name in location_ids.items():
+        for location_id, name in list(location_ids.items()):
             distance = levenshtein(name.lower(), location.lower())
             if distance < smallest_discance:
                 best_location_id, smallest_discance = location_id, distance
@@ -565,8 +573,8 @@ class AutoQueueBase(object):
         song = self.last_song = self.last_songs.pop()
         filename = song.get_filename()
         try:
-            if not isinstance(filename, unicode):
-                filename = unicode(filename, 'utf-8')
+            if not isinstance(filename, str):
+                filename = str(filename, 'utf-8')
             if self.has_gaia and self.use_gaia:
                 self.log('Analyzing: %s' % filename)
                 self.similarity.analyze_track(
@@ -581,8 +589,8 @@ class AutoQueueBase(object):
         song = self.last_song
         filename = song.get_filename()
         try:
-            if not isinstance(filename, unicode):
-                filename = unicode(filename, 'utf-8')
+            if not isinstance(filename, str):
+                filename = str(filename, 'utf-8')
         except UnicodeDecodeError:
             self.log('Could not decode filename: %r' % filename)
             return
@@ -634,8 +642,8 @@ class AutoQueueBase(object):
         song = self.get_last_songs()[-1]
         filename = song.get_filename()
         try:
-            if not isinstance(filename, unicode):
-                filename = unicode(filename, 'utf-8')
+            if not isinstance(filename, str):
+                filename = str(filename, 'utf-8')
             self.log('Analyzing: %s' % filename)
             if self.has_gaia and self.use_gaia:
                 self.similarity.analyze_track(
@@ -706,8 +714,8 @@ class AutoQueueBase(object):
         song = self.last_song = self.last_songs.pop()
         filename = song.get_filename()
         try:
-            if not isinstance(filename, unicode):
-                filename = unicode(filename, 'utf-8')
+            if not isinstance(filename, str):
+                filename = str(filename, 'utf-8')
             self.log('Analyzing: %s' % filename)
             if self.has_gaia and self.use_gaia:
                 self.similarity.analyze_track(
@@ -834,18 +842,18 @@ class AutoQueueBase(object):
         self.pick_result(results)
 
     def log_lookup(self, number, result):
-        look_for = unicode(result.get('artist', ''))
+        look_for = str(result.get('artist', ''))
         if look_for:
-            title = unicode(result.get('title', ''))
+            title = str(result.get('title', ''))
             if title:
                 look_for += ' - ' + title
         elif 'filename' in result:
-            look_for = unicode(result['filename'])
+            look_for = str(result['filename'])
         elif 'tags' in result:
             look_for = result['tags']
         else:
             self.log(repr(result))
-            look_for = unicode(result)
+            look_for = str(result)
         self.log('%03d: %06d %s' % (
             number + 1, result.get('score', 0), look_for))
 
@@ -910,7 +918,7 @@ def levenshtein(string1, string2):
     if len(string2) == 0:
         return len(string1)
 
-    previous_row = range(len(string2) + 1)
+    previous_row = list(range(len(string2) + 1))
     for i, character1 in enumerate(string1):
         current_row = [i + 1]
         for j, character2 in enumerate(string2):

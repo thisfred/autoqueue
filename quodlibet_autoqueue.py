@@ -8,6 +8,8 @@ This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation
 """
+from __future__ import print_function
+from builtins import str
 
 from collections import deque
 from datetime import datetime
@@ -445,8 +447,8 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         """Perform a player search."""
         try:
             songs = app.library.query(search)
-        except Exception, e:
-            print repr(search), repr(e)
+        except Exception as e:
+            print(repr(search), repr(e))
             return []
         return [Song(song) for song in songs]
 
@@ -455,4 +457,3 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         if app.window is None:
             return []
         return [Song(song) for song in app.window.playlist.q.get()]
-

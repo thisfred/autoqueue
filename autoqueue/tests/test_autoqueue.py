@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 """Tests for autoqueue."""
-from gi.repository import GObject
+from __future__ import absolute_import
+
 import unittest
+from builtins import object, range
+from collections import deque
 from datetime import datetime
 from xml.dom import minidom
-from collections import deque
-from autoqueue import SongBase, AutoQueueBase
 
+from autoqueue import AutoQueueBase, SongBase
+from gi.repository import GObject
 
 # we have to do this or the tests break badly
 GObject.threads_init()
@@ -32,7 +35,9 @@ FAKE_RESPONSES = {
 
 
 class FakePlayer(object):
+
     """Fake music player object."""
+
     def __init__(self, plugin_on_song_started):
         self.queue = []
         self.library = [
@@ -53,11 +58,11 @@ class FakePlayer(object):
             ('al jarreau', 'jacaranda bougainvillea'),
             ('jimmy smith and wes montgomery', 'mellow mood'),
             ('marlena shaw', 'will i find my love today?'),
-            ('minnie riperton', 'reasons'),
-            ]
+            ('minnie riperton', 'reasons')]
         self.plugin_on_song_started = plugin_on_song_started
 
-    def satisfies_criteria(self, song, criteria):
+    @staticmethod
+    def satisfies_criteria(song, criteria):
         """Check that song satisfies search criteria."""
         positions = {'artist': 0, 'title': 1, 'tags': 2}
         for criterium in criteria:
@@ -67,7 +72,7 @@ class FakePlayer(object):
                     if len(song) < 3:
                         continue
                     if set(criteria[ncriterium]) < set(
-                        song[positions[ncriterium]]):
+                            song[positions[ncriterium]]):
                         return False
                 else:
                     if song[positions[ncriterium]] in criteria[criterium]:
@@ -76,8 +81,8 @@ class FakePlayer(object):
                 if criterium == 'tags':
                     if len(song) < 3:
                         return False
-                    if not set(criteria[criterium]) < set(
-                        song[positions[criterium]]):
+                    if not (set(criteria[criterium]) <
+                            set(song[positions[criterium]])):
                         return False
                 else:
                     if criteria[criterium] != song[positions[criterium]]:
@@ -92,9 +97,9 @@ class FakePlayer(object):
 
 
 class FakeSong(SongBase):
+
     """Fake song object."""
 
-    # pylint: disable=W0231
     def __init__(self, artist, title, tags=None, performers=None,
                  filename=None):
         self.filename = filename
@@ -102,7 +107,6 @@ class FakeSong(SongBase):
         self.title = title
         self.tags = tags
         self.performers = performers or []
-    # pylint: enable=W0231
 
     def get_artist(self):
         return self.artist.lower()
@@ -135,6 +139,7 @@ class FakeSong(SongBase):
 
 
 class FakeSimilarityService(object):
+
     """Fake similarity Service implementation."""
 
     def analyze_track(self, filename, add_neighbours, exclude_filenames,
@@ -206,12 +211,7 @@ class FakeAutoQueue(AutoQueueBase):
 
     def block_artist(self, artist_name):
         """Block songs by artist from being played for a while."""
-        now = datetime.now()
-        self._blocked_artists.append(artist_name)
-        self._blocked_artists_times.append(now)
-        self.log("Blocked artist: %s (%s)" % (
-            artist_name,
-            len(self._blocked_artists)))
+        self._add_to_blocked(artist_name)
 
     def player_set_variables_from_config(self):
         """Set configuration variables."""

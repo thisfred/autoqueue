@@ -1,12 +1,14 @@
 """Autoqueue setup."""
+from __future__ import print_function
 import os
 import sys
 
 try:
     import DistUtilsExtra.auto
 except ImportError:
-    print >> sys.stderr, 'To build this program you need '\
-                         'https://launchpad.net/python-distutils-extra'
+    print(
+        'To build this program you need '
+        'https://launchpad.net/python-distutils-extra', file=sys.stderr)
     sys.exit(1)
 
 SERVICE_FILE = 'org.autoqueue.service'

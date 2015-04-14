@@ -1,4 +1,5 @@
 """Add selected songs to the queue in ideal order."""
+from __future__ import print_function
 
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
@@ -47,7 +48,7 @@ class MiximizePlugin(SongsMenuPlugin):
             follow_name_owner_changes=True)
         similarity = dbus.Interface(
             sim, dbus_interface='org.autoqueue.SimilarityInterface')
-        print [song['~filename'] for song in songs]
+        print([song['~filename'] for song in songs])
         similarity.miximize(
             [song['~filename'] for song in songs],
             reply_handler=self.player_enqueue, error_handler=no_op)
