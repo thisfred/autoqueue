@@ -178,6 +178,7 @@ artist:florissant,artist:missouri,artist:geohash:9yzu8wfvmypb
 artist:folkestone,artist:england,artist:geohash:u10fde103u89
 artist:forest city,artist:north carolina,artist:geohash:dnmbcpb4dsrq
 artist:forest hills,artist:queens,artist:new york city,artist:new york,artist:geohash:dr5rxs0hd30y
+artist:fort wayne,artist:indiana,artist:geohash:dp73ww7wfnbm
 artist:fort worth,artist:texas,artist:geohash:9vff35k1kqpg
 artist:framlingham,artist:england,artist:geohash:u12cnddpxgqt
 artist:franklin,artist:tennessee,artist:geohash:dn6hrs8q9d1v
@@ -291,6 +292,7 @@ artist:livingston,artist:new jersey,artist:geohash:dr70h8g4wmmu
 artist:livonia,artist:michigan,artist:geohash:dps9ny1jwp1b
 artist:london,artist:england,artist:geohash:gcpvj0e5m415
 artist:long beach,artist:california,artist:geohash:9q5bn7kdgct8
+artist:long branch,artist:new jersey,artist:geohash:dr5mhrd1w3u8
 artist:long island,artist:new york,artist:geohash:dr7bh52t4pq8
 artist:longview,artist:texas,artist:geohash:9vu8gy47d7gq
 artist:los angeles,artist:california,artist:geohash:9q5ctnsgxk11

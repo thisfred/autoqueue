@@ -73,8 +73,8 @@ def expand(word, pos=None):
         return
 
     for synset in wordnet.synsets(stemmed, pos=pos):
-        if not synset.name() in EXCLUSIONS.get(word, []):
-            for term in expand_synset(synset):
+        for term in expand_synset(synset):
+            if term not in EXCLUSIONS.get(word, []):
                 yield term
 
 
