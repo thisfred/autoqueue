@@ -173,6 +173,17 @@ class GaiaAnalysis(Thread):
         except Exception as exc:
             print(exc)
 
+    def _remove_point(self, filename):
+        """Remove a point from the gaia database."""
+        encoded = filename.encode('utf-8')
+        print('removing %s' % encoded)
+        try:
+            self.gaia_db.removePoint(encoded)
+        except Exception as exc:
+            print(exc)
+        signame = self.get_signame(encoded)
+        self.queue_sigfile(signame)
+
     @staticmethod
     def load_point(signame):
         """Load point data from JSON file."""
@@ -221,16 +232,6 @@ class GaiaAnalysis(Thread):
                 dataset.removePoint(name)
         dataset.save(path)
         os.remove(self.gaia_queue_path)
-
-    def _remove_point(self, filename):
-        """Remove a point from the gaia database."""
-        encoded = filename.encode('utf-8')
-        try:
-            self.gaia_db.removePoint(encoded)
-        except:
-            pass
-        signame = self.get_signame(encoded)
-        self.queue_sigfile(signame)
 
     @staticmethod
     def get_signame(filename):
@@ -545,37 +546,11 @@ class Similarity(object):
             os.makedirs(data_dir)
         return data_dir
 
-    def remove_track(self, artist, title):
-        """Delete missing track."""
-        sql = (
-            'SELECT tracks.id FROM tracks WHERE tracks.title = ? AND '
-            'tracks.artist IN (SELECT artists.id FROM artists WHERE '
-            'artists.name = ?);', (artist, title))
-        command = self.get_sql_command(sql, priority=10)
-        for row in command.result_queue.get():
-            track_id = row[0]
-            self.execute_sql(
-                ('DELETE FROM track_2_track WHERE track1 = ? or track2 = ?;',
-                 (track_id, track_id)), priority=10)
-            self.execute_sql(
-                ('DELETE FROM tracks WHERE id = ?;', (track_id,)), priority=10)
-            self.execute_sql(
-                "DELETE FROM users_2_tracks WHERE users_2_tracks.track = ?",
-                (track_id,))
-        self.delete_orphan_artist(artist)
-
-    def remove_artist(self, artist):
-        """Delete missing artist."""
-        sql = ('SELECT id from artists WHERE artists.name = ?;', (artist,))
-        command = self.get_sql_command(sql, priority=10)
-        for row in command.result_queue.get():
-            artist_id = row[0]
-            self.execute_sql(
-                ('DELETE FROM artists WHERE artists.id = ?;', (artist_id,)),
-                priority=10)
-            self.execute_sql(
-                ('DELETE FROM tracks WHERE tracks.artist = ?;', (artist_id,)),
-                priority=10)
+    def remove_track_by_filename(self, filename):
+        if not filename:
+            return
+        if GAIA:
+            self.gaia_queue.put((REMOVE, filename))
 
     def get_ordered_gaia_tracks(self, filename, number):
         """Get neighbours for track."""
@@ -786,22 +761,12 @@ class Similarity(object):
                 ('DELETE FROM artists WHERE id = ?', (artist_id,)),
                 priority=10)
 
-    @staticmethod
-    def log(message):
-        """Log message."""
-        try:
-            print(message)
-        except:
-            try:
-                print(message.encode('utf-8'))
-            except:
-                return
-
     def analyze_track(self, filename):
         """Perform gaia analysis of a track."""
         if not filename:
             return
-        self.gaia_queue.put((ADD, filename))
+        if GAIA:
+            self.gaia_queue.put((ADD, filename))
 
     def analyze_tracks(self, filenames):
         """Analyze audio files."""
@@ -879,8 +844,9 @@ class Similarity(object):
         if updated:
             updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
             if updated + timedelta(self.cache_time) > now:
-                self.log("Getting similar tracks from db for: %s - %s" % (
-                    artist_name, title))
+                print(
+                    "Getting similar tracks from db for: %s - %s" % (
+                        artist_name, title))
                 return self.get_similar_tracks(track_id)
         return self.get_similar_tracks_from_lastfm(
             artist_name, title, track_id)
@@ -902,7 +868,7 @@ class Similarity(object):
                 updated = datetime(
                     *strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
                 if updated + timedelta(self.cache_time) > now:
-                    self.log(
+                    print(
                         "Getting similar artists from db for: %s " %
                         artist_name)
                     result = self.get_similar_artists(artist_id)
@@ -935,16 +901,6 @@ class SimilarityService(dbus.service.Object):
     def remove_track_by_filename(self, filename):
         """Remove tracks from database."""
         self.similarity.remove_track_by_filename(str(filename))
-
-    @method(dbus_interface=IFACE, in_signature='ss')
-    def remove_track(self, artist, title):
-        """Remove tracks from database."""
-        self.similarity.remove_track(str(artist), str(title))
-
-    @method(dbus_interface=IFACE, in_signature='s')
-    def remove_artist(self, artist):
-        """Remove tracks from database."""
-        self.similarity.remove_artist(str(artist))
 
     @method(dbus_interface=IFACE, in_signature='s')
     def analyze_track(self, filename):

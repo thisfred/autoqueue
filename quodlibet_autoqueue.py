@@ -14,7 +14,8 @@ from builtins import str
 from collections import deque
 from datetime import datetime
 
-from autoqueue import AutoQueueBase, SongBase
+from autoqueue import AutoQueueBase
+from autoqueue.player import PlayerBase, SongBase
 from gi.repository import GLib, Gtk
 from quodlibet import app, config
 from quodlibet.plugins.events import EventPlugin
@@ -215,17 +216,17 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
     def __init__(self):
         EventPlugin.__init__(self)
-        AutoQueueBase.__init__(self)
+        AutoQueueBase.__init__(self, Player())
         self._generators = deque()
 
     def enabled(self):
         """Handle user enabling the plugin."""
-        self.log("enabled")
+        print("enabled")
         self.__enabled = True
 
     def disabled(self):
         """Handle user disabling the plugin."""
-        self.log("disabled")
+        print("disabled")
         self.__enabled = False
 
     def plugin_on_song_ended(self, song, skipped):
@@ -252,9 +253,9 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         def bool_changed(widget):
             """Boolean setting changed."""
             if widget.get_active():
-                setattr(self, widget.get_name(), True)
+                setattr(self.configuration, widget.get_name(), True)
             else:
-                setattr(self, widget.get_name(), False)
+                setattr(self.configuration, widget.get_name(), False)
             config.set(
                 'plugins',
                 'autoqueue_%s' % widget.get_name(),
@@ -264,14 +265,14 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             """String setting changed."""
             value = entry.get_text()
             config.set('plugins', 'autoqueue_%s' % key, value)
-            setattr(self, key, value)
+            setattr(self.configuration, key, value)
 
         def int_changed(entry, key):
             """Integer setting changed."""
             value = entry.get_text()
             if value:
                 config.set('plugins', 'autoqueue_%s' % key, value)
-                setattr(self, key, int(value))
+                setattr(self.configuration, key, int(value))
 
         table = Gtk.Table()
         table.set_col_spacings(3)
@@ -324,14 +325,16 @@ class AutoQueue(EventPlugin, AutoQueueBase):
 
         return table
 
-    def player_execute_async(self, method, *args, **kwargs):
+
+class Player(PlayerBase):
+
+    def execute_async(self, method, *args, **kwargs):
         """Execute a method asynchronously."""
         if 'funcid' not in kwargs:
             kwargs['funcid'] = method.__name__ + str(datetime.now())
         copool.add(method, *args, **kwargs)
 
-    def player_construct_album_search(self, album, album_artist=None,
-                                      album_id=None, restrictions=None):
+    def construct_album_search(self, album, album_artist=None, album_id=None):
         """"Construct a search that looks for songs from this album."""
         if not album:
             return
@@ -342,25 +345,21 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             search = (
                 '&(%s, |(musicbrainz_albumid="%s", musicbrainz_albumid=""))' %
                 (search, album_id))
-        if restrictions:
-            search = "&(%s, %s)" % (search, restrictions)
         return search
 
-    def player_construct_files_search(self, filenames):
+    def construct_files_search(self, filenames):
         """Construct a search for songs with any of these filenames."""
         return '~filename=|(%s)' % (
             ','.join(['"%s"' % escape(f) for f in filenames]),)
 
-    def player_construct_file_search(self, filename, restrictions=None):
+    def construct_file_search(self, filename):
         """Construct a search that looks for songs with this filename."""
         if not filename:
             return
         search = '~filename="%s"' % (escape(filename),)
-        if restrictions:
-            search = "&(%s, %s)" % (search, restrictions)
         return search
 
-    def player_construct_track_search(self, artist, title, restrictions=None):
+    def construct_track_search(self, artist, title):
         """Construct an artist and title search."""
         search = '&(artist = "%s", title = "%s", version="")' % (
             escape(artist), escape(title))
@@ -379,11 +378,9 @@ class AutoQueue(EventPlugin, AutoQueueBase):
                 escape(vtitle),
                 escape(version))
             search = "|(%s, %s)" % (search, versioned)
-        if restrictions:
-            search = "&(%s, %s)" % (search, restrictions)
         return search
 
-    def player_construct_tag_search(self, tags, restrictions=None):
+    def construct_tag_search(self, tags):
         """Construct a tags search."""
         search = ''
         search_tags = []
@@ -392,46 +389,42 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             search_tags.append(
                 '|(grouping = "%s",grouping = "artist:%s",'
                 'grouping = "album:%s")' % (stripped, stripped, stripped))
-        if restrictions:
-            search = "&(|(%s),%s)" % (",".join(search_tags), restrictions)
-        else:
-            search = "|(%s)" % (",".join(search_tags))
+        search = "|(%s)" % (",".join(search_tags))
         return search
 
-    def player_construct_artist_search(self, artist, restrictions=None):
+    def construct_artist_search(self, artist):
         """Construct a search that looks for songs with this artist."""
         search = '|(artist = "%s",performer="%s")' % (
             escape(artist), escape(artist))
-        if restrictions:
-            search = "&(%s, %s)" % (search, restrictions)
         return search
 
-    def player_set_variables_from_config(self):
+    def set_variables_from_config(self, configuration):
         """Initialize user settings from the configuration storage."""
         for key, vdict in INT_SETTINGS.items():
             try:
-                setattr(self, key, config.getint(
+                setattr(configuration, key, config.getint(
                     "plugins", "autoqueue_%s" % key))
             except:
-                setattr(self, key, vdict['value'])
+                setattr(configuration, key, vdict['value'])
                 config.set("plugins", "autoqueue_%s" % key, vdict['value'])
         for key, vdict in BOOL_SETTINGS.items():
             try:
-                setattr(self, key, config.get(
+                setattr(configuration, key, config.get(
                     "plugins", "autoqueue_%s" % key).lower() == 'true')
             except:
-                setattr(self, key, vdict['value'])
+                setattr(configuration, key, vdict['value'])
                 config.set("plugins", "autoqueue_%s" %
                            key, vdict['value'] and 'true' or 'false')
         for key, vdict in STR_SETTINGS.items():
             try:
                 setattr(
-                    self, key, config.get("plugins", "autoqueue_%s" % key))
+                    configuration, key, config.get(
+                        "plugins", "autoqueue_%s" % key))
             except:
-                setattr(self, key, vdict['value'])
+                setattr(configuration, key, vdict['value'])
                 config.set("plugins", "autoqueue_%s" % key, vdict['value'])
 
-    def player_get_queue_length(self):
+    def get_queue_length(self):
         """Get the current length of the queue."""
         if app.window is None:
             return 0
@@ -439,12 +432,14 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         return sum(
             [row.get("~#length", 0) for row in playlist.q.get()])
 
-    def player_enqueue(self, song):
+    def enqueue(self, song):
         """Put the song at the end of the queue."""
         app.window.playlist.enqueue([song.song])
 
-    def player_search(self, search):
+    def search(self, search, restrictions=None):
         """Perform a player search."""
+        if restrictions:
+            search = '&(%s,%s)' % (search, restrictions)
         try:
             songs = app.library.query(search)
         except Exception as e:
@@ -452,7 +447,7 @@ class AutoQueue(EventPlugin, AutoQueueBase):
             return []
         return [Song(song) for song in songs]
 
-    def player_get_songs_in_queue(self):
+    def get_songs_in_queue(self):
         """Return (wrapped) song objects for the songs in the queue."""
         if app.window is None:
             return []

@@ -1,20 +1,23 @@
 """Context awareness filters."""
-from __future__ import division, print_function, absolute_import
+
+from __future__ import absolute_import, division, print_function
 
 import re
 from builtins import object, str
+from collections import Counter
 from datetime import date, datetime, time, timedelta
 
 import nltk
 from dateutil.easter import easter
 from dateutil.rrule import TH, YEARLY, rrule
 from nltk import pos_tag, word_tokenize
-from nltk.corpus import stopwords, wordnet
+from nltk.corpus import wordnet
 
 nltk.download('punkt')
 nltk.download('wordnet')
-nltk.download('stopwords')
 nltk.download('maxent_treebank_pos_tagger')
+
+HISTORY = 10
 
 HALF_HOUR = timedelta(minutes=30)
 ONE_HOUR = timedelta(hours=1)
@@ -28,7 +31,9 @@ SIX_MONTHS = timedelta(days=182)
 ONE_YEAR = timedelta(days=365)
 
 TIME = re.compile('^([0-9]{2}):([0-9]{2})$')
-STOPWORDS = {w for w in stopwords.words('english') if len(w) > 2}
+STOPWORDS = {
+    '"', "'", ',', '(', ')', "'ll", "'s", 'a', 'an', 'do', 'get', 'go', 'i',
+    'it', 'make', "n't", 'of', 'the', 'you'}
 
 POS_MAP = {
     'J': wordnet.ADJ,
@@ -38,8 +43,11 @@ POS_MAP = {
 
 # remove problematic synsets
 EXCLUSIONS = {
+    'black': {'dark.n.01'},
     'sun': {'sunday.n.01'},
-    'night': {'twilight.n.01'}}
+    'night': {'twilight.n.01'},
+    'fall': {'dusky.s.01', 'twilight.n.01'},
+    'rose': {'ascension.n.04'}}
 
 
 def get_wordnet_pos(tag):
@@ -59,12 +67,7 @@ def expand_synset(synset):
 
 def expand(word, pos=None):
     word = word.replace(' ', '_')
-    if len(word) < 3:
-        yield word
-        return
-
     if word in STOPWORDS:
-        yield word
         return
 
     stemmed = wordnet.morphy(word, pos=pos)
@@ -82,30 +85,33 @@ def get_terms(words):
     return {term for word in words for term in expand(word)}
 
 
-def get_terms_from_song(song):
-    word_tags = pos_tag(word_tokenize(song.get_title(with_version=False)))
-    return {
-        term for word, tag in word_tags
-        for term in expand(word, get_wordnet_pos(tag))} | get_terms(
-            song.get_non_geo_tags())
+def get_terms_from_song(song, artist_tags=False):
+    if artist_tags:
+        prefix = 'artist:'
+        exclude_prefix = ''
+        title_terms = set()
+    else:
+        prefix = ''
+        exclude_prefix = 'artist:'
+        title_terms = {
+            term for word, tag in
+            pos_tag(word_tokenize(song.get_title(with_version=False)))
+            for term in expand(word, get_wordnet_pos(tag))}
+    tag_terms = get_terms(
+        song.get_non_geo_tags(prefix=prefix, exclude_prefix=exclude_prefix))
+    return title_terms | tag_terms
 
 
 class Context(object):
 
     """Object representing the current context."""
 
-    def __init__(self, context_date, location, geohash, birthdays, last_song,
-                 nearby_artists, southern_hemisphere, weather, extra_context):
+    def __init__(self, context_date, configuration, cache):
         self.date = context_date
-        self.location = location
-        self.geohash = geohash
-        self.birthdays = birthdays
-        self.last_song = last_song
-        self.nearby_artists = nearby_artists
-        self.southern_hemisphere = southern_hemisphere
-        self.weather = weather
+        self.configuration = configuration
+        self.cache = cache
+        self.weather = cache.get_weather(configuration)
         self.predicates = []
-        self.extra_context = extra_context
         self.build_predicates()
 
     @staticmethod
@@ -164,40 +170,57 @@ class Context(object):
         self.add_nearby_artist_predicates()
 
     def add_nearby_artist_predicates(self):
-        for artist in set(self.nearby_artists):
+        for artist in set(self.cache.nearby_artists):
             self.predicates.append(Artist(artist))
 
     def add_last_song_predicates(self):
-        if not self.last_song:
+        if not self.cache.last_song:
             return
-        terms = get_terms_from_song(self.last_song)
+        terms = get_terms_from_song(self.cache.last_song)
         predicate = Terms(ne_expanded_terms=frozenset(terms))
-        self.predicates.append(predicate)
-        self.predicates.append(Geohash(self.last_song.get_geohashes()))
+        counter = Counter(terms)
+        for previous in self.cache.previous_terms:
+            counter.update(previous)
+        common_terms = {k for k, v in counter.iteritems() if v > 1}
+        if common_terms:
+            print("common: %s" % common_terms)
+            common = CommonTerms(ne_expanded_terms=frozenset(common_terms))
+            self.predicates.append(common)
+        self.cache.previous_terms.append(terms)
+        if len(self.cache.previous_terms) >= HISTORY:
+            self.cache.previous_terms = self.cache.previous_terms[1:]
+        artist_terms = get_terms_from_song(
+            self.cache.last_song, artist_tags=True)
+        artist_predicate = ArtistTerms(
+            ne_expanded_terms=frozenset(artist_terms))
+        self.predicates.extend([
+            predicate, artist_predicate,
+            Geohash(self.cache.last_song.get_geohashes())])
 
     def add_extra_predicates(self):
-        if self.extra_context:
-            words = [l.strip().lower() for l in self.extra_context.split(',')]
+        if self.configuration.extra_context:
+            words = [
+                l.strip().lower()
+                for l in self.configuration.extra_context.split(',')]
             if words:
                 self.predicates.extend([
                     String(word) for word in words])
 
     def add_birthday_predicates(self):
-        for name_date in self.birthdays.split(','):
+        for name_date in self.configuration.birthdays.split(','):
             if ':' not in name_date:
                 continue
-            name, bdate = name_date.strip().split(':')
-            bdate = bdate.strip()
-            if '-' in bdate:
-                bdate = [int(i) for i in bdate.split('-')]
-            else:
-                bdate = [int(i) for i in bdate.split('/')]
-            if len(bdate) == 3:
-                year, month, day = bdate
-                age = self.date.year - year
-                self.predicates.append(
-                    Birthday(
-                        year=year, month=month, day=day, name=name, age=age))
+            name, date_string = name_date.strip().split(':')
+            birth_date = self.get_date(date_string)
+            age = self.date.year - birth_date.year
+            self.predicates.append(
+                Birthday(birth_date=birth_date, name=name, age=age))
+
+    @staticmethod
+    def get_date(date_string):
+        date_string = date_string.strip()
+        delimiter = '-' if '-' in date_string else '/'
+        return date(*[int(i) for i in date_string.split(delimiter)])
 
     def get_astronomical_times(self, weather):
         sunrise = weather.get('astronomy', {}).get('sunrise', '')
@@ -254,13 +277,14 @@ class Context(object):
         return predicates
 
     def add_location_predicates(self):
-        if self.location:
-            locations = [l.lower() for l in self.location.split(',')]
+        if self.configuration.location:
+            locations = [
+                l.lower() for l in self.configuration.location.split(',')]
             if locations:
                 self.predicates.extend([
                     String(location) for location in locations])
-        if self.geohash:
-            self.predicates.append(Geohash([self.geohash]))
+        if self.configuration.geohash:
+            self.predicates.append(Geohash([self.configuration.geohash]))
 
     def add_december_predicate(self):
         if self.date.month == 12:
@@ -269,10 +293,10 @@ class Context(object):
 
     def add_standard_predicates(self):
         self.predicates.extend(STATIC_PREDICATES)
-        for predicate in (Year, Today, Now, Midnight, Noon, Spring, Summer,
-                          Fall, Winter, Evening, Morning, Afternoon, Night,
-                          DayTime, Christmas, NewYear, Halloween, Easter,
-                          Thanksgiving):
+        for predicate in (Year, Date.from_date, Now, Midnight, Noon, Spring,
+                          Summer, Fall, Winter, Evening, Morning, Afternoon,
+                          Night, DayTime, Christmas, NewYear, Halloween,
+                          Easter, Thanksgiving):
             self.predicates.append(predicate(self.date))
 
 
@@ -322,7 +346,7 @@ class Terms(Predicate):
     def applies_to_song(self, song, exclusive):
         return (
             self.regex_terms_match(song, exclusive) or
-            self.get_intersection(get_terms_from_song(song), exclusive))
+            self.get_intersection(self._get_song_terms(song), exclusive))
 
     def regex_terms_match(self, song, exclusive):
         """Determine whether the predicate applies to the song."""
@@ -336,6 +360,10 @@ class Terms(Predicate):
 
         return False
 
+    @staticmethod
+    def _get_song_terms(song):
+        return get_terms_from_song(song)
+
     def get_factor(self, song, exclusive=False):
         if self.regex_terms_match(song, exclusive):
             return 1
@@ -344,11 +372,22 @@ class Terms(Predicate):
             else self.terms_expanded | self.non_exclusive_terms_expanded)
         if not expanded:
             return 1
-        song_terms = get_terms_from_song(song)
+        song_terms = self._get_song_terms(song)
         intersection = self.get_intersection(song_terms, exclusive)
         print("  %s" % intersection)
         shortest = min(len(song_terms), len(expanded))
         return len(intersection) / shortest
+
+
+class CommonTerms(Terms):
+    pass
+
+
+class ArtistTerms(Terms):
+
+    @staticmethod
+    def _get_song_terms(song):
+        return get_terms_from_song(song, artist_tags=True)
 
 
 class ExclusiveTerms(Terms):
@@ -837,23 +876,31 @@ class Midnight(TimePredicate):
 
 class Date(ExclusiveTerms):
 
+    day = None
+    month = None
+
     def __init__(self):
-        self.regex_terms = (
-            re.compile(r"^([0-9]{4}-)?%02d-%02d$" % (self.month, self.day)),)
+        self.set_regex()
         super(Date, self).__init__()
 
+    def set_regex(self):
+        if self.month and self.day:
+            self.regex_terms = (
+                re.compile(
+                    r"^([0-9]{4}-)?%02d-%02d$" % (self.month, self.day)),)
+
+    @classmethod
+    def from_date(cls, from_date):
+        instance = cls()
+        instance.month = from_date.month
+        instance.day = from_date.day
+        instance.set_regex()
+        return instance
+
     def applies_in_context(self, context):
-        context_date = context.date
         return (
-            context_date.day == self.day and context_date.month == self.month)
-
-
-class Today(Date):
-
-    def __init__(self, moment):
-        self.month = moment.month
-        self.day = moment.day
-        super(Today, self).__init__()
+            context.date.day == self.day and
+            context.date.month == self.month)
 
 
 class Season(Period):
@@ -866,7 +913,7 @@ class Season(Period):
         super(Season, self).__init__(peak=peak)
 
     def get_peak(self, context):
-        if context.southern_hemisphere:
+        if context.configuration.southern_hemisphere:
             return self.peak + SIX_MONTHS
 
         return self.peak
@@ -1408,11 +1455,12 @@ class Friday13(ExclusiveTerms):
 
 class Birthday(Date):
 
-    def __init__(self, year, month, day, name, age):
-        self.non_exclusive_terms = ('birthday', name, str(year), str(age))
-        self.year = year
-        self.month = month
-        self.day = day
+    def __init__(self, birth_date, name, age):
+        self.non_exclusive_terms = (
+            'birthday', name, str(birth_date.year), str(age))
+        self.year = birth_date.year
+        self.month = birth_date.month
+        self.day = birth_date.day
         super(Birthday, self).__init__()
 
     def applies_to_song(self, song, exclusive):
