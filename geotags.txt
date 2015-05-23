@@ -1,4 +1,5 @@
 artist:'s-hertogenbosch,artist:the netherlands,artist:geohash:u15y08em4zw6
+artist:illinois,artist:geohash:dp0ewcb0vsqn
 artist:aalborg,artist:denmark,artist:geohash:u4ph99th74fc
 artist:abilene,artist:texas,artist:geohash:9vc0d5k6bw3j
 artist:adelaide,artist:australia,artist:geohash:r1f93cq5v6kp
@@ -22,6 +23,7 @@ artist:andros,artist:bahamas,artist:geohash:dk2dfpyw3r7h
 artist:angered,artist:sweden,artist:geohash:u628cf4mkuzq
 artist:ann arbor,artist:michigan,artist:geohash:dps2w306fqhv
 artist:anson,artist:texas,artist:geohash:9vbfqfcwvqjw
+artist:arlington heights,artist:illinois,artist:geohash:dp3rmznm4hb0
 artist:asbury park,artist:new jersey,artist:geohash:dr5kgf77k951
 artist:asheville,artist:north carolina,artist:geohash:dnm63mhst8tp
 artist:astoria,artist:queens,artist:new york city,artist:new york,artist:geohash:dr5ryqb8k56b
@@ -57,6 +59,7 @@ artist:billinge higher end,artist:wigan,artist:england,artist:geohash:gcw06pweyd
 artist:birmingham,artist:alabama,artist:geohash:djfq8x09q2zq
 artist:birmingham,artist:england,artist:geohash:gcqdsfjpgwtr
 artist:bitti,artist:sardinia,artist:italy,artist:geohash:spnwm2pxbwvg
+artist:black hawk,artist:colorado,artist:geohash:9xhfrt944cj2
 artist:black mountain,artist:north carolina,artist:geohash:dnm6wsk2etbp
 artist:blackpool,artist:england,artist:geohash:gctf4sdf5rgf
 artist:blackwood,artist:wales,artist:geohash:gcjtzqjped5e
@@ -431,6 +434,7 @@ artist:nacka,artist:stockholm,artist:sweden,artist:geohash:u6sfwftjeqy7
 artist:napa,artist:california,artist:geohash:9qc1cj0tjmdz
 artist:nashua,artist:new hampshire,artist:geohash:drt5jzc0mz8q
 artist:nashville,artist:tennessee,artist:geohash:dn6m9pyq1g2u
+artist:nederland,artist:colorado,artist:geohash:9xhgr4ce1y71
 artist:nelson,artist:new zealand,artist:geohash:rbejpnv7zr0e
 artist:neptune township,artist:new jersey,artist:geohash:dr5kfb7w2mf8
 artist:nevada city,artist:california,artist:geohash:9qczq5kfjvr7
@@ -584,6 +588,7 @@ artist:santa monica,artist:california,artist:geohash:9q59xcs2pw11
 artist:santiago,artist:chile,artist:geohash:66j9xyw5ek1c
 artist:sarasota,artist:florida,artist:geohash:dhv79bedues1
 artist:saratoga,artist:california,artist:geohash:9q9hp3k0hcs4
+artist:sarnia,artist:ontario,artist:canada,artist:geohash:dptkx5b3zvk4
 artist:saskatoon,artist:saskatchewan,artist:canada,artist:geohash:c9k0s6eddjtk
 artist:scunthorpe,artist:england,artist:geohash:gcx8c4ne35xw
 artist:seattle,artist:washington,artist:geohash:c23nb5pf9pqn
@@ -739,6 +744,7 @@ artist:wiscasset,artist:maine,artist:geohash:dry6qdqygtyw
 artist:wivenhoe,artist:england,artist:geohash:u10xjbqzvj5u
 artist:wolverhampton,artist:england,artist:geohash:gcq7pkw81exx
 artist:woodbridge,artist:england,artist:geohash:u12bmgrdtk1r
+artist:woodstock,artist:new york,artist:geohash:dr7r1jhzzxwh
 artist:worksop,artist:england,artist:geohash:gcrpq2wqzjwn
 artist:würzburg,artist:germany,artist:geohash:u0z54nc0zmvu
 artist:york,artist:england,artist:geohash:gcx4zqv65dq3

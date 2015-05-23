@@ -32,8 +32,8 @@ ONE_YEAR = timedelta(days=365)
 
 TIME = re.compile('^([0-9]{2}):([0-9]{2})$')
 STOPWORDS = {
-    '"', "'", ',', '(', ')', "'ll", "'s", 'a', 'an', 'do', 'get', 'go', 'i',
-    'it', 'make', "n't", 'of', 'the', 'you'}
+    '"', "'", ',', '(', ')', "'ll", "'s", 'a', 'an', 'and', 'do', 'get', 'go',
+    'i', 'in', 'it', 'la', 'make', "n't", 'of', 'or', 'the', 'you'}
 
 POS_MAP = {
     'J': wordnet.ADJ,
