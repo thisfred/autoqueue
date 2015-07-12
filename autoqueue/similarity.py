@@ -109,11 +109,6 @@ class GaiaAnalysis(Thread):
                 'euclidean', self.gaia_db.layout())
             self.transformed = True
 
-    @property
-    def gaia_queue_path(self):
-        """The path to the queue file."""
-        return self.gaia_db_path + '.queue'
-
     def initialize_gaia_db(self):
         """Load or initialize the gaia database."""
         if not os.path.isfile(self.gaia_db_path):
@@ -121,9 +116,7 @@ class GaiaAnalysis(Thread):
         else:
             dataset = self.load_gaia_db()
             self.transformed = True
-        print("songs in db before processing queue: %d" % dataset.size())
-        self.process_queue(dataset, self.gaia_db_path)
-        print("songs in db after processing queue: %d" % dataset.size())
+        print("songs in db: %d" % dataset.size())
         return dataset
 
     @staticmethod
@@ -161,15 +154,12 @@ class GaiaAnalysis(Thread):
         signame = self.get_signame(encoded)
         if not os.path.exists(signame):
             if not self.essentia_analyze(encoded, signame):
-                # Create a bogus sis file so we don't have to do analysis that
-                # we know is going to fail every time.
-                subprocess.check_call(['touch', signame])
                 return
-        self.queue_sigfile(signame)
         try:
             point = self.load_point(signame)
             point.setName(encoded)
             self.gaia_db.addPoint(point)
+            os.remove(signame)
         except Exception as exc:
             print(exc)
 
@@ -179,10 +169,10 @@ class GaiaAnalysis(Thread):
         print('removing %s' % encoded)
         try:
             self.gaia_db.removePoint(encoded)
+            signame = self.get_signame(encoded)
+            os.remove(signame)
         except Exception as exc:
             print(exc)
-        signame = self.get_signame(encoded)
-        self.queue_sigfile(signame)
 
     @staticmethod
     def load_point(signame):
@@ -196,47 +186,11 @@ class GaiaAnalysis(Thread):
         point.loadFromString(yamlsig)
         return point
 
-    def queue_sigfile(self, sig_file):
-        """Add the name of the sigfile to the queue file."""
-        with open(self.gaia_queue_path, 'a') as queue:
-            key = '.'.join(sig_file.split('.')[:-1])
-            queue.write(
-                yaml.dump({key: sig_file}, default_flow_style=False))
-
-    def process_queue(self, dataset, path):
-        """Process and flush the queue file."""
-        if not os.path.isfile(self.gaia_queue_path):
-            return
-        for name, sigfile in list(yaml.load(
-                open(self.gaia_queue_path).read()).items()):
-            if not dataset.contains(name):
-                print("adding %s" % name)
-                if not os.path.isfile(sigfile):
-                    continue
-                try:
-                    point = self.load_point(sigfile)
-                except Exception as e:
-                    print(repr(e))
-                    continue
-                point.setName(name)
-                try:
-                    dataset.addPoint(point)
-                    os.remove(sigfile)
-                except Exception as e:
-                    print(repr(e))
-                    continue
-            else:
-                print("removing %s" % name)
-                if os.path.isfile(sigfile):
-                    os.remove(sigfile)
-                dataset.removePoint(name)
-        dataset.save(path)
-        os.remove(self.gaia_queue_path)
-
     @staticmethod
-    def get_signame(filename):
+    def get_signame(full_path):
         """Get the path for the analysis data file for this filename."""
-        return filename + '.sig'
+        filename = os.path.split(full_path)[-1]
+        return os.path.join('/tmp', filename + '.sig')
 
     @staticmethod
     def essentia_analyze(filename, signame):
@@ -273,12 +227,6 @@ class GaiaAnalysis(Thread):
                 except Empty:
                     self.gaia_db = self.transform_and_save(
                         self.gaia_db, self.gaia_db_path)
-                    if os.path.isfile(self.gaia_queue_path):
-                        for _, sigfile in list(yaml.load(
-                                open(self.gaia_queue_path).read()).items()):
-                            if os.path.isfile(sigfile):
-                                os.remove(sigfile)
-                        os.remove(self.gaia_queue_path)
                     break
             print (
                 "songs in db after processing queue: %d" %

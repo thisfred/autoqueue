@@ -4,7 +4,7 @@ from __future__ import absolute_import, division, print_function
 
 import re
 from builtins import object, str
-from collections import Counter
+from collections import OrderedDict
 from datetime import date, datetime, time, timedelta
 
 import nltk
@@ -32,9 +32,13 @@ ONE_YEAR = timedelta(days=365)
 
 TIME = re.compile('^([0-9]{2}):([0-9]{2})$')
 STOPWORDS = {
-    '"', "'", ',', '(', ')', "'ll", "'s", 'a', 'am', 'an', 'and', 'are', 'be',
-    'been', 'did', 'do', 'get', 'go', 'had', 'have', 'i', 'in', 'is', 'it',
-    'la', 'make', "n't", 'of', 'or', 'the', 'was', 'were', 'you'}
+    '"', "'", ',', '(', ')', '[', ']', '-', '/', "'ll", "'m", "'s", 'a', 'am',
+    'an', 'and', 'are', 'be', 'been', 'being', 'did', 'do', 'get', 'go',
+    'goes', 'going', 'got', 'had', 'have', 'he', 'her', 'him', 'his', 'i',
+    'in', 'is', 'it', 'la', 'let', 'made', 'make', 'me', 'my', "n't", 'no',
+    'not', 'of', 'on', 'or', 'our', 'she', 'so', 'that', 'the', 'their',
+    'them', 'these', 'they', 'this', 'those', 'to', 'us', 'was', 'we', 'were',
+    'went', 'you', 'your', 'daytrotter_sessions'}
 
 POS_MAP = {
     'J': wordnet.ADJ,
@@ -45,10 +49,41 @@ POS_MAP = {
 # remove problematic synsets
 EXCLUSIONS = {
     'black': {'dark.n.01'},
-    'sun': {'sunday.n.01'},
-    'night': {'twilight.n.01'},
     'fall': {'dusky.s.01', 'twilight.n.01'},
-    'rose': {'ascension.n.04'}}
+    'friday': {'day.n.04'},
+    'mars': {'march.n.01'},
+    'monday': {'day.n.04'},
+    'morning': {'dawn.n.01', 'dawn.n.02', 'dawn.v.02', 'dawn.v.03'},
+    'night': {'twilight.n.01'},
+    'oh': {'ohio.n.01'},
+    'rose': {'ascension.n.04'},
+    'saturday': {'day.n.04'},
+    'shadow': {'dark.a.01', 'darkness.n.02'},
+    'sun': {'sunday.n.01'},
+    'sunday': {'day.n.04'},
+    'thursday': {'day.n.04'},
+    'tuesday': {'day.n.04'},
+    'wednesday': {'day.n.04'},
+}
+
+
+class LRUCache(object):
+
+    size = 1000
+
+    def __init__(self, function):
+        self._function = function
+        self._cache = OrderedDict()
+
+    def __call__(self, *args):
+        if args in self._cache:
+            value = self._cache.pop(args)
+        else:
+            value = self._function(*args)
+        self._cache[args] = value
+        while len(self._cache) > self.size:
+            self._cache.popitem(last=False)
+        return value
 
 
 def get_wordnet_pos(tag):
@@ -86,20 +121,22 @@ def get_terms(words):
     return {term for word in words for term in expand(word)}
 
 
-def get_terms_from_song(song, artist_tags=False):
-    if artist_tags:
-        prefix = 'artist:'
-        exclude_prefix = ''
-        title_terms = set()
-    else:
-        prefix = ''
-        exclude_prefix = 'artist:'
-        title_terms = {
-            term for word, tag in
-            pos_tag(word_tokenize(song.get_title(with_version=False)))
-            for term in expand(word, get_wordnet_pos(tag))}
+@LRUCache
+def get_artist_terms_from_song(song):
     tag_terms = get_terms(
-        song.get_non_geo_tags(prefix=prefix, exclude_prefix=exclude_prefix))
+        song.get_non_geo_tags(prefix='artist:', exclude_prefix=''))
+    return tag_terms
+
+
+@LRUCache
+def get_terms_from_song(song):
+    title_terms = {
+        term for word, tag in
+        pos_tag(word_tokenize(song.get_title(with_version=False)))
+        for term in expand(word, get_wordnet_pos(tag))}
+
+    tag_terms = get_terms(
+        song.get_non_geo_tags(prefix='', exclude_prefix='artist:'))
     return title_terms | tag_terms
 
 
@@ -174,29 +211,47 @@ class Context(object):
         for artist in set(self.cache.nearby_artists):
             self.predicates.append(Artist(artist))
 
+    def _add_common_terms(self):
+        if len(self.cache.previous_terms) < 2:
+            return
+
+        if len(self.cache.previous_terms) > HISTORY:
+            self.cache.previous_terms = self.cache.previous_terms[-HISTORY:]
+        common_terms = None
+        for i, previous in enumerate(reversed(self.cache.previous_terms)):
+            if common_terms is None:
+                common_terms = previous.copy()
+                continue
+            common_terms &= previous
+            if not common_terms:
+                break
+            print(
+                "common(%s): %s" % (
+                    i + 1,
+                    ', '.join(w for w in common_terms)))
+            common = CommonTerms(ne_expanded_terms=frozenset(common_terms))
+            self.predicates.append(common)
+
+    def _add_artist_predicate(self):
+        artist_terms = get_artist_terms_from_song(self.cache.last_song)
+        artist_predicate = ArtistTerms(
+            ne_expanded_terms=frozenset(artist_terms))
+        self.predicates.append(artist_predicate)
+
+    def _add_terms(self):
+        terms = get_terms_from_song(self.cache.last_song)
+        predicate = Terms(ne_expanded_terms=frozenset(terms))
+        self.predicates.append(predicate)
+
+    def _add_geohash(self):
+        self.predicates.append(Geohash(self.cache.last_song.get_geohashes()))
+
     def add_last_song_predicates(self):
         if not self.cache.last_song:
             return
-        terms = get_terms_from_song(self.cache.last_song)
-        predicate = Terms(ne_expanded_terms=frozenset(terms))
-        counter = Counter(terms)
-        for previous in self.cache.previous_terms:
-            counter.update(previous)
-        common_terms = {k for k, v in counter.iteritems() if v > 1}
-        if common_terms:
-            print("common: %s" % common_terms)
-            common = CommonTerms(ne_expanded_terms=frozenset(common_terms))
-            self.predicates.append(common)
-        self.cache.previous_terms.append(terms)
-        if len(self.cache.previous_terms) >= HISTORY:
-            self.cache.previous_terms = self.cache.previous_terms[1:]
-        artist_terms = get_terms_from_song(
-            self.cache.last_song, artist_tags=True)
-        artist_predicate = ArtistTerms(
-            ne_expanded_terms=frozenset(artist_terms))
-        self.predicates.extend([
-            predicate, artist_predicate,
-            Geohash(self.cache.last_song.get_geohashes())])
+        self._add_common_terms()
+        self._add_artist_predicate()
+        self._add_terms()
 
     def add_extra_predicates(self):
         if self.configuration.extra_context:
@@ -318,6 +373,9 @@ class Predicate(object):
     def negative_score(self, result):
         pass
 
+    def __repr__(self):
+        return '<%s>' % self.__class__.__name__
+
 
 class Terms(Predicate):
 
@@ -375,7 +433,7 @@ class Terms(Predicate):
             return 1
         song_terms = self._get_song_terms(song)
         intersection = self.get_intersection(song_terms, exclusive)
-        print("  %s" % intersection)
+        print("  %s" % ', '.join(w for w in intersection))
         shortest = min(len(song_terms), len(expanded))
         return len(intersection) / shortest
 
@@ -388,7 +446,7 @@ class ArtistTerms(Terms):
 
     @staticmethod
     def _get_song_terms(song):
-        return get_terms_from_song(song, artist_tags=True)
+        return get_artist_terms_from_song(song)
 
 
 class ExclusiveTerms(Terms):
@@ -439,11 +497,6 @@ class Period(ExclusiveTerms):
         return factor * (
             1.0 - min(
                 1, (self.diff.total_seconds() / self.decay.total_seconds())))
-
-
-class DayPeriod(Period):
-
-    period = ONE_DAY
 
 
 class Artist(Predicate):
@@ -674,8 +727,9 @@ class Humid(Weather):
         return self.get_humidity(context) > 65
 
 
-class Now(DayPeriod):
+class Now(Period):
 
+    period = ONE_DAY
     decay = HALF_HOUR
 
     def applies_to_song(self, song, exclusive):
@@ -694,11 +748,6 @@ class Now(DayPeriod):
 
     def __repr__(self):
         return '<Now %s>' % (self.peak,)
-
-
-class TimePredicate(DayPeriod):
-
-    decay = HALF_HOUR
 
 
 class TimeRange(ExclusiveTerms):
@@ -837,8 +886,9 @@ class Rain(Weather):
         return False
 
 
-class Dawn(TimePredicate):
+class Dawn(Period):
 
+    period = ONE_DAY
     decay = ONE_HOUR
 
     terms_expanded = frozenset([
@@ -847,8 +897,9 @@ class Dawn(TimePredicate):
         u'dawn.n.03', u'dawn.n.02'])
 
 
-class Dusk(TimePredicate):
+class Dusk(Period):
 
+    period = ONE_DAY
     decay = ONE_HOUR
 
     terms_expanded = frozenset([
@@ -857,8 +908,10 @@ class Dusk(TimePredicate):
         u'dusky.s.01', u'dusk.v.01'])
 
 
-class Noon(TimePredicate):
+class Noon(Period):
 
+    period = ONE_DAY
+    decay = HALF_HOUR
     terms_expanded = frozenset(['noon.n.01'])
 
     def __init__(self, now):
@@ -866,8 +919,10 @@ class Noon(TimePredicate):
             peak=now.replace(hour=12, minute=0, second=0))
 
 
-class Midnight(TimePredicate):
+class Midnight(Period):
 
+    period = ONE_DAY
+    decay = HALF_HOUR
     terms_expanded = frozenset(['midnight.n.01'])
 
     def __init__(self, now):
@@ -1073,8 +1128,9 @@ class Sunday(Day):
     day_index = 7
 
 
-class Night(DayPeriod):
+class Night(Period):
 
+    period = ONE_DAY
     decay = SIX_HOURS
     terms_expanded = frozenset([
         'night.n.01', 'night.n.02', 'night.n.03', 'night.n.07'])
@@ -1084,8 +1140,9 @@ class Night(DayPeriod):
             peak=now.replace(hour=0, minute=0, second=0, microsecond=0))
 
 
-class DayTime(DayPeriod):
+class DayTime(Period):
 
+    period = ONE_DAY
     decay = SIX_HOURS
     terms_expanded = frozenset(['day.n.04'])
 
@@ -1094,8 +1151,9 @@ class DayTime(DayPeriod):
             peak=now.replace(hour=12, minute=0, second=0, microsecond=0))
 
 
-class Evening(DayPeriod):
+class Evening(Period):
 
+    period = ONE_DAY
     decay = THREE_HOURS
     terms_expanded = frozenset([
         'evening.n.01', 'evening.n.02', 'evening.n.03'])
@@ -1104,8 +1162,9 @@ class Evening(DayPeriod):
         super(Evening, self).__init__(peak=now.replace(hour=20))
 
 
-class Morning(DayPeriod):
+class Morning(Period):
 
+    period = ONE_DAY
     decay = THREE_HOURS
     terms_expanded = frozenset(['morning.n.01'])
 
@@ -1113,8 +1172,9 @@ class Morning(DayPeriod):
         super(Morning, self).__init__(peak=now.replace(hour=9))
 
 
-class Afternoon(DayPeriod):
+class Afternoon(Period):
 
+    period = ONE_DAY
     decay = THREE_HOURS
     terms_expanded = frozenset(['afternoon.n.01'])
 
@@ -1172,7 +1232,6 @@ class Christmas(Period):
 class Kwanzaa(ExclusiveTerms):
 
     terms_expanded = frozenset(['kwanzaa.n.01'])
-    non_exclusive_terms_expanded = frozenset(['kwanzaa.n.01', 'festival.n.02'])
 
     def applies_in_context(self, context):
         context_date = context.date

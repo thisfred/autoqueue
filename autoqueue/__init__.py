@@ -34,7 +34,7 @@ from dbus.mainloop.glib import DBusGMainLoop
 from future import standard_library
 
 from autoqueue.blocking import Blocking
-from autoqueue.context import Context
+from autoqueue.context import Context, get_terms_from_song
 
 
 standard_library.install_aliases()
@@ -63,9 +63,10 @@ FIVE_MINUTES = timedelta(minutes=5)
 DEFAULT_NUMBER = 20
 DEFAULT_LENGTH = 15 * 60
 BANNED_ALBUMS = [
-    'ep', 'greatest hits', 'demo', 'the best of', 'the very best of', 'live',
-    'demos', 'self titled', 'untitled album', '[non-album tracks]', 'single',
-    'singles', '7"', 'covers', 'album', 'split 7"']
+    'ep', 'greatest hits', 'the greatest hits', 'demo', 'the best of',
+    'the very best of', 'live', 'demos', 'self titled', 'untitled album',
+    '[non-album tracks]', 'single', 'singles', '7"', 'covers', 'album',
+    'split 7"']
 
 
 def no_op(*args, **kwargs):
@@ -92,6 +93,7 @@ class Configuration(object):
         self.extra_context = None
         self.whole_albums = True
         self.southern_hemisphere = False
+        self.favor_new = True
         self.use_lastfm = True
         self.use_groupings = True
         self.location = ''
@@ -577,7 +579,11 @@ class AutoQueueBase(object):
             if rating is NotImplemented:
                 rating = THRESHOLD
             print("score: %.5f, play frequency %.5f" % (rating, frequency))
-            if frequency > 0 and random.random() > rating - frequency:
+            comparison = rating
+            if self.configuration.favor_new:
+                comparison -= frequency
+            if (frequency > 0 or not self.configuration.favor_new) and \
+                    random.random() > comparison:
                 continue
 
             if self.maybe_enqueue_album(song):
@@ -585,7 +591,7 @@ class AutoQueueBase(object):
                 return
 
             if self.allowed(song):
-                self.player.enqueue(song)
+                self.enqueue_song(song)
                 self.cache.found = True
                 return
 
@@ -599,7 +605,8 @@ class AutoQueueBase(object):
             return
         self.pick_result(results)
 
-    def log_lookup(self, number, result):
+    @staticmethod
+    def log_lookup(number, result):
         look_for = str(result.get('artist', ''))
         if look_for:
             title = str(result.get('title', ''))
@@ -626,6 +633,14 @@ class AutoQueueBase(object):
 
         return False
 
+    def enqueue_song(self, song):
+        if not self.cache.previous_terms:
+            if self.cache.last_song:
+                self.cache.previous_terms.append(
+                    get_terms_from_song(self.cache.last_song))
+        self.cache.previous_terms.append(get_terms_from_song(song))
+        self.player.enqueue(song)
+
     def enqueue_album(self, album, album_artist, album_id):
         """Try to enqueue whole album."""
         search = self.player.construct_album_search(
@@ -635,7 +650,7 @@ class AutoQueueBase(object):
                 song)for song in self.player.search(search)])
         if songs and all([self.allowed(song[2]) for song in songs]):
             for _, _, song in songs:
-                self.player.enqueue(song)
+                self.enqueue_song(song)
             return True
         return False
 

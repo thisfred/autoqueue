@@ -54,7 +54,10 @@ BOOL_SETTINGS = {
         'label': 'southern hemisphere'},
     'whole_albums': {
         'value': True,
-        'label': 'queue whole albums'}}
+        'label': 'queue whole albums'},
+    'favor_new': {
+        'value': True,
+        'label': 'favor tracks that have never been played'}}
 
 STR_SETTINGS = {
     'restrictions': {
