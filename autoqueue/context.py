@@ -172,8 +172,8 @@ class Context(object):
 
     @staticmethod
     def string_to_datetime(time_string):
-        time_string, ampm = time_string.partition()
-        hour, minute = time_string.partition(':')
+        time_string, ampm = time_string.split(' ')
+        hour, minute = time_string.split(':')
         hour = int(hour)
         minute = int(minute)
         if ampm == 'am':
@@ -285,7 +285,7 @@ class Context(object):
         for name_date in self.configuration.birthdays.split(','):
             if ':' not in name_date:
                 continue
-            name, date_string = name_date.strip().partition(':')
+            name, date_string = name_date.strip().split(':')
             birth_date = self.get_date(date_string)
             age = self.date.year - birth_date.year
             self.predicates.append(
