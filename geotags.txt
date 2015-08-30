@@ -1,8 +1,12 @@
 artist:'s-hertogenbosch,artist:the netherlands,artist:geohash:u15y08em4zw6
 artist:aalborg,artist:denmark,artist:geohash:u4ph99th74fc
+artist:aalst,artist:belgium,artist:geohash:u14cgb0upmrj
 artist:abakaliki,artist:nigeria,artist:geohash:s1ju02fnrdvf
 artist:abbotsford,artist:british columbia,artist:canada,artist:geohash:c29p0978zndx
 artist:abilene,artist:texas,artist:geohash:9vc0d5k6bw3j
+artist:accra,artist:ghana,artist:geohash:ebzze6q75dvp
+artist:ada,artist:oklahoma,artist:geohash:9y5mb2828wf9
+artist:addis ababa,artist:ethiopia,artist:geohash:scee3ecee6j8
 artist:adelaide,artist:australia,artist:geohash:r1f93cq5v6kp
 artist:akron,artist:ohio,artist:geohash:dpq19j0efhe4
 artist:alaska,artist:geohash:bemk4dv748tq
@@ -14,6 +18,8 @@ artist:aledo,artist:texas,artist:geohash:9vfd4bp3mmru
 artist:alexander city,artist:alabama,artist:djfgk7r39ckj
 artist:alexandria,artist:virginia,artist:geohash:dqchy8pvvs7r
 artist:algiers,artist:new orleans,artist:louisiana,artist:geohash:9vrfr4pcvdps
+artist:alhambra,artist:california,artist:geohash:9q5czu2twyz7
+artist:allen,artist:texas,artist:geohash:9vgk23s5ge3k
 artist:almelo,artist:the netherlands,artist:geohash:u1k9zdn8be71
 artist:alpena,artist:michigan,artist:geohash:f0h8m7np5re9
 artist:alpine,artist:texas,artist:geohash:9tqk9p109mqz
@@ -24,17 +30,22 @@ artist:ames,artist:iowa,artist:geohash:9zmrjs5ypbh7
 artist:amityville,artist:new york,artist:geohash:dr5z3khcds0r
 artist:amsterdam,artist:the netherlands,artist:geohash:u173zt01fq2b
 artist:anaheim,artist:california,artist:geohash:9qh0mremdk7b
+artist:anchor point,artist:alaska,artist:geohash:bdsh46hkcx9w
 artist:anchorage,artist:alaska,artist:geohash:bdvkkbnhuvfd
 artist:andros,artist:bahamas,artist:geohash:dk2dfpyw3r7h
 artist:angered,artist:sweden,artist:geohash:u628cf4mkuzq
 artist:ann arbor,artist:michigan,artist:geohash:dps2w306fqhv
 artist:anson,artist:texas,artist:geohash:9vbfqfcwvqjw
 artist:antarctica,artist:geohash:h00000000000
+artist:ardmore,artist:oklahoma,artist:geohash:9y4fmy2xqkgv
 artist:arendal,artist:norway,artist:geohash:u4qhxy75xh6d
 artist:arlington heights,artist:illinois,artist:geohash:dp3rmznm4hb0
+artist:arlington,artist:massachusetts,artist:geohash:drt3kc3nghbu
+artist:arlington,artist:virginia,artist:geohash:dqcjjmgqj95s
 artist:arnaudville,artist:louisiana,artist:geohash:9vqsun2y93rx
 artist:asbury park,artist:new jersey,artist:geohash:dr5kgf77k951
 artist:asheville,artist:north carolina,artist:geohash:dnm63mhst8tp
+artist:asmara,artist:eritrea,artist:geohash:sfexjzq7hkmn
 artist:astoria,artist:queens,artist:new york city,artist:new york,artist:geohash:dr5ryqb8k56b
 artist:athens,artist:alabama,artist:geohash:dn4juvqbc44r
 artist:athens,artist:georgia,artist:geohash:dnh9ns6j5d8w
@@ -56,6 +67,7 @@ artist:baltimore,artist:maryland,artist:geohash:dqcx2x36n203
 artist:bamako,artist:mali,artist:geohash:ef4rcyyed6zt
 artist:banbury,artist:england,artist:geohash:gcr01t7jkcy1
 artist:barcelona,artist:catalonia,artist:spain,artist:geohash:sp3e3ttg7k7h
+artist:barcelona,artist:venezuela,artist:geohash:d9ccx3dvb77t
 artist:barking,artist:london,artist:england,artist:geohash:u10j0n842025
 artist:barretville,artist:tennessee,artist:geohash:dn21jrss6x81
 artist:barry,artist:wales,artist:geohash:gcjsmtfzg6x3
@@ -82,6 +94,7 @@ artist:bethesda,artist:maryland,artist:geohash:dqcjv0zyrwcv
 artist:bethlehem,artist:pennsylvania,artist:geohash:dr4rhgc0npzz
 artist:bethnal green,artist:london,artist:england,artist:geohash:u10j0h212n0n
 artist:beverly hills,artist:california,artist:geohash:9q5ccfb1uyp8
+artist:beyla,artist:guinea,artist:geohash:ec9c7sc2hf86
 artist:biatorbágy,artist:hungary,artist:geohash:u2mqh3u5dznw
 artist:billinge higher end,artist:wigan,artist:england,artist:geohash:gcw06pweyd70
 artist:birmingham,artist:alabama,artist:geohash:djfq8x09q2zq
@@ -96,15 +109,19 @@ artist:bloomington,artist:illinois,artist:geohash:dp0wqcuv6edn
 artist:bloomington,artist:indiana,artist:geohash:dnfqycr2kr29
 artist:bluffton,artist:ohio,artist:geohash:dpk2duxbnmrj
 artist:boca raton,artist:florida,artist:geohash:dhxn122bq9r5
+artist:bodø,artist:norway,artist:geohash:u7fnxxvy2m40
 artist:boise,artist:idaho,artist:geohash:9rv25u1txb01
 artist:bologna,artist:italy,artist:geohash:srbj4q3ffx35
+artist:bolton,artist:england,artist:geohash:gcw2b9x62pn7
 artist:bolton,artist:mississippi,artist:geohash:9vz8j93n15z4
 artist:bon aqua,artist:tennessee,artist:geohash:dn3usc47qep1
 artist:bordeaux,artist:france,artist:geohash:ezzx4fcevjbd
+artist:borgerhout,artist:antwerp,artist:belgium,artist:geohash:u155kbsm85u8
 artist:borlänge,artist:sweden,artist:geohash:u6fbp703vuvg
 artist:boston,artist:massachusetts,artist:geohash:drt2yzj19cgn
 artist:bothell,artist:washington,artist:geohash:c23pg0t6nh4j
 artist:boulder,artist:colorado,artist:geohash:9xj5syvbeytw
+artist:boulogne-sur-seine,artist:france,artist:geohash:u09tffpv8v05
 artist:bournemouth,artist:england,artist:geohash:gcn8t1r12v63
 artist:bowling green,artist:kentucky,artist:geohash:dndd2um1f6qs
 artist:bozeman,artist:montana,artist:geohash:c815c53uk4vz
@@ -124,8 +141,10 @@ artist:brixton,artist:london,artist:england,artist:geohash:gcpuv8dcdn88
 artist:brooklyn,artist:new york city,artist:new york,artist:geohash:dr5rkrcute9
 artist:broughton,artist:england,artist:geohash:gcw2ke56gsqc
 artist:brownsville,artist:texas,artist:geohash:9udet8myzf4j
+artist:broxbourne,artist:england,artist:geohash:u10n2h8n8jbp
 artist:brunswick,artist:maryland,artist:geohash:dqbz9scup81f
 artist:brussels,artist:belgium,artist:geohash:u1516bzwdr51
+artist:buckinghamshire,artist:england,artist:geohash:gcpqv5cpjctg
 artist:bucks county,artist:pennsylvania,artist:geohash:dr4t6zdtd1h9
 artist:buenos aires,artist:argentina,artist:geohash:69y7pkxubx1y
 artist:buffalo,artist:new york,artist:geohash:dpxujdxd4gc5
@@ -134,8 +153,10 @@ artist:burlington,artist:north carolina,artist:geohash:dnrt21vtb7gc
 artist:burlington,artist:vermont,artist:geohash:drgvn08dw01y
 artist:burnaby,artist:british columbia,artist:canada,artist:geohash:c2b83bdrhurk
 artist:burton-upon-trent,artist:england,artist:geohash:gcqu6ez5ru4t
+artist:bushwick,artist:brooklyn,artist:new york city,artist:new york,artist:geohash:dr5rtbnhew89
 artist:cadillac,artist:michigan,artist:geohash:dpg78xmwgvbe
 artist:caen,artist:france,artist:geohash:gbxxz8fw62kp
+artist:cagliari,artist:sardinia,artist:italy,artist:geohash:snyrmcnpb631
 artist:calgary,artist:alberta,artist:canada,artist:geohash:c3nfkm75y18r
 artist:calhoun,artist:georgia,artist:geohash:dn5s70dc061k
 artist:camberley,artist:england,artist:geohash:gcpkp178n1sd
@@ -144,6 +165,7 @@ artist:cambridge,artist:massachusetts,artist:geohash:drt3jcfu5vw7
 artist:camden,artist:london,artist:england,artist:geohash:gcpvhwz8hfgb
 artist:canberra,artist:australia,artist:geohash:r3dp1kmnfubw
 artist:canton,artist:ohio,artist:geohash:dpq0hhrfmem4
+artist:cape cod,artist:massachusetts,artist:geohash:drqj4e9gt7nh
 artist:caracas,artist:venezuela,artist:geohash:d9b7tr2ybtue
 artist:cardiff,artist:wales,artist:geohash:gcjszs3bnuyg
 artist:cardiff-by-the-sea,artist:encinitas,artist:california,artist:geohash:9mueg5rbm36v
@@ -154,6 +176,7 @@ artist:castle cary,artist:england,artist:geohash:gcn4wu33h9xp
 artist:castle donington,artist:england,artist:geohash:gcrh9s1bvq4s
 artist:cayce,artist:mississippi,artist:geohash:dn0qbeqjf13w
 artist:center point,artist:alabama,artist:geohash:djfr7ec5pkms
+artist:chambéry,artist:france,artist:geohash:u0h5nxbb6ztw
 artist:champaign,artist:illinois,artist:geohash:dp1hpq9wz1yp
 artist:chapel hill,artist:north carolina,artist:geohash:dnru3t3wvfg8
 artist:chapelton,artist:jamaica,artist:geohash:d71ncezgk3zv
@@ -164,10 +187,14 @@ artist:charlotte,artist:north carolina,artist:geohash:dnq82kgevf3f
 artist:charlottesville,artist:virginia,artist:geohash:dqb0q5jk4z0j
 artist:chatham,artist:england,artist:geohash:u10khjyrw27e
 artist:chattanooga,artist:tennessee,artist:geohash:dn5r7ey71tph
+artist:chelmsford,artist:england,artist:geohash:u10q6fm2shhc
 artist:cheltenham,artist:england,artist:geohash:gcnx0vp474m2
+artist:chennai,artist:madras,artist:india,artist:geohash:tf346t8ruyhc
 artist:cherry hill,artist:arkansas,artist:geohash:9yjzn9g12jeb
 artist:cheshunt,artist:england,artist:geohash:u10n0h01bp25
+artist:chester,artist:england,artist:geohash:gcmyw4yruydf
 artist:chester,artist:pennsylvania,artist:geohash:dr46svgnyux1
+artist:chevy chase,artist:maryland,artist:geohash:dqcjvbjnpnq3
 artist:chicago,artist:illinois,artist:geohash:dp3wh8jvvgsk
 artist:chichester,artist:england,artist:geohash:gcp3nq885y1m
 artist:chislehurst,artist:london,artist:england,artist:geohash:u10h2p20852j
@@ -196,6 +223,7 @@ artist:columbia,artist:south carolina,artist:geohash:dnn3x4uvvd7u
 artist:columbus,artist:georgia,artist:geohash:djg8g5h2uj4j
 artist:columbus,artist:ohio,artist:geohash:dphgrwtru1qp
 artist:como,artist:mississippi,artist:geohash:dn0h36fwtxxd
+artist:compton,artist:california,artist:geohash:9q5bvdxnmudw
 artist:consort,artist:alberta,artist:canada,artist:geohash:c91pzmq5j9dc
 artist:coopersville,artist:michigan,artist:geohash:dpduue5stcey
 artist:copenhagen,artist:denmark,artist:geohash:u3butzxbz7k6
@@ -210,6 +238,7 @@ artist:cumberland gap,artist:geohash:dns2pzx1w6zw
 artist:cumberland,artist:maryland,artist:geohash:dppcx9wtn380
 artist:cwmaman,artist:wales,artist:geohash:gcjw1bevn33v
 artist:częstochowa,artist:poland,artist:geohash:u3j8gpb76wk5
+artist:daisy,artist:kentucky,artist:geohash:dnsgjhjqtkmj
 artist:dallas,artist:texas,artist:geohash:9vg4mqdv44jg
 artist:dana point,artist:california,artist:geohash:9muq3swbsw2e
 artist:dar es salaam,artist:tanzania,artist:geohash:kygcmfj70h05
@@ -218,6 +247,7 @@ artist:darliston,artist:westmoreland parish,artist:jamaica,artist:geohash:d70x9z
 artist:dartmouth,artist:nova scotia,artist:canada,artist:geohash:dxfy1e24jq1x
 artist:dayton,artist:ohio,artist:geohash:dph4hjvrxcwc
 artist:dearborn,artist:michigan,artist:geohash:dpsbdrjgsb1d
+artist:decatur,artist:georgia,artist:geohash:dnh01gbhx7hy
 artist:deep gap,artist:north carolina,artist:geohash:dnqn1hsx7xcy
 artist:deerfield,artist:illinois,artist:geohash:dp3xbus86702
 artist:delavan,artist:illinois,artist:geohash:dp0mdm6cjkdp
@@ -232,6 +262,7 @@ artist:derbyshire,artist:england,artist:geohash:gcqy78duj71t
 artist:dereham,artist:england,artist:geohash:u12etqsb1cww
 artist:derry,artist:londonderry,artist:northern ireland,artist:geohash:gcfbcewvv0pt
 artist:derry,artist:new hampshire,artist:geohash:drt7byjj7702
+artist:des moines,artist:iowa,artist:geohash:9zmkte7khmpn
 artist:detroit,artist:michigan,artist:geohash:dpsby4py5yfe
 artist:devon,artist:england,artist:geohash:gcj23t8uvt48
 artist:dire dawa,artist:ethiopia,artist:geohash:scty8ewkh19w
@@ -244,6 +275,7 @@ artist:duncan,artist:british columbia,artist:canada,artist:geohash:c28j2zysmzt5
 artist:dunedin,artist:new zealand,artist:geohash:pzc5pf4r3cw9
 artist:dunfermline,artist:scotland,artist:geohash:gcvwcxxdde2p
 artist:durban,artist:south africa,artist:geohash:kdwjfxcuvqyp
+artist:durgerdam,artist:the netherlands,artist:geohash:u179cwbz3tc7
 artist:durham,artist:north carolina,artist:geohash:dnrusrt8b7qf
 artist:düsseldorf,artist:germany,artist:geohash:u1hg6qerz17x
 artist:eagle rock,artist:los angeles,artist:california,artist:geohash:9q5fjyzckn3e
@@ -258,6 +290,7 @@ artist:edinburgh,artist:scotland,artist:geohash:gcvwr3vyjt8h
 artist:edmonton,artist:alberta,artist:canada,artist:geohash:c3x291ry629f
 artist:egan,artist:louisiana,artist:geohash:9vqhp03fn585
 artist:ehime,artist:japan,artist:geohash:wyn2qxnm2yru
+artist:el vendrell,artist:catalonia,artist:spain,artist:geohash:sp346zvt98g8
 artist:elaine,artist:arkansas,artist:geohash:9yp7htdn0kwu
 artist:elizabethtown,artist:kentucky,artist:geohash:dndyqp1f3tk7
 artist:elkmont,artist:alabama,artist:geohash:dn4nsyc4zhb4
@@ -271,6 +304,7 @@ artist:enniskillen,artist:northern ireland,artist:geohash:gcdt4jhwx470
 artist:enon,artist:louisiana,artist:geohash:9vryy1fttyup
 artist:enville,artist:oklahoma,artist:geohash:9y513488vk4z
 artist:epsom,artist:england,artist:geohash:gcpu1cmtfkn2
+artist:erick,artist:oklahoma,artist:geohash:9y2br6mn4ucg
 artist:esmont,artist:virginia,artist:geohash:dq8p5nzzyfnc
 artist:estevan,artist:saskatchewan,artist:canada,artist:geohash:c8wz83xb3stu
 artist:eugene,artist:oregon,artist:geohash:9rb6x57j0v8c
@@ -289,10 +323,12 @@ artist:farmingville,artist:new york,artist:drk03g5kb9b4
 artist:fayetteville,artist:new york,artist:geohash:dr9uy3p7yd3q
 artist:fayetteville,artist:north carolina,artist:geohash:dnpzmj4g85de
 artist:ferndale,artist:michigan,artist:geohash:dpscs1xnst66
+artist:fitchburg,artist:massachusetts,artist:geohash:drsfq04cfh85
 artist:fitzgerald,artist:georgia,artist:geohash:djsu3mws980u
 artist:flatwoods,artist:kentucky,artist:geohash:dnv5jsvt160h
 artist:flint,artist:michigan,artist:geohash:dpskxtdz3tj5
 artist:florence,artist:alabama,artist:geohash:dn1wj4vfv4r0
+artist:florence,artist:italy,artist:geohash:srb104802hb4
 artist:florissant,artist:missouri,artist:geohash:9yzu8wfvmypb
 artist:folkestone,artist:england,artist:geohash:u10fde103u89
 artist:forest city,artist:north carolina,artist:geohash:dnmbcpb4dsrq
@@ -311,12 +347,15 @@ artist:fullerton,artist:california,artist:geohash:9qh0srxj21y2
 artist:funchal,artist:portugal,artist:geohash:etgcxpc8j14u
 artist:fyzabad,artist:trinidad and tobago,artist:geohash:d9u1zmudjnce
 artist:gainesville,artist:florida,artist:geohash:djm2wtuz2sug
+artist:galveston,artist:texas,artist:geohash:9vhwd4myvfwn
 artist:galway,artist:ireland,artist:geohash:gc3x41fg9d57
 artist:gardena,artist:california,artist:geohash:9q5bgf4usgnb
 artist:garnant,artist:wales,artist:geohash:gcjnxnq8sb9y
 artist:gary,artist:indiana,artist:geohash:dp3uskjpet8h
 artist:garður,artist:iceland,artist:geohash:g7rukyyzmh7d
 artist:gautier,artist:mississippi,artist:geohash:dj2uyfg611nr
+artist:geleen,artist:the netherlands,artist:geohash:u1h1uw5zgwcx
+artist:geneva,artist:switzerland,artist:geohash:u0hqgfqq92hq
 artist:genk,artist:belgium,artist:geohash:u15cvnhyr735
 artist:georgetown,artist:washington,artist:d.c.,artist:geohash:dqcjq74zzq54
 artist:ghent,artist:belgium,artist:geohash:u14dkvqebcwz
@@ -339,10 +378,12 @@ artist:greenwich,artist:new york,artist:geohash:dretrgzs0tkp
 artist:greenwood,artist:mississippi,artist:geohash:9vzyevfh51fq
 artist:grenada,artist:mississippi,artist:geohash:dn00hke1thqd
 artist:grey lynn,artist:auckland,artist:new zealand,artist:geohash:rckq23bfnx85
+artist:greysouthen,artist:england,artist:geohash:gctwcsq7dvs3
 artist:grimsby,artist:ontario,artist:canada,artist:geohash:dpxmvb36nxsv
 artist:grosse pointe,artist:michigan,artist:geohash:dpt115tuv9gv
 artist:guelph,artist:ontario,artist:canada,artist:geohash:dpwzvb59pkqv
 artist:gulfport,artist:mississippi,artist:geohash:dj2svn2y81mx
+artist:guthrie,artist:kentucky,artist:geohash:dnd02rkphm5u
 artist:gävle,artist:sweden,artist:geohash:u6u1nj6pvgcq
 artist:haarlem,artist:the netherlands,artist:geohash:u17612jgh3p2
 artist:hackberry,artist:louisiana,artist:geohash:9vmdddy5qup9
@@ -351,12 +392,15 @@ artist:hackney,artist:london,artist:england,artist:geohash:u10j0j252j81
 artist:hagerstown,artist:maryland,artist:geohash:dr09x2wpbtrt
 artist:halifax,artist:nova scotia,artist:canada,artist:geohash:dxfvcruspm09
 artist:hall in tirol,artist:austria,artist:geohash:u22hvxwj3kje
+artist:hamburg,artist:germany,artist:geohash:u1x0ex6b3781
 artist:hamilton,artist:ontario,artist:canada,artist:geohash:dpxnn96veb2e
 artist:hamlet,artist:north carolina,artist:geohash:dnpq6ppv8vpb
 artist:hammersmith,artist:london,artist:england,artist:geohash:gcpufvvxq19s
 artist:hampstead,artist:england,artist:geohash:gcpvk11h2hvc
 artist:handsworth,artist:sheffield,artist:england,artist:geohash:gcrp85swc9h6
+artist:hannibal,artist:missouri,artist:geohash:9zp1beuvtcjt
 artist:harlem,artist:new york city,artist:new york,artist:geohash:dr72jm03y51k
+artist:harrisburg,artist:pennsylvania,artist:geohash:dr1m4duujsq8
 artist:harrow,artist:london,artist:england,artist:geohash:gcpv2neb0rcr
 artist:harstad,artist:norway,artist:geohash:uk5z2s8m1ce6
 artist:harvard university,artist:cambridge,artist:massachusetts,artist:geohash:drt3jdn1p0gh
@@ -378,7 +422,9 @@ artist:hershey,artist:pennsylvania,artist:geohash:dr1mpu2q79mp
 artist:hilton head island,artist:south carolina,artist:geohash:djwx49uxw7tt
 artist:hinckley,artist:england,artist:geohash:gcr4bube62jy
 artist:hinds county,artist:mississippi,artist:geohash:9vxxtbz857b5
+artist:hinton,artist:alberta,artist:canada,artist:geohash:c3krug0xfud9
 artist:hoboken,artist:new jersey,artist:geohash:dr5rg6kczyx4
+artist:hollywood,artist:florida,artist:geohash:dhwup943e46z
 artist:hollywood,artist:los angeles,artist:california,artist:geohash:9q5cgr8qckxx
 artist:homer,artist:louisiana,artist:geohash:9vvfd3hz95n2
 artist:hong kong,artist:geohash:wecnyetfuv7c
@@ -413,6 +459,7 @@ artist:jamaica,artist:queens,artist:new york city,artist:new york,artist:geohash
 artist:jasper,artist:alabama,artist:geohash:dn1btby9yqwp
 artist:jefferson county,artist:alabama,artist:geohash:djfpp39t5gn2
 artist:jersey city,artist:new jersey,artist:geohash:dr5rd7z0hxeq
+artist:jimma,artist:ethiopia,artist:geohash:sc65w5tjwf7d
 artist:joensuu,artist:finland,artist:geohash:uejhhgzr3jzc
 artist:johannesburg,artist:south africa,artist:geohash:ke7fyjwhhcd6
 artist:johnson city,artist:tennessee,artist:geohash:dnmqtwq3j81t
@@ -420,6 +467,7 @@ artist:joliet,artist:illinois,artist:geohash:dp3k4nddz0tk
 artist:juazeiro,artist:bahia,artist:brazil,artist:geohash:7n74q74z0bgy
 artist:jönköping,artist:sweden,artist:geohash:u660dpp3hfeb
 artist:jōetsu,artist:niigata,artist:japan,artist:geohash:xnd73dfqqjgy
+artist:kansas city,artist:kansas,artist:geohash:9yuwmx4ub5pe
 artist:kansas city,artist:missouri,artist:geohash:9yuwrvfhmh7q
 artist:kansas,artist:geohash:9yf71bwwf2pt
 artist:kasilof,artist:alaska,artist:geohash:bdsrnxen3rn2
@@ -446,9 +494,12 @@ artist:knowle west,artist:bristol,artist:england,artist:gcnht1f40thp
 artist:knowlton,artist:new jersey,artist:geohash:dr68gfvwjrk0
 artist:knoxville,artist:tennessee,artist:geohash:dnkk9uehs7ye
 artist:kristiansund,artist:norway,artist:geohash:u5jrpbghn28b
+artist:kyushu,artist:japan,artist:geohash:wvv5szrqcjzg
 artist:kópavogur,artist:iceland,artist:geohash:ge2kwefkc499
 artist:lackawanna,artist:new york,artist:geohash:dpxgw70cr6vk
+artist:ladbroke grove,artist:london,artist:england,artist:geohash:gcpv54r92esh
 artist:lafayette,artist:louisiana,artist:geohash:9vqecsz2gfvp
+artist:lagos,artist:nigeria,artist:geohash:s14ktq8zb8ud
 artist:laguna beach,artist:california,artist:geohash:9muqb05n7xbq
 artist:lake in the hills,artist:illinois,artist:geohash:dp3pvxg74h9q
 artist:lakeland,artist:florida,artist:geohash:dhvxwbxr73yy
@@ -469,16 +520,18 @@ artist:leicester,artist:england,artist:geohash:gcr5qjwerkms
 artist:leiden,artist:the netherlands,artist:geohash:u170y08sv5x3
 artist:leipzig,artist:germany,artist:geohash:u30u1bcq2df6
 artist:leksand,artist:sweden,artist:geohash:u6f9t24tm3fe
+artist:lenow,artist:shelby county,artist:tennessee,artist:geohash:dn20njkpwd24
 artist:lethbridge,artist:alberta,artist:canada,artist:geohash:c2zf8qt9t8ns
 artist:lettsworth,artist:louisiana,artist:geohash:9vqzcpq9m551
 artist:levittown,artist:long island,artist:new york,artist:geohash:dr5xxjwv4fwg
 artist:lexington,artist:kentucky,artist:geohash:dngbm70g4q0b
 artist:libertyville,artist:illinois,artist:geohash:dp92w3sgry23
+artist:lille,artist:belgium,artist:geohash:u140j8dbr9cy
 artist:limerick,artist:ireland,artist:geohash:gc3geg2mdgkx
 artist:limestone county,artist:texas,artist:geohash:9ve76m8tffhk
 artist:lincoln,artist:massachusetts,artist:geohash:drt337msqh2z
 artist:lincoln,artist:nebraska,artist:geohash:9z70pvrddpp9
-artist:linköping,artist:swedend,artist:geohash:u67h7d3bzke9
+artist:linköping,artist:sweden,artist:geohash:u67h7d3bzke9
 artist:lisbon,artist:portugal,artist:geohash:eycs0p8uexbx
 artist:liss,artist:england,artist:geohash:gcp67snd6w5y
 artist:lititz,artist:pennsylvania,artist:geohash:dr1srtvw5qxn
@@ -501,7 +554,9 @@ artist:louisville,artist:kentucky,artist:geohash:dng1874w7ucc
 artist:lower east side,artist:manhattan,artist:new york city,artist:new york,artist:geohash:dr5rsk67482d
 artist:lowestoft,artist:england,artist:geohash:u134xcdq1vnd
 artist:lubbock,artist:texas,artist:geohash:9tzwcwdu4228
+artist:lubefu,artist:congo,artist:democratic republic of congo,artist:geohash:kx1m5t7emsux
 artist:lucerne,artist:switzerland,artist:geohash:u0mgsv5yh58w
+artist:luckenbach,artist:texas,artist:geohash:9v3g8wrhn5ng
 artist:lumberton,artist:texas,artist:geohash:9vmh0mk5ztg3
 artist:lund,artist:sweden,artist:geohash:u3cku7gun296
 artist:luton,artist:england,artist:geohash:gcpxq0h7qt5r
@@ -512,6 +567,7 @@ artist:maces spring,artist:virginia,artist:geohash:dnt2sguphjem
 artist:madison,artist:wisconsin,artist:geohash:dp8mj8hct087
 artist:madrid,artist:spain,artist:geohash:ezjmu4tgh1gg
 artist:magnolia,artist:texas,artist:geohash:9v7gv5st4rfd
+artist:magoffin county,artist:kentucky,artist:geohash:dnsymzjd3tr5
 artist:maleny,artist:australia,artist:geohash:r7hxwpmbz5se
 artist:malibu,artist:california,artist:geohash:9q599fbzh7y1
 artist:malmö,artist:sweden,artist:geohash:u3ck2dsrkytd
@@ -528,14 +584,18 @@ artist:mansfield,artist:ohio,artist:geohash:dpjrf631yq9d
 artist:marghera,artist:italy,artist:u20dtczvkyp4
 artist:marietta,artist:georgia,artist:geohash:dn5chjp2w202
 artist:marina del rey,artist:california,artist:geohash:9q5c29c2d5rn
+artist:marseille,artist:france,artist:geohash:spey61y7f1fn
 artist:martinsville,artist:virginia,artist:geohash:dnx0ww9032tx
 artist:maryhill,artist:glasgow,artist:scotland,artist:geohash:gcuvyr0ytprm
+artist:massapequa,artist:new york,artist:geohash:dr5z25gfq0eg
 artist:massillon,artist:ohio,artist:geohash:dpq00fvcvcyt
 artist:mataderos,artist:buenos aires,artist:argentina,artist:geohash:69y6uc1s50yk
 artist:matala,artist:crete,artist:greece,artist:geohash:sw1x55w3ubcs
 artist:matawan,artist:new jersey,artist:geohash:dr5jystuxfxu
+artist:maumee,artist:ohio,artist:geohash:dpks2rwn53r1
 artist:maurrin,artist:france,artist:geohash:ezz9rd1w9gbp
 artist:mcallen,artist:texas,artist:geohash:9udjhsd3w1p5
+artist:mccomb,artist:mississippi,artist:geohash:9vx9trbs5pex
 artist:mcminnville,artist:tennessee,artist:geohash:dn750093fhfs
 artist:melbourne,artist:australia,artist:geohash:r1r0fsnzu010
 artist:memphis,artist:tennessee,artist:geohash:dn0pb8vj6pm3
@@ -554,6 +614,7 @@ artist:milwaukee,artist:wisconsin,artist:geohash:dp9kythb2mwu
 artist:mindelo,artist:cape verde,artist:geohash:e7n0p6h216s9
 artist:minneapolis,artist:minnesota,artist:geohash:9zvxvsvqcjh9
 artist:minneapolis-saint paul,artist:minnesota,artist:geohash:9zvxxnvudx74
+artist:mission beach,artist:san diego,artist:california,artist:geohash:9mud7yg269z0
 artist:mission district,artist:san francisco,artist:california,artist:geohash:9q8yy3brznpv
 artist:mississauga,artist:ontario,artist:canada,artist:geohash:dpz2590skmp6
 artist:missoula,artist:montana,artist:geohash:c2qfte51ze5m
@@ -565,6 +626,7 @@ artist:monterrey,artist:mexico,artist:geohash:9u8dj87z0te2
 artist:montesano,artist:washington,artist:geohash:c22573wb740g
 artist:montgomery,artist:alabama,artist:geohash:djf8hem2meyp
 artist:montpelier,artist:vermont,artist:geohash:dru7sxqwfjg7
+artist:montpellier,artist:france,artist:geohash:spfb05r39r3u
 artist:montreal,artist:quebec,artist:canada,artist:geohash:f25dvgn2sqv0
 artist:montville,artist:new jersey,artist:geohash:dr70u002y1fv
 artist:morden,artist:manitoba,artist:canada,artist:geohash:cbdpzej7g6gx
@@ -581,6 +643,7 @@ artist:munich,artist:germany,artist:geohash:u281z4qsfzs5
 artist:murfreesboro,artist:tennessee,artist:geohash:dn6efje4ytms
 artist:muscle shoals,artist:alabama,artist:geohash:dn1ttqpn22z9
 artist:nacka,artist:stockholm,artist:sweden,artist:geohash:u6sfwftjeqy7
+artist:nacogdoches,artist:texas,artist:geohash:9vsey4jr5ezx
 artist:nancy,artist:france,artist:geohash:u0smh8rkz8un
 artist:napa,artist:california,artist:geohash:9qc1cj0tjmdz
 artist:nashua,artist:new hampshire,artist:geohash:drt5jzc0mz8q
@@ -614,12 +677,16 @@ artist:norfolk,artist:virginia,artist:geohash:dq9f402z5m9b
 artist:norman,artist:oklahoma,artist:geohash:9y68qew777vg
 artist:north gower,artist:ontario,artist:canada,artist:geohash:f240v02b9z14
 artist:north london,artist:london,artist:england,artist:geohash:u10h0jb18jbj
+artist:north shore,artist:oahu,artist:hawaii,artist:geohash:87zdfxtxfs0v
+artist:north wales,artist:pennsylvania,artist:geohash:dr4kz04mj6ef
 artist:northampton,artist:england,artist:geohash:gcr35t7xc1cj
 artist:northampton,artist:massachusetts,artist:geohash:drs2ff9cs31x
 artist:norwich,artist:england,artist:geohash:u12gms8nq82f
 artist:notre-dame-de-grâce,artist:montreal,artist:quebec,artist:canada,artist:geohash:f25dsyg9q08s
 artist:nottingham,artist:england,artist:geohash:gcrjnpq8p7mt
 artist:novi sad,artist:serbia,artist:geohash:u2n17tw26e2u
+artist:nuremberg,artist:germany,artist:geohash:u0zck4nehkh5
+artist:nutbush,artist:tennessee,artist:geohash:dn27j6xh1rcq
 artist:nutley,artist:new jersey,artist:geohash:dr720x1jn17v
 artist:oahu,artist:hawaii,artist:geohash:87zdj5bh3sbb
 artist:oak hill,artist:austin,artist:texas,artist:9v6kj0htr0qd
@@ -636,6 +703,7 @@ artist:old town,artist:maine,artist:geohash:drzptjxkk0ug
 artist:oldham,artist:england,artist:geohash:gcw2xg6w8xsg
 artist:olympia,artist:washington,artist:geohash:c22eeeb42jxg
 artist:omaha,artist:nebraska,artist:geohash:9z7dxmqftv7d
+artist:oosterland,artist:the netherlands,artist:geohash:u17t453ntzf7
 artist:opelika,artist:alabama,artist:geohash:djg38zjrcer8
 artist:orange county,artist:california,artist:geohash:9mupxc7jznft
 artist:orange mound,artist:memphis,artist:tennessee,artist:geohash:dn0p8xhmu2q2
@@ -643,6 +711,7 @@ artist:orange,artist:texas,artist:geohash:9vm763nwt59c
 artist:orangeburg,artist:south carolina,artist:geohash:djyqxcvvvdvn
 artist:oregon,artist:geohash:9rf63cywd6rx
 artist:orlando,artist:florida,artist:geohash:djn1tuzynx4w
+artist:oshawa,artist:ontario,artist:canada,artist:geohash:dpzctxz0jc4s
 artist:oslo,artist:norway,artist:geohash:u4xth9efj1uz
 artist:osu,artist:accra,artist:ghana,artist:geohash:ebzzs509dpyw
 artist:oswestry,artist:england,artist:geohash:gcmudwb69kct
@@ -650,6 +719,7 @@ artist:ottawa,artist:illinois,artist:geohash:dp2g4rwr9tz9
 artist:ottawa,artist:ontario,artist:canada,artist:geohash:f244mgc5682e
 artist:ottumwa,artist:iowa,artist:geohash:9zq3341wkgub
 artist:outremont,artist:quebec,artist:canada,artist:geohash:f25duy1cz3dw
+artist:owatonna,artist:minnesota,artist:geohash:9zvdy96csg05
 artist:oxford,artist:england,artist:geohash:gcpn7mhhgtsd
 artist:oxford,artist:mississippi,artist:geohash:dn076ycpfkmj
 artist:padua,artist:italy,artist:geohash:u206q5c532k5
@@ -663,7 +733,9 @@ artist:palo alto,artist:california,artist:geohash:9q9hutvb9n2w
 artist:paradise valley,artist:arizona,artist:geohash:9tbqu6eu5j3t
 artist:paragould,artist:arkansas,artist:geohash:9yrthecwvvw2
 artist:paris,artist:france,artist:geohash:u09tvqpfcsgx
+artist:paris,artist:texas,artist:geohash:9vup9b0636m1
 artist:pasadena,artist:california,artist:geohash:9q5frcfvy0w4
+artist:patterson,artist:new york,artist:geohash:dr7evsf2b4fp
 artist:pauls valley,artist:oklahoma,artist:geohash:9y4vesqpkb71
 artist:peckham,artist:london,artist:england,artist:geohash:u10hb4048h2h
 artist:pendle hill,artist:england,artist:geohash:gcw67wt1wj7t
@@ -673,6 +745,7 @@ artist:peoria,artist:arizona,artist:geohash:9tbpjcw24z9z
 artist:perry,artist:georgia,artist:geohash:dju2wyh4kdwu
 artist:perryville,artist:missouri,artist:geohash:dn8ndgv6w2u1
 artist:perth,artist:australia,artist:geohash:qd66hrmbgf15
+artist:perth-andover,artist:new brunswick,artist:canada,artist:geohash:f2rcgkxebzqj
 artist:petaluma,artist:california,artist:geohash:9qbc96qw1s0b
 artist:peterborough,artist:ontario,artist:canada,artist:geohash:drbk1bed1qs9
 artist:philadelphia,artist:pennsylvania,artist:geohash:dr4e389m9ey8
@@ -682,6 +755,7 @@ artist:pine bluff,artist:arkansas,artist:geohash:9ynddhgw8301
 artist:pineville,artist:kentucky,artist:geohash:dntm1yx2xse9
 artist:piscataway,artist:new jersey,artist:geohash:dr5n9t573pne
 artist:piteå,artist:sweden,artist:geohash:u7x79jxf4rcz
+artist:pittsburg,artist:california,artist:geohash:9qc266y32pkn
 artist:pittsburgh,artist:pennsylvania,artist:geohash:dppn5d1vbchk
 artist:place pigalle,artist:paris,artist:france,artist:geohash:u09wj4tvvnz1
 artist:placerville,artist:california,artist:geohash:9qfh74t0ur7n
@@ -690,6 +764,7 @@ artist:plainfield,artist:new jersey,artist:geohash:dr5p49u44g82
 artist:plano,artist:texas,artist:geohash:9vg5ze1cf474
 artist:plymouth,artist:england,artist:geohash:gbvn99zdx5rr
 artist:ponce,artist:puerto rico,artist:geohash:de0wkhg1x5hy
+artist:pordenone,artist:italy,artist:geohash:u20vrzgrnrg9
 artist:pori,artist:finland,artist:geohash:u6ztb0dq2gfp
 artist:port angeles,artist:washington,artist:geohash:c281xn9nu5ew
 artist:port jervis,artist:new york,artist:geohash:dr6gkkjnndxv
@@ -700,10 +775,12 @@ artist:porto alegre,artist:brazil,artist:geohash:6fet4hxky2x6
 artist:portsmouth,artist:england,artist:geohash:gcp1p6ghs926
 artist:portsmouth,artist:ohio,artist:geohash:dnvh2hfqdmje
 artist:potenza,artist:italy,artist:geohash:sr5ppt14qdmb
+artist:prague,artist:czech republic,artist:geohash:u2fkbj3us9yn
 artist:prince edward island,artist:canada,artist:geohash:f85pn7scc8gh
 artist:prince george's county,artist:maryland,artist:geohash:dqckghz91hws
 artist:princeton,artist:new jersey,artist:geohash:dr4vsffc5p92
 artist:providence,artist:rhode island,artist:geohash:drmjytzbjw5m
+artist:provo,artist:utah,artist:geohash:9x0sgn70fh07
 artist:purchase,artist:new york,artist:geohash:dr796x4y8fns
 artist:putnam,artist:connecticut,artist:geohash:drkyksc8v1k9
 artist:queens village,artist:queens,artist:new york city,artist:new york,artist:geohash:dr5x9unu45bc
@@ -719,6 +796,7 @@ artist:rayne,artist:louisiana,artist:geohash:9vqkh2s6nqwc
 artist:reading,artist:england,artist:geohash:gcpk9ygqnpuv
 artist:reading,artist:pennsylvania,artist:geohash:dr4j2rbp4zuc
 artist:redcar and cleveland,artist:england,artist:geohash:gcxq2rygpcys
+artist:redding,artist:california,artist:geohash:9r0yz7zr1cxg
 artist:redhill,artist:england,artist:geohash:gcpgkpf6d1u4
 artist:redondo beach,artist:california,artist:geohash:9q5bd72ec22g
 artist:redwood city,artist:california,artist:geohash:9q9j4rw3h0m2
@@ -729,7 +807,9 @@ artist:retroit,artist:michigan,artist:geohash:dpsby4py5yfe
 artist:reykjavík,artist:iceland,artist:geohash:ge2kughesrc9
 artist:rhondda valley,artist:wales,artist:geohash:gcjtdhrktupx
 artist:richland,artist:holmes county,artist:mississippi,artist:geohash:djb586cbmnjp
+artist:richmond,artist:london,artist:england,artist:geohash:gcpu9pkbfjwh
 artist:richmond,artist:virginia,artist:geohash:dq8vt0wrxb6k
+artist:ridgewood,artist:new jersey,artist:geohash:dr731s2pn4k8
 artist:riverdale,artist:the bronx,artist:new york city,artist:new york,artist:geohash:dr72whd0y60e
 artist:robert's cove,artist:louisiana,artist:geohash:9vqkh2s6nqwc
 artist:robertsfors,artist:sweden,artist:geohash:u7qv4rq805qv
@@ -746,11 +826,13 @@ artist:rosmalen,artist:the netherlands,artist:geohash:u15y4nezkmkz
 artist:rossville,artist:tennessee,artist:geohash:dn0r67s9rw6h
 artist:rotherham,artist:england,artist:geohash:gcrpcneu79gk
 artist:rotterdam,artist:the netherlands,artist:geohash:u15pq7hu985j
+artist:rouen,artist:france,artist:geohash:u0bc302bzggr
 artist:royal oak,artist:michigan,artist:geohash:dpscsnc78ygr
 artist:rugby,artist:england,artist:geohash:gcr1gmdmrgef
 artist:ruston,artist:louisiana,artist:geohash:9vy15cv5qedw
 artist:rutherford,artist:new jersey,artist:geohash:dr721xjes44c
 artist:sacramento,artist:california,artist:geohash:9qce7fv43sxd
+artist:saint james parish,artist:jamaica,artist:geohash:d728edx4dv9u
 artist:saint michael,artist:barbados,artist:geohash:ddmdegbd57fy
 artist:saint paul,artist:minnesota,artist:geohash:9zvz9tg69xur
 artist:saint petersburg,artist:russia,artist:geohash:udtt13xf11vx
@@ -758,6 +840,7 @@ artist:salem,artist:massachusetts,artist:geohash:drt9fevq94k7
 artist:salem,artist:oregon,artist:geohash:9rbx87mj5476
 artist:salford,artist:england,artist:geohash:gcw27b61ncud
 artist:salinas,artist:california,artist:geohash:9q92xsvps16s
+artist:salt lake city,artist:utah,artist:geohash:9x0ry431cqs4
 artist:san anselmo,artist:california,artist:geohash:9qbb5116f1m2
 artist:san antonio,artist:texas,artist:geohash:9v1zqe4kx8ht
 artist:san bernardino county,artist:california,artist:geohash:9qjqhh952y8d
@@ -774,11 +857,14 @@ artist:santa fe,artist:argentina,artist:geohash:6dku49rd7rrd
 artist:santa fe,artist:new mexico,artist:geohash:9wkdutp09kpf
 artist:santa monica,artist:california,artist:geohash:9q59xcs2pw11
 artist:santa rosa,artist:california,artist:geohash:9qbdxz35ksxf
+artist:santander,artist:spain,artist:geohash:eztr32jm1143
 artist:santiago,artist:chile,artist:geohash:66j9xyw5ek1c
+artist:santo amaro,artist:bahia,artist:brazil,artist:geohash:7ju2x5fuf247
 artist:sarasota,artist:florida,artist:geohash:dhv79bedues1
 artist:saratoga,artist:california,artist:geohash:9q9hp3k0hcs4
 artist:sarnia,artist:ontario,artist:canada,artist:geohash:dptkx5b3zvk4
 artist:saskatoon,artist:saskatchewan,artist:canada,artist:geohash:c9k0s6eddjtk
+artist:savannah,artist:georgia,artist:geohash:djwq4hkwsem1
 artist:scarborough,artist:ontario,artist:canada,artist:geohash:dpz9h8zb6cpe
 artist:scranton,artist:pennsylvania,artist:geohash:dr65w4s9grns
 artist:scunthorpe,artist:england,artist:geohash:gcx8c4ne35xw
@@ -787,7 +873,9 @@ artist:section,artist:alabama,artist:geohash:dn4ueqc27er1
 artist:seguin,artist:texas,artist:geohash:9v624xzgeefn
 artist:senja,artist:norway,artist:geohash:ukk6qjxpgw1c
 artist:seoul,artist:south korea,artist:geohash:wydm9ny39y2c
+artist:sevenoaks,artist:england,artist:geohash:u105sqbkwdxt
 artist:sevier county,artist:tennessee,artist:geohash:dnkee3w9dgqj
+artist:shanghai,artist:china,artist:geohash:wtw3kzc95jw3
 artist:shawnee,artist:oklahoma,artist:geohash:9y7141yuuxt8
 artist:sheffield,artist:england,artist:geohash:gcqzww5y1dr7
 artist:shelby,artist:mississippi,artist:geohash:9yp3ns68pxrm
@@ -803,12 +891,14 @@ artist:silver city,artist:new mexico,artist:geohash:9tg42pj4j092
 artist:silver lake,artist:los angeles,artist:california,artist:geohash:9q5cuy8nx902
 artist:silver spring,artist:maryland,artist:geohash:dqcjzks2pjsn
 artist:singapore,artist:geohash:w21z6h8v539f
+artist:sioux falls,artist:south dakota,artist:geohash:9zepwvd1ug1k
 artist:skellefteå,artist:sweden,artist:geohash:u7wbkerk46u5
 artist:skien,artist:norway,artist:geohash:u4wbc6kpgvee
 artist:slab fork,artist:west virginia,artist:geohash:dnwnmk8q378c
 artist:sligo,artist:ireland,artist:geohash:gc9uwyywky14
 artist:smyth county,artist:virginia,artist:geohash:dnw18dx8t39z
 artist:snohomish,artist:washington,artist:geohash:c290tervqujm
+artist:soest,artist:germany,artist:geohash:u1jv2s0zmrc5
 artist:sollentuna,artist:stockholm,artist:sweden,artist:geohash:u6sf07wb3261
 artist:solvang,artist:california,artist:geohash:9q4sf1suj863
 artist:somerville,artist:massachusetts,artist:geohash:drt3nh6t1ftq
@@ -820,6 +910,7 @@ artist:southend-on-sea,artist:england,artist:geohash:u10t0npvbp12
 artist:southport,artist:england,artist:geohash:gctc5tc7je2g
 artist:sparta,artist:north carolina,artist:geohash:dnqrdj9h20ug
 artist:spartanburg,artist:south carolina,artist:geohash:dnjwz9y5nfuk
+artist:spokane,artist:washington,artist:geohash:c2krpuj9phvf
 artist:springfield,artist:illinois,artist:geohash:dp03bdugt1eu
 artist:springfield,artist:missouri,artist:geohash:9ytet5phs4d1
 artist:springfield,artist:ohio,artist:geohash:dph7hurxm3gf
@@ -833,6 +924,7 @@ artist:st. thomas,artist:ontario,artist:canada,artist:geohash:dpw72dun7jzq
 artist:staffordshire,artist:england,artist:geohash:gcqsd6p8kx5g
 artist:stamford,artist:texas,artist:geohash:9vc53npnu3yv
 artist:stanford-le-hope,artist:england,artist:geohash:u10m19v4c1xe
+artist:stapleton,artist:staten island,artist:new york city,artist:new york,artist:geohash:dr5r47f5qxth
 artist:staten island,artist:new york,artist:geohash:dr5qbf9mup0b
 artist:steung treng,artist:cambodia,artist:geohash:w67kfuwkmcq5
 artist:stockholm,artist:sweden,artist:geohash:u6sce0t5j1uy
@@ -890,6 +982,7 @@ artist:torrington,artist:connecticut,artist:geohash:drkjb1qndhv8
 artist:totnes,artist:england,artist:geohash:gbvquhv7sw4w
 artist:tottenham,artist:london,artist:england,artist:geohash:u10j842hbj0p
 artist:toulouse,artist:france,artist:geohash:spc00cgqxeuq
+artist:towson,artist:baltimore,artist:maryland,artist:geohash:dr180eq9ntfh
 artist:tranås,artist:sweden,artist:geohash:u66dhsdkst7g
 artist:traverse city,artist:michigan,artist:geohash:dpgnetgbcdeb
 artist:trbovlje,artist:slovenia,artist:geohash:u24ww3r54rt3
@@ -925,6 +1018,7 @@ artist:vernon,artist:texas,artist:geohash:9y16k94bdke2
 artist:verona,artist:italy,artist:geohash:u0pf3yvu65ns
 artist:versailles,artist:france,artist:geohash:u09t8sdxmp76
 artist:vestbjerg,artist:denmark,artist:geohash:u4pj48x3xqq0
+artist:vicenza,artist:italy,artist:geohash:u205nu47yx2j
 artist:victoria,artist:british columbia,artist:canada,artist:geohash:c2872wzz6z4v
 artist:vienna,artist:austria,artist:geohash:u2edhqtc6gpr
 artist:viggiù,artist:italy,artist:geohash:u0nkftbb9n2y
@@ -936,11 +1030,13 @@ artist:virginia beach,artist:virginia,artist:geohash:dq9cxh6w69ex
 artist:virginia,artist:geohash:dnxv669vqddm
 artist:vista,artist:california,artist:geohash:9musu4ewu1e6
 artist:voorburg,artist:the netherlands,artist:geohash:u1705q9vxpgu
+artist:voorschoten,artist:the netherlands,artist:geohash:u170t686st8k
 artist:västerås,artist:sweden,artist:geohash:u6eg0sv358tf
 artist:waco,artist:texas,artist:geohash:9vdgmpv21j0n
 artist:wagontown,artist:pennsylvania,artist:geohash:dr45d5syrhjz
 artist:waitsfield,artist:vermont,artist:geohash:dru5rh7dcvby
 artist:wakefield,artist:england,artist:geohash:gcwcqh1t1zuj
+artist:waliso,artist:woliso,artist:ghion,artist:giyon,artist:ethiopia,artist:geohash:scdbxcqqr2wf
 artist:wall lake,artist:iowa,artist:geohash:9zs2kphr5d1z
 artist:walla walla,artist:washington,artist:geohash:c25y53fs0dms
 artist:walsall,artist:england,artist:geohash:gcqe4gyhwwkv
@@ -949,6 +1045,8 @@ artist:warren,artist:rhode island,artist:geohash:drmm3uv8mres
 artist:warsaw,artist:poland,artist:geohash:u3qcnhzc5z48
 artist:washington,artist:d.c.,artist:geohash:dqcjqbxs7w1w
 artist:waterloo,artist:iowa,artist:geohash:9zw3dxe86kpw
+artist:waukesha,artist:wisconsin,artist:geohash:dp9k8np9j5ue
+artist:weidum,artist:friesland,artist:the netherlands,artist:geohash:u1kn6dysfm64
 artist:wellington,artist:new zealand,artist:geohash:rbsm15sfu3nr
 artist:west bridgefort,artist:nottingham,artist:england,artist:geohash:gcrjn3c1m54b
 artist:west grove,artist:pennsylvania,artist:geohash:dr44d92dn8g0
@@ -957,26 +1055,32 @@ artist:west marin,artist:california,artist:geohash:9qb8nv8nj9qj
 artist:west norwood,artist:london,artist:england,artist:geohash:gcputf42ju2c
 artist:west oakland,artist:oakland,artist:california,artist:geohash:9q9p157qxcnx
 artist:west palm beach,artist:florida,artist:geohash:dhxpfn753tn1
+artist:west point grey,artist:vancouver,artist:british columbia,artist:canada,artist:geohash:c2b2k82dvyuw
 artist:west wickham,artist:bromley,artist:london,artist:england,artist:geohash:u10h20b1b1b0
 artist:westfield,artist:massachusetts,artist:geohash:drkr8s95fjhk
 artist:westmoreland,artist:jamaica,artist:geohash:d70rtxkbv587
 artist:westmount,artist:quebec,artist:canada,artist:geohash:f25dtpypeey3
 artist:wheaton,artist:illinois,artist:geohash:dp3q559mx095
 artist:wheeling,artist:west virginia,artist:geohash:dpnegwt4614q
+artist:wheldrake,artist:england,artist:geohash:gcx6d5knfqt7
 artist:whitby,artist:england,artist:geohash:gcxtcyu4fcr1
 artist:white station,artist:mississippi,artist:geohash:djbzrrsnpb6m
+artist:whitewater,artist:wisconsin,artist:geohash:dp8gsvb7fwxz
 artist:wichita falls,artist:texas,artist:geohash:9y1by4z8407g
+artist:wichita,artist:kansas,artist:geohash:9ydy3j418nph
 artist:wigan,artist:england,artist:geohash:gcw0s5e94d5t
 artist:wilmington,artist:north carolina,artist:geohash:dq0den4j3est
 artist:wilmslow,artist:england,artist:geohash:gcqrm598es2x
 artist:winchester,artist:england,artist:geohash:gcp46pz89qks
 artist:winchester,artist:tennessee,artist:geohash:dn6b0myfckdn
+artist:windsor,artist:ontario,artist:canada,artist:geohash:dpsbx33nrbd6
 artist:winnipeg,artist:manitoba,artist:canada,artist:geohash:cbfgvecmm6e3
 artist:winnsboro,artist:texas,artist:geohash:9vu5rxezq561
 artist:winston-salem,artist:north carolina,artist:geohash:dnqvmsk1ffzx
 artist:wiscasset,artist:maine,artist:geohash:dry6qdqygtyw
 artist:witbank,artist:south africa,artist:geohash:kekub3rd0003
 artist:wivenhoe,artist:england,artist:geohash:u10xjbqzvj5u
+artist:woerden,artist:the netherlands,artist:geohash:u172r17zmuvp
 artist:wollongong,artist:australia,artist:geohash:r3gk17tsyj0u
 artist:wolverhampton,artist:england,artist:geohash:gcq7pkw81exx
 artist:woodbridge,artist:england,artist:geohash:u12bmgrdtk1r

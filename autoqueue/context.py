@@ -32,13 +32,13 @@ ONE_YEAR = timedelta(days=365)
 
 TIME = re.compile('^([0-9]{2}):([0-9]{2})$')
 STOPWORDS = {
-    '"', "'", ',', '(', ')', '[', ']', '-', '/', "'ll", "'m", "'s", 'a', 'am',
-    'an', 'and', 'are', 'be', 'been', 'being', 'did', 'do', 'get', 'go',
-    'goes', 'going', 'got', 'had', 'have', 'he', 'her', 'him', 'his', 'i',
-    'in', 'is', 'it', 'la', 'let', 'made', 'make', 'me', 'my', "n't", 'no',
-    'not', 'of', 'on', 'or', 'our', 'she', 'so', 'that', 'the', 'their',
-    'them', 'these', 'they', 'this', 'those', 'to', 'us', 'was', 'we', 'were',
-    'went', 'you', 'your', 'daytrotter_sessions'}
+    '.', ':', '"', "'", ',', '(', ')', '[', ']', '-', '/', "'ll", "'m", "'s",
+    'a', 'am', 'an', 'and', 'are', 'be', 'been', 'being', 'did', 'do', 'for',
+    'get', 'go', 'goes', 'going', 'got', 'had', 'have', 'he', 'her', 'him',
+    'his', 'i', 'in', 'is', 'it', 'la', 'let', 'made', 'make', 'me', 'my',
+    "n't", 'no', 'not', 'of', 'on', 'or', 'our', 'she', 'so', 'that', 'the',
+    'their', 'them', 'these', 'they', 'this', 'those', 'to', 'us', 'was', 'we',
+    'were', 'went', 'you', 'your', 'daytrotter_sessions'}
 
 POS_MAP = {
     'J': wordnet.ADJ,
@@ -48,21 +48,34 @@ POS_MAP = {
 
 # remove problematic synsets
 EXCLUSIONS = {
+    'air': {'breeze.n.01', 'wind.n.01'},
     'black': {'dark.n.01'},
-    'fall': {'dusky.s.01', 'twilight.n.01'},
+    'clouds': {'fog.n.02'},
+    'calm': {'wind.n.01'},
+    'fall': {'fall.n.01', 'dusky.s.01', 'twilight.n.01'},
     'friday': {'day.n.04'},
+    'jan': {'january.n.01'},
+    'jul': {'july.n.01'},
+    'mar': {'march.n.01'},
     'mars': {'march.n.01'},
+    'may': {'may.n.01'},
+    'mon': {'monday.n.00'},
     'monday': {'day.n.04'},
     'morning': {'dawn.n.01', 'dawn.n.02', 'dawn.v.02', 'dawn.v.03'},
-    'night': {'twilight.n.01'},
+    'night': {'twilight.n.01', 'dark.n.01'},
     'oh': {'ohio.n.01'},
+    'rising': {'ascension.n.04'},
     'rose': {'ascension.n.04'},
+    'sat': {'saturday.n.01'},
     'saturday': {'day.n.04'},
     'shadow': {'dark.a.01', 'darkness.n.02'},
     'sun': {'sunday.n.01'},
+    'suns': {'sunday.n.01'},
     'sunday': {'day.n.04'},
     'thursday': {'day.n.04'},
+    'tue': {'tuesday.n.00'},
     'tuesday': {'day.n.04'},
+    'wed': {'wednesday.n.00'},
     'wednesday': {'day.n.04'},
 }
 
@@ -130,10 +143,15 @@ def get_artist_terms_from_song(song):
 
 @LRUCache
 def get_terms_from_song(song):
-    title_terms = {
-        term for word, tag in
-        pos_tag(word_tokenize(song.get_title(with_version=False)))
-        for term in expand(word, get_wordnet_pos(tag))}
+    title_terms = set()
+    words = []
+    for word, tag in pos_tag(word_tokenize(
+            song.get_title(with_version=False))):
+        terms = {t for t in expand(word, get_wordnet_pos(tag))}
+        if terms:
+            words.append(word)
+        title_terms |= terms
+    print('words: %s' % ','.join(words))
 
     tag_terms = get_terms(
         song.get_non_geo_tags(prefix='', exclude_prefix='artist:'))
@@ -154,8 +172,8 @@ class Context(object):
 
     @staticmethod
     def string_to_datetime(time_string):
-        time_string, ampm = time_string.split()
-        hour, minute = time_string.split(':')
+        time_string, ampm = time_string.partition()
+        hour, minute = time_string.partition(':')
         hour = int(hour)
         minute = int(minute)
         if ampm == 'am':
@@ -182,9 +200,9 @@ class Context(object):
                     "%s - %s " % (
                         song.get_artist(), song.get_title(with_version=False)),
                     end='')
-                print("%r adjusted positively %.2f%%" % (
-                    predicate,
-                    100 * ((before_score - result['score']) / before_score)))
+                print(
+                    "%r adjusted positively %.2f -> %.2f" % (
+                        predicate, before_score, result['score']))
             elif predicate.applies_to_song(song, exclusive=True) \
                     and not in_context:
                 predicate.negative_score(result)
@@ -192,9 +210,9 @@ class Context(object):
                     "%s - %s " % (
                         song.get_artist(), song.get_title(with_version=False)),
                     end='')
-                print("%r adjusted negatively %.2f%%" % (
-                    predicate,
-                    100 * (((result['score'] - before_score) / before_score))))
+                print(
+                    "%r adjusted negatively %.2f -> %.2f" % (
+                        predicate, before_score, result['score']))
 
     def build_predicates(self):
         """Construct predicates to check against the context."""
@@ -252,6 +270,7 @@ class Context(object):
         self._add_common_terms()
         self._add_artist_predicate()
         self._add_terms()
+        self._add_geohash()
 
     def add_extra_predicates(self):
         if self.configuration.extra_context:
@@ -266,7 +285,7 @@ class Context(object):
         for name_date in self.configuration.birthdays.split(','):
             if ':' not in name_date:
                 continue
-            name, date_string = name_date.strip().split(':')
+            name, date_string = name_date.strip().partition(':')
             birth_date = self.get_date(date_string)
             age = self.date.year - birth_date.year
             self.predicates.append(
@@ -871,7 +890,7 @@ class Rain(Weather):
     terms_expanded = frozenset([
         u'drizzle.n.01', u'drizzle.v.01', u'drizzle.v.02', u'rain.n.01',
         u'rain.n.02', u'rain.n.03', u'rain.v.01', u'raindrop.n.01',
-        u'shower.v.04', u'showery.s.01', u'shower.n.03'])
+        'rainy.s.01', u'shower.v.04', u'showery.s.01', u'shower.n.03'])
     non_exclusive_terms_expanded = Cloudy.terms_expanded | frozenset([
         u'drop.n.02', u'droplet.n.01', u'precipitate.v.03',
         u'precipitation.n.01', u'precipitation.n.03'])
