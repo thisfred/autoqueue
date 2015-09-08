@@ -79,6 +79,13 @@ EXCLUSIONS = {
     'wednesday': {'day.n.04'},
 }
 
+static_predicates = []
+
+
+def static_predicate(cls):
+    static_predicates.append(cls())
+    return cls
+
 
 class LRUCache(object):
 
@@ -367,7 +374,7 @@ class Context(object):
             self.predicates.append(SongYear(self.date.year))
 
     def add_standard_predicates(self):
-        self.predicates.extend(STATIC_PREDICATES)
+        self.predicates.extend(static_predicates)
         for predicate in (Year, Date.from_date, Now, Midnight, Noon, Spring,
                           Summer, Fall, Winter, Evening, Morning, Afternoon,
                           Night, DayTime, Christmas, NewYear, Halloween,
@@ -1035,61 +1042,73 @@ class Month(ExclusiveTerms):
         return context.date.month == self.month
 
 
+@static_predicate
 class January(Month):
 
     month = 1
 
 
+@static_predicate
 class February(Month):
 
     month = 2
 
 
+@static_predicate
 class March(Month):
 
     month = 3
 
 
+@static_predicate
 class April(Month):
 
     month = 4
 
 
+@static_predicate
 class May(Month):
 
     month = 5
 
 
+@static_predicate
 class June(Month):
 
     month = 6
 
 
+@static_predicate
 class July(Month):
 
     month = 7
 
 
+@static_predicate
 class August(Month):
 
     month = 8
 
 
+@static_predicate
 class September(Month):
 
     month = 9
 
 
+@static_predicate
 class October(Month):
 
     month = 10
 
 
+@static_predicate
 class November(Month):
 
     month = 11
 
 
+@static_predicate
 class December(Month):
 
     month = 12
@@ -1112,36 +1131,43 @@ class Day(ExclusiveTerms):
                 context.date.hour < 4)
 
 
+@static_predicate
 class Monday(Day):
 
     day_index = 1
 
 
+@static_predicate
 class Tuesday(Day):
 
     day_index = 2
 
 
+@static_predicate
 class Wednesday(Day):
 
     day_index = 3
 
 
+@static_predicate
 class Thursday(Day):
 
     day_index = 4
 
 
+@static_predicate
 class Friday(Day):
 
     day_index = 5
 
 
+@static_predicate
 class Saturday(Day):
 
     day_index = 6
 
 
+@static_predicate
 class Sunday(Day):
 
     day_index = 7
@@ -1201,6 +1227,7 @@ class Afternoon(Period):
         super(Afternoon, self).__init__(peak=now.replace(hour=15))
 
 
+@static_predicate
 class Weekend(ExclusiveTerms):
 
     terms_expanded = frozenset([u'weekend.n.01', u'weekend.v.01'])
@@ -1248,6 +1275,7 @@ class Christmas(Period):
         super(Christmas, self).__init__(peak=now.replace(day=25, month=12))
 
 
+@static_predicate
 class Kwanzaa(ExclusiveTerms):
 
     terms_expanded = frozenset(['kwanzaa.n.01'])
@@ -1354,6 +1382,7 @@ class Easter(Period):
         super(Easter, self).__init__(peak=easter(now.year))
 
 
+@static_predicate
 class MardiGras(EasterBased):
 
     days_after_easter = -47
@@ -1365,6 +1394,7 @@ class MardiGras(EasterBased):
         u'party.v.01', u'fat.a.01'])
 
 
+@static_predicate
 class AshWednesday(EasterBased):
 
     days_after_easter = -46
@@ -1372,6 +1402,7 @@ class AshWednesday(EasterBased):
     non_exclusive_terms_expanded = frozenset([u'lent.n.01', u'ash.n.01'])
 
 
+@static_predicate
 class PalmSunday(EasterBased):
 
     days_after_easter = -7
@@ -1380,6 +1411,7 @@ class PalmSunday(EasterBased):
         u'palm.n.03', u'jerusalem.n.01', u'jesus.n.01'])
 
 
+@static_predicate
 class MaundyThursday(EasterBased):
 
     days_after_easter = -3
@@ -1389,6 +1421,7 @@ class MaundyThursday(EasterBased):
         'apostle.n.01', 'apostle.n.02', 'apostle.n.03'])
 
 
+@static_predicate
 class GoodFriday(EasterBased):
 
     days_after_easter = -2
@@ -1399,6 +1432,7 @@ class GoodFriday(EasterBased):
         u'jesus.n.01', u'torture.v.02', u'execution.n.01', u'torture.n.05'])
 
 
+@static_predicate
 class Ascension(EasterBased):
 
     days_after_easter = 39
@@ -1408,6 +1442,7 @@ class Ascension(EasterBased):
         'rise.n.02', 'rise.n.04', 'heaven.n.02', 'jesus.n.01'])
 
 
+@static_predicate
 class Pentecost(EasterBased):
 
     days_after_easter = 49
@@ -1415,6 +1450,7 @@ class Pentecost(EasterBased):
     non_exclusive_terms_expanded = frozenset(['holy_ghost.n.01'])
 
 
+@static_predicate
 class WhitMonday(EasterBased):
 
     days_after_easter = 50
@@ -1422,6 +1458,7 @@ class WhitMonday(EasterBased):
     non_exclusive_terms_expanded = frozenset(['holy_ghost.n.01'])
 
 
+@static_predicate
 class AllSaints(EasterBased):
 
     days_after_easter = 56
@@ -1433,6 +1470,7 @@ class AllSaints(EasterBased):
         u'reverence.n.02', u'divine.s.03'])
 
 
+@static_predicate
 class VeteransDay(Date):
 
     month = 11
@@ -1444,6 +1482,7 @@ class VeteransDay(Date):
         u'veteran.n.01'])
 
 
+@static_predicate
 class Assumption(Date):
 
     month = 8
@@ -1454,6 +1493,7 @@ class Assumption(Date):
         u'mary.n.01'])
 
 
+@static_predicate
 class IndependenceDay(Date):
 
     month = 7
@@ -1466,6 +1506,7 @@ class IndependenceDay(Date):
         u'american.a.01'])
 
 
+@static_predicate
 class GroundhogDay(Date):
 
     month = 2
@@ -1475,6 +1516,7 @@ class GroundhogDay(Date):
         u'marmot.n.01', u'groundhog.n.01'])
 
 
+@static_predicate
 class ValentinesDay(Date):
 
     month = 2
@@ -1487,6 +1529,7 @@ class ValentinesDay(Date):
         u'couple.n.02', u'lover.n.01', u'affection.n.01', u'beloved.n.01'])
 
 
+@static_predicate
 class AprilFools(Date):
 
     month = 4
@@ -1501,6 +1544,7 @@ class AprilFools(Date):
         u'flim-flam.v.01', u'clown.n.02'])
 
 
+@static_predicate
 class CincoDeMayo(Date):
 
     month = 5
@@ -1509,6 +1553,7 @@ class CincoDeMayo(Date):
     non_exclusive_terms_expanded = frozenset([u'mexican.a.01', u'mexico.n.01'])
 
 
+@static_predicate
 class Solstice(ExclusiveTerms):
 
     terms_expanded = frozenset(['solstice.n.01'])
@@ -1519,6 +1564,7 @@ class Solstice(ExclusiveTerms):
             context_date.month == 6 or context_date.month == 12)
 
 
+@static_predicate
 class Friday13(ExclusiveTerms):
 
     terms_expanded = frozenset(['friday the 13th'])
@@ -1550,13 +1596,3 @@ class Birthday(Date):
             return True
 
         return super(Birthday, self).applies_to_song(song, exclusive)
-
-
-STATIC_PREDICATES = [
-    AllSaints(), AprilFools(), Ascension(), AshWednesday(), Assumption(),
-    CincoDeMayo(), Friday13(), GoodFriday(), GroundhogDay(), IndependenceDay(),
-    Kwanzaa(), MardiGras(), MaundyThursday(), PalmSunday(), Pentecost(),
-    Solstice(), ValentinesDay(), VeteransDay(), WhitMonday(), January(),
-    February(), March(), April(), May(), June(), July(), August(), September(),
-    October(), November(), December(), Monday(), Tuesday(), Wednesday(),
-    Thursday(), Friday(), Saturday(), Sunday(), Weekend()]
