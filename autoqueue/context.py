@@ -10,12 +10,11 @@ from datetime import date, datetime, time, timedelta
 import nltk
 from dateutil.easter import easter
 from dateutil.rrule import TH, YEARLY, rrule
-from nltk import pos_tag, word_tokenize
+from nltk import word_tokenize
 from nltk.corpus import wordnet
 
 nltk.download('punkt')
 nltk.download('wordnet')
-nltk.download('maxent_treebank_pos_tagger')
 
 HISTORY = 10
 
@@ -39,12 +38,6 @@ STOPWORDS = {
     "n't", 'no', 'not', 'of', 'on', 'or', 'our', 'she', 'so', 'that', 'the',
     'their', 'them', 'these', 'they', 'this', 'those', 'to', 'us', 'was', 'we',
     'were', 'went', 'you', 'your', 'daytrotter_sessions'}
-
-POS_MAP = {
-    'J': wordnet.ADJ,
-    'V': wordnet.VERB,
-    'N': wordnet.NOUN,
-    'R': wordnet.ADV}
 
 # remove problematic synsets
 EXCLUSIONS = {
@@ -121,17 +114,17 @@ def expand_synset(synset):
             yield pertainym.synset().name()
 
 
-def expand(word, pos=None):
+def expand(word):
     word = word.replace(' ', '_')
     if word in STOPWORDS:
         return
 
-    stemmed = wordnet.morphy(word, pos=pos)
+    stemmed = wordnet.morphy(word)
     if stemmed is None:
         yield word
         return
 
-    for synset in wordnet.synsets(stemmed, pos=pos):
+    for synset in wordnet.synsets(stemmed):
         for term in expand_synset(synset):
             if term not in EXCLUSIONS.get(word, []):
                 yield term
@@ -152,9 +145,8 @@ def get_artist_terms_from_song(song):
 def get_terms_from_song(song):
     title_terms = set()
     words = []
-    for word, tag in pos_tag(word_tokenize(
-            song.get_title(with_version=False))):
-        terms = {t for t in expand(word, get_wordnet_pos(tag))}
+    for word in word_tokenize(song.get_title(with_version=False)):
+        terms = {t for t in expand(word)}
         if terms:
             words.append(word)
         title_terms |= terms
