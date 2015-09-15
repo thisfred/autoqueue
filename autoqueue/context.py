@@ -119,9 +119,10 @@ def expand(word):
     if word in STOPWORDS:
         return
 
+    yield word
+
     stemmed = wordnet.morphy(word)
     if stemmed is None:
-        yield word
         return
 
     for synset in wordnet.synsets(stemmed):
