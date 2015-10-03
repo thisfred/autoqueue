@@ -29,7 +29,7 @@ TWO_MONTHS = timedelta(days=60)
 SIX_MONTHS = timedelta(days=182)
 ONE_YEAR = timedelta(days=365)
 
-TIME = re.compile('^([0-9]{2}):([0-9]{2})$')
+TIME = re.compile(r'([0-9]{2}):([0-9]{2})')
 STOPWORDS = {
     '.', ':', '"', "'", ',', '(', ')', '[', ']', '-', '/', "'ll", "'m", "'s",
     'a', 'am', 'an', 'and', 'are', 'be', 'been', 'being', 'did', 'do', 'for',
@@ -172,8 +172,8 @@ class Context(object):
 
     @staticmethod
     def string_to_datetime(time_string):
-        time_string, ampm = time_string.split(' ')
-        hour, minute = time_string.split(':')
+        time_string, _, ampm = time_string.partition(' ')
+        hour, _, minute = time_string.partition(':')
         hour = int(hour)
         minute = int(minute)
         if ampm == 'am':
@@ -274,18 +274,16 @@ class Context(object):
 
     def add_extra_predicates(self):
         if self.configuration.extra_context:
-            words = [
+            words = (
                 l.strip().lower()
-                for l in self.configuration.extra_context.split(',')]
-            if words:
-                self.predicates.extend([
-                    String(word) for word in words])
+                for l in self.configuration.extra_context.split(','))
+            self.predicates.extend([String(word) for word in words])
 
     def add_birthday_predicates(self):
         for name_date in self.configuration.birthdays.split(','):
             if ':' not in name_date:
                 continue
-            name, date_string = name_date.strip().split(':')
+            name, _, date_string = name_date.strip().partition(':')
             birth_date = self.get_date(date_string)
             age = self.date.year - birth_date.year
             self.predicates.append(
@@ -353,11 +351,10 @@ class Context(object):
 
     def add_location_predicates(self):
         if self.configuration.location:
-            locations = [
-                l.lower() for l in self.configuration.location.split(',')]
-            if locations:
-                self.predicates.extend([
-                    String(location) for location in locations])
+            locations = (
+                l.lower() for l in self.configuration.location.split(','))
+            self.predicates.extend(
+                [String(location) for location in locations])
         if self.configuration.geohash:
             self.predicates.append(Geohash([self.configuration.geohash]))
 
@@ -961,8 +958,7 @@ class Date(ExclusiveTerms):
     def set_regex(self):
         if self.month and self.day:
             self.regex_terms = (
-                re.compile(
-                    r"^([0-9]{4}-)?%02d-%02d$" % (self.month, self.day)),)
+                re.compile(r"([0-9]{4}-)?%02d-%02d" % (self.month, self.day)),)
 
     @classmethod
     def from_date(cls, from_date):

@@ -103,7 +103,7 @@ class Configuration(object):
         self.zipcode = ''
 
     def get_location_id(self):
-        city = self.location.split(',')[0].strip()
+        city = self.location.partition(',')[0].strip()
         smallest_discance = 100
         best_location_id = None
         location_ids = pywapi.get_location_ids(city)
