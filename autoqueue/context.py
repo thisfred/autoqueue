@@ -38,7 +38,7 @@ STOPWORDS = {
     'him', 'his', 'i', 'in', 'is', 'it', 'la', 'let', 'made', 'make', 'me',
     'my', "n't", 'no', 'not', 'of', 'on', 'or', 'our', 'she', 'so', 'that',
     'the', 'their', 'them', 'these', 'they', 'this', 'those', 'to', 'us',
-    'was', 'we', 'were', 'went', 'you', 'your', 'daytrotter_sessions'}
+    'was', 'we', 'were', 'went', 'y', 'you', 'your', 'daytrotter_sessions'}
 
 # remove problematic synsets
 EXCLUSIONS = {
