@@ -208,7 +208,7 @@ class Cache(object):
     def add_to_previous_terms(self, song):
         self.previous_terms -= Counter(self.previous_terms.keys())
         terms = get_terms_from_song(song)
-        for _ in range(5):
+        for _ in range(1):
             self.previous_terms.update(terms)
 
     def get_weather(self, configuration):
