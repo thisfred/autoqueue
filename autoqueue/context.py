@@ -33,12 +33,12 @@ ONE_YEAR = timedelta(days=365)
 TIME = re.compile(r'([0-9]{2}):([0-9]{2})')
 STOPWORDS = {
     '.', ':', '"', "'", ',', '(', ')', '[', ']', '-', '/', "'ll", "'m", "'s",
-    'a', 'am', 'an', 'and', 'are', 'be', 'been', 'being', 'did', 'do', 'for',
-    'get', 'go', 'goes', 'going', 'got', 'had', 'have', 'he', 'her', 'him',
-    'his', 'i', 'in', 'is', 'it', 'la', 'let', 'made', 'make', 'me', 'my',
-    "n't", 'no', 'not', 'of', 'on', 'or', 'our', 'she', 'so', 'that', 'the',
-    'their', 'them', 'these', 'they', 'this', 'those', 'to', 'us', 'was', 'we',
-    'were', 'went', 'you', 'your', 'daytrotter_sessions'}
+    'a', 'am', 'an', 'and', 'are', 'be', 'been', 'being', 'de', 'did', 'do',
+    'for', 'get', 'go', 'goes', 'going', 'got', 'had', 'have', 'he', 'her',
+    'him', 'his', 'i', 'in', 'is', 'it', 'la', 'let', 'made', 'make', 'me',
+    'my', "n't", 'no', 'not', 'of', 'on', 'or', 'our', 'she', 'so', 'that',
+    'the', 'their', 'them', 'these', 'they', 'this', 'those', 'to', 'us',
+    'was', 'we', 'were', 'went', 'you', 'your', 'daytrotter_sessions'}
 
 # remove problematic synsets
 EXCLUSIONS = {
