@@ -12,6 +12,7 @@ from dateutil.easter import easter
 from dateutil.rrule import TH, YEARLY, rrule
 from nltk import word_tokenize
 from nltk.corpus import wordnet
+from pprint import pprint
 
 nltk.download('punkt')
 nltk.download('wordnet')
@@ -230,25 +231,10 @@ class Context(object):
             self.predicates.append(Artist(artist))
 
     def _add_common_terms(self):
-        if len(self.cache.previous_terms) < 2:
-            return
-
-        if len(self.cache.previous_terms) > HISTORY:
-            self.cache.previous_terms = self.cache.previous_terms[-HISTORY:]
-        common_terms = None
-        for i, previous in enumerate(reversed(self.cache.previous_terms)):
-            if common_terms is None:
-                common_terms = previous.copy()
-                continue
-            common_terms &= previous
-            if not common_terms:
-                break
-            print(
-                "common(%s): %s" % (
-                    i + 1,
-                    ', '.join(w for w in common_terms)))
-            common = CommonTerms(ne_expanded_terms=frozenset(common_terms))
-            self.predicates.append(common)
+        print("common terms:")
+        pprint(self.cache.previous_terms)
+        common = CommonTerms.from_counter(self.cache.previous_terms)
+        self.predicates.append(common)
 
     def _add_artist_predicate(self):
         artist_terms = get_artist_terms_from_song(self.cache.last_song)
@@ -402,6 +388,7 @@ class Terms(Predicate):
     non_exclusive_terms_expanded = frozenset()
 
     def __init__(self, ne_expanded_terms=frozenset()):
+        ne_expanded_terms = frozenset(ne_expanded_terms)
         ne_expanded_terms = (
             self.non_exclusive_terms_expanded | ne_expanded_terms)
         if self.terms_expanded or ne_expanded_terms:
@@ -455,7 +442,24 @@ class Terms(Predicate):
 
 
 class CommonTerms(Terms):
-    pass
+
+    def __init__(self, ne_expanded_terms=frozenset()):
+        super(CommonTerms, self).__init__(ne_expanded_terms)
+        self.counter = None
+
+    @classmethod
+    def from_counter(cls, counter):
+        instance = cls(counter.keys())
+        instance.counter = counter
+        return instance
+
+    def get_factor(self, song, exclusive=False):
+        original_factor = super(CommonTerms, self).get_factor(song, exclusive)
+        if exclusive:
+            return original_factor
+        return original_factor * sum(
+            self.counter[t] for t in self.get_intersection(
+                self._get_song_terms(song), exclusive))
 
 
 class ArtistTerms(Terms):

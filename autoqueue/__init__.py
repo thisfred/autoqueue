@@ -29,6 +29,7 @@ import re
 import dbus
 import requests
 from builtins import object, range, str
+from collections import Counter
 from datetime import datetime, timedelta
 from dbus.mainloop.glib import DBusGMainLoop
 from future import standard_library
@@ -87,7 +88,6 @@ class Configuration(object):
 
     def __init__(self):
         self.desired_queue_length = DEFAULT_LENGTH
-        self.verbose = False
         self.number = DEFAULT_NUMBER
         self.restrictions = None
         self.extra_context = None
@@ -187,8 +187,8 @@ class Configuration(object):
     def _get_weather(self, location_id):
         try:
             return pywapi.get_weather_from_yahoo(location_id)
-        except Exception as e:
-            print(repr(e))
+        except Exception as exception:
+            print(repr(exception))
         return {}
 
 
@@ -203,7 +203,13 @@ class Cache(object):
         self.weather = None
         self.weather_at = None
         self.found = False
-        self.previous_terms = []
+        self.previous_terms = Counter()
+
+    def add_to_previous_terms(self, song):
+        self.previous_terms -= Counter(self.previous_terms.keys())
+        terms = get_terms_from_song(song)
+        for _ in range(5):
+            self.previous_terms.update(terms)
 
     def get_weather(self, configuration):
         if WEATHER and self.weather and \
@@ -212,6 +218,10 @@ class Cache(object):
         self.weather = configuration.get_weather()
         self.weather_at = datetime.now()
         return self.weather
+
+    def set_nearby_artist(self, configuration):
+        if configuration.location or configuration.geohash:
+            self.nearby_artists = configuration.get_performing_artists()
 
 
 class AcousticAnalysis(object):
@@ -239,9 +249,7 @@ class AutoQueueBase(object):
         self.acoustic = AcousticAnalysis()
         self.player = player
         self.player.set_variables_from_config(self.configuration)
-        if self.configuration.location or self.configuration.geohash:
-            self.cache.nearby_artists = \
-                self.configuration.get_performing_artists()
+        self.cache.set_nearby_artist(self.configuration)
 
     @property
     def use_gaia(self):
@@ -634,20 +642,16 @@ class AutoQueueBase(object):
         return False
 
     def enqueue_song(self, song):
-        if not self.cache.previous_terms:
-            if self.cache.last_song:
-                self.cache.previous_terms.append(
-                    get_terms_from_song(self.cache.last_song))
-        self.cache.previous_terms.append(get_terms_from_song(song))
+        self.cache.add_to_previous_terms(song)
         self.player.enqueue(song)
 
     def enqueue_album(self, album, album_artist, album_id):
         """Try to enqueue whole album."""
         search = self.player.construct_album_search(
             album=album, album_artist=album_artist, album_id=album_id)
-        songs = sorted(
-            [(song.get_discnumber(), song.get_tracknumber(),
-                song)for song in self.player.search(search)])
+        songs = sorted([
+            (song.get_discnumber(), song.get_tracknumber(), song)
+            for song in self.player.search(search)])
         if songs and all([self.allowed(song[2]) for song in songs]):
             for _, _, song in songs:
                 self.enqueue_song(song)
