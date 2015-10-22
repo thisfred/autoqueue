@@ -44,6 +44,7 @@ STOPWORDS = {
 EXCLUSIONS = {
     'air': {'breeze.n.01', 'wind.n.01'},
     'black': {'dark.n.01'},
+    'cloud': {'fog.n.02'},
     'clouds': {'fog.n.02'},
     'calm': {'wind.n.01'},
     'fall': {'fall.n.01', 'dusky.s.01', 'twilight.n.01'},
