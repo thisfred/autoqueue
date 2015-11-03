@@ -427,20 +427,6 @@ class Terms(Predicate):
     def _get_song_terms(song):
         return get_terms_from_song(song)
 
-    def get_factor(self, song, exclusive=False):
-        if self.regex_terms_match(song, exclusive):
-            return 1
-        expanded = (
-            self.terms_expanded if exclusive
-            else self.terms_expanded | self.non_exclusive_terms_expanded)
-        if not expanded:
-            return 1
-        song_terms = self._get_song_terms(song)
-        intersection = self.get_intersection(song_terms, exclusive)
-        print("  %s" % ', '.join(w for w in intersection))
-        shortest = min(len(song_terms), len(expanded))
-        return len(intersection) / shortest
-
 
 class CommonTerms(Terms):
 
