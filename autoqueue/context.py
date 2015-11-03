@@ -440,14 +440,6 @@ class CommonTerms(Terms):
         instance.counter = counter
         return instance
 
-    def get_factor(self, song, exclusive=False):
-        original_factor = super(CommonTerms, self).get_factor(song, exclusive)
-        if exclusive:
-            return original_factor
-        return original_factor * sum(
-            self.counter[t] for t in self.get_intersection(
-                self._get_song_terms(song), exclusive))
-
 
 class ArtistTerms(Terms):
 
