@@ -101,10 +101,6 @@ class LRUCache(object):
         return value
 
 
-def get_wordnet_pos(tag):
-    return POS_MAP.get(tag[:1])
-
-
 def expand_synset(synset):
     yield synset.name()
     for hyper in synset.hypernyms():
@@ -605,12 +601,12 @@ class Weather(ExclusiveTerms):
 
 class Freezing(Weather):
 
-    terms_expanded = frozenset([
+    non_exclusive_terms_expanded = frozenset([
         u'frost.n.03', u'frost.n.01', u'ice.n.01', u'ice.n.02', u'frost.v.02',
         u'frost.v.03', u'frost.v.01', u'frost.v.04', u'freeze.v.10',
         u'freeze.n.02', u'freeze.n.01', u'freeze.v.06', u'freeze.v.07',
-        u'freeze.v.04', u'freeze.v.02', u'freeze.v.08'])
-    non_exclusive_terms_expanded = frozenset([u'snow.n.01', u'snow.n.02'])
+        u'freeze.v.04', u'freeze.v.02', u'freeze.v.08', u'snow.n.01',
+        u'snow.n.02'])
 
     def applies_in_context(self, context):
         temperature = self.get_temperature(context)
@@ -625,7 +621,7 @@ class Freezing(Weather):
 
 class Cold(Weather):
 
-    terms_expanded = frozenset([
+    non_exclusive_terms_expanded = frozenset([
         u'coldness.n.03', u'cold.a.01', u'cold.a.02', u'chill.n.01',
         u'chilliness.n.01', u'cold.s.11', u'cold.s.10', u'cold.s.13',
         u'cold.s.12', u'chilly.s.03', u'cold.s.08', u'chilly.s.01',
@@ -644,7 +640,7 @@ class Cold(Weather):
 
 class Hot(Weather):
 
-    terms_expanded = frozenset([
+    non_exclusive_terms_expanded = frozenset([
         u'hot.s.21', u'hot.a.01', u'hot.a.03', u'hotness.n.01', u'hot.s.19',
         u'hot.s.18', u'hot.s.15', u'hot.s.14', u'hot.s.17', u'hot.s.16',
         u'hot.s.11', u'hot.s.10', u'hot.s.13', u'hot.s.12', u'heat.n.01',
@@ -664,7 +660,7 @@ class Hot(Weather):
 
 class Calm(Weather):
 
-    terms_expanded = frozenset([
+    non_exclusive_terms_expanded = frozenset([
         u'calm.a.02', u'calm_air.n.01', u'calmness.n.02', u'calm.s.01'])
 
     def applies_in_context(self, context):
@@ -673,9 +669,9 @@ class Calm(Weather):
 
 class Breeze(Weather):
 
-    terms_expanded = frozenset([
-        'breeze.n.01', u'breeze.v.02', u'breeziness.n.01', u'breezy.s.01'])
-    non_exclusive_terms_expanded = frozenset([u'blow.v.02'])
+    non_exclusive_terms_expanded = frozenset([
+        'breeze.n.01', u'breeze.v.02', u'breeziness.n.01', u'breezy.s.01',
+        u'blow.v.02'])
 
     def applies_in_context(self, context):
         speed = self.get_wind_speed(context)
@@ -684,8 +680,8 @@ class Breeze(Weather):
 
 class Wind(Weather):
 
-    terms_expanded = frozenset([u'wind.n.01', u'gust.n.01', u'windy.s.03'])
-    non_exclusive_terms_expanded = frozenset([u'blowy.s.01'])
+    non_exclusive_terms_expanded = frozenset([
+        u'wind.n.01', u'gust.n.01', u'windy.s.03', u'blowy.s.01'])
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 30
@@ -693,7 +689,7 @@ class Wind(Weather):
 
 class Gale(Weather):
 
-    terms_expanded = frozenset(['gale.n.01'])
+    non_exclusive_terms_expanded = frozenset(['gale.n.01'])
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 38
@@ -701,7 +697,7 @@ class Gale(Weather):
 
 class Storm(Weather):
 
-    terms_expanded = frozenset([
+    non_exclusive_terms_expanded = frozenset([
         u'stormy.s.02', u'stormy.a.01', u'storminess.n.02', u'storminess.n.01',
         u'storm.n.01', u'storm.n.02'])
 
@@ -711,7 +707,7 @@ class Storm(Weather):
 
 class Hurricane(Weather):
 
-    terms_expanded = frozenset([
+    non_exclusive_terms_expanded = frozenset([
         'cyclonic.a.01', u'cyclonic.a.02', u'cyclone.n.02', u'hurricane.n.01'])
 
     def applies_in_context(self, context):
@@ -720,7 +716,7 @@ class Hurricane(Weather):
 
 class Humid(Weather):
 
-    terms_expanded = frozenset(['humid.s.01', u'humidity.n.01'])
+    non_exclusive_terms_expanded = frozenset(['humid.s.01', u'humidity.n.01'])
 
     def applies_in_context(self, context):
         return self.get_humidity(context) > 65
@@ -788,7 +784,7 @@ class NotDaylight(NegativeTimeRange):
 
 class Sun(TimeRange, Weather):
 
-    terms_expanded = frozenset([
+    non_exclusive_terms_expanded = frozenset([
         u'sun.v.01', u'sun.v.02', u'sunlight.n.01', u'fair_weather.n.01',
         u'sun.n.04', u'sun.n.01'])
 
@@ -804,7 +800,7 @@ class Sun(TimeRange, Weather):
 
 class Fog(Weather):
 
-    terms_expanded = frozenset([
+    non_exclusive_terms_expanded = frozenset([
         u'brumous.s.01', u'fogged.s.01', u'haze.n.01', u'mist.v.03',
         u'mist.n.01', u'misty.s.02', u'haziness.n.02', u'fog.n.01',
         u'fog.n.02', u'mist.v.01'])
@@ -821,7 +817,7 @@ class Fog(Weather):
 
 class Cloudy(Weather):
 
-    terms_expanded = frozenset([
+    non_exclusive_terms_expanded = frozenset([
         u'overcast.v.01', u'cloud.n.01', u'cloud.n.02', u'cloud-covered.s.01',
         u'cloudiness.n.02', u'cloudiness.n.01', u'gloom.n.01',
         u'cloudiness.n.03', u'cloudy.a.02', u'cloudy.s.03', u'cloudy.s.01'])
@@ -837,9 +833,10 @@ class Cloudy(Weather):
 
 class Snow(Weather):
 
-    non_exclusive_terms_expanded = Cloudy.terms_expanded | frozenset([
-        u'snow.n.01', u'snow.n.02', u'snow.n.03', u'precipitation.n.03',
-        u'precipitation.n.01', u'precipitate.v.03', u'snow.v.01'])
+    non_exclusive_terms_expanded = (
+        Cloudy.non_exclusive_terms_expanded | frozenset([
+            u'snow.n.01', u'snow.n.02', u'snow.n.03', u'precipitation.n.03',
+            u'precipitation.n.01', u'precipitate.v.03', u'snow.v.01']))
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -852,9 +849,10 @@ class Snow(Weather):
 
 class Sleet(Weather):
 
-    terms_expanded = frozenset(['sleet.n.01', u'sleet.v.01'])
-    non_exclusive_terms_expanded = Cloudy.terms_expanded | frozenset([
-        u'precipitation.n.03', u'precipitation.n.01', u'precipitate.v.03'])
+    non_exclusive_terms_expanded = (
+        Cloudy.non_exclusive_terms_expanded | frozenset([
+            'sleet.n.01', u'sleet.v.01', u'precipitation.n.03',
+            u'precipitation.n.01', u'precipitate.v.03']))
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -867,13 +865,13 @@ class Sleet(Weather):
 
 class Rain(Weather):
 
-    terms_expanded = frozenset([
-        u'drizzle.n.01', u'drizzle.v.01', u'drizzle.v.02', u'rain.n.01',
-        u'rain.n.02', u'rain.n.03', u'rain.v.01', u'raindrop.n.01',
-        'rainy.s.01', u'shower.v.04', u'showery.s.01', u'shower.n.03'])
-    non_exclusive_terms_expanded = Cloudy.terms_expanded | frozenset([
-        u'drop.n.02', u'droplet.n.01', u'precipitate.v.03',
-        u'precipitation.n.01', u'precipitation.n.03'])
+    non_exclusive_terms_expanded = (
+        Cloudy.non_exclusive_terms_expanded | frozenset([
+            u'drizzle.n.01', u'drizzle.v.01', u'drizzle.v.02', u'rain.n.01',
+            u'rain.n.02', u'rain.n.03', u'rain.v.01', u'raindrop.n.01',
+            'rainy.s.01', u'shower.v.04', u'showery.s.01', u'shower.n.03',
+            u'drop.n.02', u'droplet.n.01', u'precipitate.v.03',
+            u'precipitation.n.01', u'precipitation.n.03']))
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
