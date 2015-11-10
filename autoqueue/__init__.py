@@ -500,7 +500,11 @@ class AutoQueueBase(object):
                 song.get_title().lower() == title.lower() and
                 song.get_artist().lower() == artist.lower())
         if artist:
-            return artist.lower() in [a.lower() for a in song.get_artists()]
+            artist_lower = artist.lower()
+            for song_artist in song.get_artists():
+                if song_artist.lower() == artist_lower:
+                    return True
+            return False
         tags = criteria.get('tags')
         song_tags = song.get_tags()
         for tag in tags:
@@ -652,7 +656,7 @@ class AutoQueueBase(object):
         songs = sorted([
             (song.get_discnumber(), song.get_tracknumber(), song)
             for song in self.player.search(search)])
-        if songs and all([self.allowed(song[2]) for song in songs]):
+        if songs and all(self.allowed(song[2]) for song in songs):
             for _, _, song in songs:
                 self.enqueue_song(song)
             return True
