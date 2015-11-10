@@ -149,7 +149,6 @@ def get_terms_from_song(song):
         if terms:
             words.append(word)
         title_terms |= terms
-    print('words: %s' % ','.join(words))
 
     tag_terms = get_terms(
         song.get_non_geo_tags(prefix='', exclude_prefix='artist:'))
@@ -397,10 +396,13 @@ class Terms(Predicate):
 
     def get_intersection(self, song_terms, exclusive=True):
         if exclusive:
-            return song_terms & self.terms_expanded
-
-        return song_terms & (
-            self.terms_expanded | self.non_exclusive_terms_expanded)
+            intersection = song_terms & self.terms_expanded
+        else:
+            intersection = song_terms & (
+                self.terms_expanded | self.non_exclusive_terms_expanded)
+        if intersection:
+            print("    %s" % intersection)
+        return intersection
 
     def applies_to_song(self, song, exclusive):
         return (

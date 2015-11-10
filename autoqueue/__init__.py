@@ -67,7 +67,7 @@ BANNED_ALBUMS = [
     'ep', 'greatest hits', 'the greatest hits', 'demo', 'the best of',
     'the very best of', 'live', 'demos', 'self titled', 'untitled album',
     '[non-album tracks]', 'single', 'singles', '7"', 'covers', 'album',
-    'split 7"']
+    'split 7"', 's/t']
 
 
 def no_op(*args, **kwargs):
