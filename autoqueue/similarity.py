@@ -286,24 +286,11 @@ class GaiaAnalysis(Thread):
             print(e)
             return []
 
-        if encoded_request is not None:
-            try:
-                view = View(dataset)
-                closest = view.nnSearch(encoded_request, self.metric).get(6)[1:]
-                print('*' * 10 + 'closest' + '*' * 10)
-                print('\n'.join([("%s" % (c,)) for c in closest]))
-            except Exception as e:
-                print(e)
-
-        print('*' * 10 + 'before' + '*' * 10)
-        print('\n'.join([("%s" % (t,)) for t in total]))
         result = sorted([
             (self.compute_score(
                 score, name, request_point=request_point) * 1000,
              name)
             for name, score in total])
-        print('*' * 10 + 'after' + '*' * 10)
-        print('\n'.join([("%s" % (r,)) for r in result]))
         return result
 
     def compute_score(self, score, name, request_point=None):
