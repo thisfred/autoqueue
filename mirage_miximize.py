@@ -28,7 +28,7 @@ class MiximizePlugin(SongsMenuPlugin):
     """Add selected songs to the queue in ideal order."""
 
     PLUGIN_ID = "Miximize"
-    PLUGIN_NAME = _("Miximize")
+    PLUGIN_NAME = _("Autoqueue Miximize")
     PLUGIN_DESC = _("Add selected songs to the queue in ideal order based on"
                     " acoustic similarity.")
     PLUGIN_ICON = "gtk-find-and-replace"

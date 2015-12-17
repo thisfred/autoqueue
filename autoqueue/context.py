@@ -401,7 +401,7 @@ class Terms(Predicate):
             intersection = song_terms & (
                 self.terms_expanded | self.non_exclusive_terms_expanded)
         if intersection:
-            print("    %s" % intersection)
+            print("    %s (%r)" % (intersection, self))
         return intersection
 
     def applies_to_song(self, song, exclusive):

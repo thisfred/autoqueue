@@ -36,6 +36,7 @@ from future import standard_library
 
 from autoqueue.blocking import Blocking
 from autoqueue.context import Context, get_terms_from_song
+from autoqueue.request import Requests
 
 
 standard_library.install_aliases()
@@ -87,6 +88,7 @@ def tag_score(song, tags):
 class Configuration(object):
 
     def __init__(self):
+        self.contextualize = True
         self.desired_queue_length = DEFAULT_LENGTH
         self.number = DEFAULT_NUMBER
         self.restrictions = None
@@ -224,18 +226,6 @@ class Cache(object):
             self.nearby_artists = configuration.get_performing_artists()
 
 
-class AcousticAnalysis(object):
-
-    def __init__(self):
-        bus = dbus.SessionBus()
-        sim = bus.get_object(
-            'org.autoqueue', '/org/autoqueue/Similarity',
-            follow_name_owner_changes=True)
-        self.similarity = dbus.Interface(
-            sim, dbus_interface='org.autoqueue.SimilarityInterface')
-        self.has_gaia = self.similarity.has_gaia()
-
-
 class AutoQueueBase(object):
 
     """Generic base class for autoqueue plugins."""
@@ -246,14 +236,21 @@ class AutoQueueBase(object):
         self.configuration = Configuration()
         self.context = None
         self.cache = Cache()
-        self.acoustic = AcousticAnalysis()
+        bus = dbus.SessionBus()
+        sim = bus.get_object(
+            'org.autoqueue', '/org/autoqueue/Similarity',
+            follow_name_owner_changes=True)
+        self.similarity = dbus.Interface(
+            sim, dbus_interface='org.autoqueue.SimilarityInterface')
+        self.has_gaia = self.similarity.has_gaia()
         self.player = player
         self.player.set_variables_from_config(self.configuration)
         self.cache.set_nearby_artist(self.configuration)
+        self.requests = Requests()
 
     @property
     def use_gaia(self):
-        return self.configuration.use_gaia and self.acoustic.has_gaia
+        return self.configuration.use_gaia and self.has_gaia
 
     def error_handler(self, *args, **kwargs):
         """Log errors when calling D-Bus methods in a async way."""
@@ -261,9 +258,13 @@ class AutoQueueBase(object):
 
     def allowed(self, song):
         """Check whether a song is allowed to be queued."""
+        filename = song.get_filename()
         for qsong in self.get_last_songs():
-            if qsong.get_filename() == song.get_filename():
+            if qsong.get_filename() == filename:
                 return False
+
+        if self.requests.has(filename):
+            return True
 
         date_search = re.compile("([0-9]{4}-)?%02d-%02d" % (
             self.eoq.month, self.eoq.day))
@@ -305,6 +306,7 @@ class AutoQueueBase(object):
                 self.queue_needs_songs():
             self.queue_song()
         self.blocking.unblock_artists()
+        self.requests.pop(song.get_filename())
 
     def on_removed(self, songs):
         if not self.use_gaia:
@@ -347,16 +349,21 @@ class AutoQueueBase(object):
 
     def analyzed(self):
         song = self.cache.last_song
-        filename = song.get_filename()
-        try:
-            if not isinstance(filename, str):
-                filename = str(filename, 'utf-8')
-        except UnicodeDecodeError:
-            print('Could not decode filename: %r' % filename)
+        filename = ensure_string(song.get_filename())
+        if not filename:
             return
         if self.use_gaia:
             print('Get similar tracks for: %s' % filename)
-            self.acoustic.similarity.get_ordered_gaia_tracks(
+            request = self.requests.get_first()
+            if request:
+                request = ensure_string(request)
+                if request:
+                    self.similarity.get_ordered_gaia_tracks_by_request(
+                        filename, self.configuration.number, request,
+                        reply_handler=self.gaia_reply_handler,
+                        error_handler=self.error_handler, timeout=TIMEOUT)
+                    return
+            self.similarity.get_ordered_gaia_tracks(
                 filename, self.configuration.number,
                 reply_handler=self.gaia_reply_handler,
                 error_handler=self.error_handler, timeout=TIMEOUT)
@@ -397,7 +404,7 @@ class AutoQueueBase(object):
         title = last_song.get_title()
         if artist_name and title:
             print('Get similar tracks for: %s - %s' % (artist_name, title))
-            self.acoustic.similarity.get_ordered_similar_tracks(
+            self.similarity.get_ordered_similar_tracks(
                 artist_name, title,
                 reply_handler=self.similar_tracks_handler,
                 error_handler=self.error_handler, timeout=TIMEOUT)
@@ -431,7 +438,7 @@ class AutoQueueBase(object):
         artists = [
             a.encode('utf-8') for a in self.cache.last_song.get_artists()]
         print('Get similar artists for %s' % artists)
-        self.acoustic.similarity.get_ordered_similar_artists(
+        self.similarity.get_ordered_similar_artists(
             artists, reply_handler=self.similar_artists_handler,
             error_handler=self.error_handler, timeout=TIMEOUT)
 
@@ -473,15 +480,12 @@ class AutoQueueBase(object):
 
     def analyze_and_callback(self, filename, reply_handler=no_op,
                              empty_handler=no_op):
-        try:
-            if not isinstance(filename, str):
-                filename = str(filename, 'utf-8')
-        except UnicodeDecodeError:
-            print('Could not decode filename: %r' % filename)
+        filename = ensure_string(filename)
+        if not filename:
             return
         if self.use_gaia:
             print('Analyzing: %s' % filename)
-            self.acoustic.similarity.analyze_track(
+            self.similarity.analyze_track(
                 filename, reply_handler=reply_handler,
                 error_handler=self.error_handler, timeout=TIMEOUT)
         else:
@@ -548,24 +552,25 @@ class AutoQueueBase(object):
         print('Remove similarity for %s' % filename)
         if not isinstance(filename, str):
             filename = str(filename, 'utf-8')
-        self.acoustic.similarity.remove_track_by_filename(
+        self.similarity.remove_track_by_filename(
             filename, reply_handler=no_op,
             error_handler=self.error_handler, timeout=TIMEOUT)
 
     def adjust_scores(self, results, invert_scores):
         """Adjust scores based on similarity with previous song and context."""
-        self.context = Context(
-            context_date=self.eoq, configuration=self.configuration,
-            cache=self.cache)
-        maximum_score = max(result['score'] for result in results) + 1
-        for result in results[:]:
-            if 'song' not in result:
-                results.remove(result)
-                continue
-            if invert_scores:
-                result['score'] = maximum_score - result['score']
-            self.context.adjust_score(result)
-            yield
+        if self.configuration.contextualize:
+            self.context = Context(
+                context_date=self.eoq, configuration=self.configuration,
+                cache=self.cache)
+            maximum_score = max(result['score'] for result in results) + 1
+            for result in results[:]:
+                if 'song' not in result:
+                    results.remove(result)
+                    continue
+                if invert_scores:
+                    result['score'] = maximum_score - result['score']
+                self.context.adjust_score(result)
+                yield
 
     def process_results(self, results, invert_scores=False):
         """Process results and queue best one(s)."""
@@ -582,7 +587,10 @@ class AutoQueueBase(object):
     def pick_result(self, results):
         for number, result in enumerate(sorted(results,
                                                key=lambda x: x['score'])):
-            song = result['song']
+            song = result.get('song')
+            if not song:
+                print("'song' not found in %s" % result)
+                continue
             self.log_lookup(number, result)
             frequency = song.get_play_frequency()
             if frequency is NotImplemented:
@@ -701,3 +709,15 @@ def levenshtein(string1, string2):
         previous_row = current_row
 
     return previous_row[-1]
+
+
+def ensure_string(possible_string):
+    """Convert unicode to utf-8 string, or return string or return None."""
+    try:
+        if not isinstance(possible_string, str):
+            possible_string = str(possible_string, 'utf-8')
+    except UnicodeDecodeError:
+        print('Could not decode filename: %r' % possible_string)
+        return None
+
+    return possible_string

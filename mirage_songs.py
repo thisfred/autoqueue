@@ -28,7 +28,7 @@ class AnalyzeSongsPlugin(SongsMenuPlugin):
     """Acoustic song analysis."""
 
     PLUGIN_ID = "Acoustic Analysis"
-    PLUGIN_NAME = _("Acoustic Analysis")  # noqa
+    PLUGIN_NAME = _("Autoqueue Analyze")  # noqa
     PLUGIN_DESC = _("Perform acoustic analysis of the selected songs.")  # noqa
     PLUGIN_ICON = "gtk-find-and-replace"
     PLUGIN_VERSION = "0.1"

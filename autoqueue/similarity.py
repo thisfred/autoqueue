@@ -36,6 +36,7 @@ from future import standard_library
 from gi.repository import GObject
 from pylast import LastFMNetwork, MalformedResponseError, NetworkError, WSError
 from queue import Empty, LifoQueue, PriorityQueue, Queue
+from autoqueue.utilities import player_get_data_dir
 
 standard_library.install_aliases()
 
@@ -46,12 +47,6 @@ try:
 except ImportError:
     GAIA = False
 
-
-try:
-    import xdg.BaseDirectory
-    XDG = True
-except ImportError:
-    XDG = False
 
 DBusGMainLoop(set_as_default=True)
 
@@ -260,23 +255,30 @@ class GaiaAnalysis(Thread):
             result.extend([encoded.index(filename) for filename in cluster])
         return result
 
-    def get_tracks(self, filename, number):
+    def get_tracks(self, filename, number, request=None):
         """Get most similar tracks from the gaia database."""
         while self.gaia_db is None:
             sleep(.1)
         encoded = filename.encode('utf-8')
-        if not self.gaia_db.contains(encoded):
-            print("%s not found in gaia db" % encoded)
-            self.queue.put((ADD, filename))
+        if not self.contains_or_add(encoded):
             return []
-        neighbours = self.get_neighbours(self.gaia_db, encoded, number)
+        encoded_request = None
+        if request:
+            encoded_request = request.encode('utf-8')
+            if not self.contains_or_add(encoded_request):
+                encoded_request = None
+        neighbours = self.get_neighbours(
+            self.gaia_db, encoded, number, encoded_request=encoded_request)
         print("total found %d" % len(neighbours))
         print(neighbours[0][0], neighbours[-1][0])
         return neighbours
 
-    def get_neighbours(self, dataset, encoded_filename, number):
+    def get_neighbours(self, dataset, encoded_filename, number,
+                       encoded_request=None):
         """Get a number of nearest neighbours."""
         view = View(dataset)
+        request_point = self.gaia_db.point(
+            encoded_request) if encoded_request else None
         try:
             total = view.nnSearch(
                 encoded_filename, self.metric).get(number + 1)[1:]
@@ -284,7 +286,42 @@ class GaiaAnalysis(Thread):
             print(e)
             return []
 
-        return [(score * 1000, name) for name, score in total]
+        if encoded_request is not None:
+            try:
+                view = View(dataset)
+                closest = view.nnSearch(encoded_request, self.metric).get(6)[1:]
+                print('*' * 10 + 'closest' + '*' * 10)
+                print('\n'.join([("%s" % (c,)) for c in closest]))
+            except Exception as e:
+                print(e)
+
+        print('*' * 10 + 'before' + '*' * 10)
+        print('\n'.join([("%s" % (t,)) for t in total]))
+        result = sorted([
+            (self.compute_score(
+                score, name, request_point=request_point) * 1000,
+             name)
+            for name, score in total])
+        print('*' * 10 + 'after' + '*' * 10)
+        print('\n'.join([("%s" % (r,)) for r in result]))
+        return result
+
+    def compute_score(self, score, name, request_point=None):
+        """If there is a request, score by distance to that instead."""
+        if request_point is None:
+            return score
+        return self.metric(request_point, self.gaia_db.point(name))
+
+    def contains_or_add(self, encoded_filename):
+        """Check if the filename exists in the database, queue it up if not.
+
+        """
+        if not self.gaia_db.contains(encoded_filename):
+            print("%s not found in gaia db" % encoded_filename)
+            self.queue.put((ADD, str(encoded_filename)))
+            return False
+
+        return True
 
 
 class DatabaseWrapper(Thread):
@@ -447,9 +484,9 @@ class Similarity(object):
     """Here the actual similarity computation and lookup happens."""
 
     def __init__(self):
-        self.db_path = os.path.join(
-            self.player_get_data_dir(), "similarity.db")
-        self.gaia_db_path = os.path.join(self.player_get_data_dir(), "gaia.db")
+        data_dir = player_get_data_dir()
+        self.db_path = os.path.join(data_dir, "similarity.db")
+        self.gaia_db_path = os.path.join(data_dir, "gaia.db")
         self.db_queue = PriorityQueue()
         self._db_wrapper = DatabaseWrapper()
         self._db_wrapper.daemon = True
@@ -478,27 +515,18 @@ class Similarity(object):
         self.execute_sql(command=command, priority=priority)
         return command
 
-    @staticmethod
-    def player_get_data_dir():
-        """Get the directory to store user data.
-
-        Defaults to $XDG_DATA_HOME/autoqueue on Gnome.
-
-        """
-        if not XDG:
-            data_dir = os.path.join(os.path.expanduser('~'), '.autoqueue')
-        else:
-            data_dir = os.path.join(
-                xdg.BaseDirectory.xdg_data_home, 'autoqueue')
-        if not os.path.exists(data_dir):
-            os.makedirs(data_dir)
-        return data_dir
-
     def remove_track_by_filename(self, filename):
         if not filename:
             return
         if GAIA:
             self.gaia_queue.put((REMOVE, filename))
+
+    def get_ordered_gaia_tracks_by_request(self, filename, number, request):
+        start_time = time()
+        tracks = self.gaia_analyser.get_tracks(
+            filename, number, request=request)
+        print("finding gaia matches took %f s" % (time() - start_time,))
+        return tracks
 
     def get_ordered_gaia_tracks(self, filename, number):
         """Get neighbours for track."""
@@ -669,9 +697,9 @@ class Similarity(object):
         self.execute_sql((
             'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name'
             ' VARCHAR(100), updated DATE, UNIQUE(name));',), priority=0)
-        self.execute_sql((
-            'CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER,'
-            ' artist2 INTEGER, match INTEGER, UNIQUE(artist1, artist2));',),
+        self.execute_sql(
+            ('CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER,'
+             ' artist2 INTEGER, match INTEGER, UNIQUE(artist1, artist2));',),
             priority=0)
         self.execute_sql((
             'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, artist'
@@ -866,6 +894,12 @@ class SimilarityService(dbus.service.Object):
         """Get similar tracks by mirage acoustic analysis."""
         return self.similarity.get_ordered_gaia_tracks(
             str(filename), number)
+
+    @method(dbus_interface=IFACE, in_signature='sis', out_signature='a(is)')
+    def get_ordered_gaia_tracks_by_request(self, filename, number, request):
+        """Get similar tracks by mirage acoustic analysis."""
+        return self.similarity.get_ordered_gaia_tracks_by_request(
+            str(filename), number, str(request))
 
     @method(dbus_interface=IFACE, in_signature='ss', out_signature='a(iss)')
     def get_ordered_similar_tracks(self, artist_name, title):
