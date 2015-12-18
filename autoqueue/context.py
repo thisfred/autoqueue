@@ -12,7 +12,6 @@ from dateutil.easter import easter
 from dateutil.rrule import TH, YEARLY, rrule
 from nltk import word_tokenize
 from nltk.corpus import wordnet
-from pprint import pprint
 
 nltk.download('punkt')
 nltk.download('wordnet')
@@ -190,26 +189,11 @@ class Context(object):
         song = result['song']
         for predicate in self.predicates:
             in_context = predicate.applies_in_context(self)
-            before_score = result['score']
             if predicate.applies_to_song(song, exclusive=False) and in_context:
                 predicate.positive_score(result)
-                print(
-                    "%s - %s " % (
-                        song.get_artist(), song.get_title(with_version=False)),
-                    end='')
-                print(
-                    "%r adjusted positively %.2f -> %.2f" % (
-                        predicate, before_score, result['score']))
             elif predicate.applies_to_song(song, exclusive=True) \
                     and not in_context:
                 predicate.negative_score(result)
-                print(
-                    "%s - %s " % (
-                        song.get_artist(), song.get_title(with_version=False)),
-                    end='')
-                print(
-                    "%r adjusted negatively %.2f -> %.2f" % (
-                        predicate, before_score, result['score']))
 
     def build_predicates(self):
         """Construct predicates to check against the context."""
@@ -227,26 +211,26 @@ class Context(object):
             self.predicates.append(Artist(artist))
 
     def _add_common_terms(self):
-        print("common terms:")
-        pprint(self.cache.previous_terms)
         common = CommonTerms.from_counter(self.cache.previous_terms)
         self.predicates.append(common)
 
+    def _add_artist_predicate_from_song(self, song):
+        if not song:
+            return
+        self.predicates.append(ArtistTerms.from_song(song))
+
     def _add_artist_predicate(self):
-        artist_terms = get_artist_terms_from_song(self.cache.last_song)
-        artist_predicate = ArtistTerms(
-            ne_expanded_terms=frozenset(artist_terms))
-        self.predicates.append(artist_predicate)
+        self._add_artist_predicate_from_song(self.cache.last_song)
+        self._add_artist_predicate_from_song(self.cache.current_request)
+
+    def _add_terms_from_song(self, song):
+        if not song:
+            return
+        self.predicates.append(Terms.from_song(song))
 
     def _add_terms(self):
-        terms = get_terms_from_song(self.cache.last_song)
-        predicate = Terms(ne_expanded_terms=frozenset(terms))
-        self.predicates.append(predicate)
-        request = self.cache.current_request
-        if request:
-            terms = get_terms_from_song(request)
-            predicate = Terms(ne_expanded_terms=frozenset(terms))
-            self.predicates.append(predicate)
+        self._add_terms_from_song(self.cache.last_song)
+        self._add_terms_from_song(self.cache.current_request)
 
     def _add_geohash(self):
         self.predicates.append(Geohash(self.cache.last_song.get_geohashes()))
@@ -372,6 +356,7 @@ class Predicate(object):
 
     def positive_score(self, result):
         result['score'] /= 1 + self.get_factor(result['song'], exclusive=False)
+        result.setdefault('reasons', []).append(self)
 
     def negative_score(self, result):
         pass
@@ -387,6 +372,7 @@ class Terms(Predicate):
     regex_terms = tuple()
     terms_expanded = frozenset()
     non_exclusive_terms_expanded = frozenset()
+    song = None
 
     def __init__(self, ne_expanded_terms=frozenset()):
         ne_expanded_terms = frozenset(ne_expanded_terms)
@@ -401,13 +387,10 @@ class Terms(Predicate):
 
     def get_intersection(self, song_terms, exclusive=True):
         if exclusive:
-            intersection = song_terms & self.terms_expanded
-        else:
-            intersection = song_terms & (
-                self.terms_expanded | self.non_exclusive_terms_expanded)
-        if intersection:
-            print("    %s (%r)" % (intersection, self))
-        return intersection
+            return song_terms & self.terms_expanded
+
+        return song_terms & (
+            self.terms_expanded | self.non_exclusive_terms_expanded)
 
     def applies_to_song(self, song, exclusive):
         return (
@@ -426,9 +409,24 @@ class Terms(Predicate):
 
         return False
 
+    @classmethod
+    def from_song(cls, song):
+        terms = cls._get_song_terms(song)
+        new = cls(ne_expanded_terms=frozenset(terms))
+        new.song = song
+        return new
+
     @staticmethod
     def _get_song_terms(song):
         return get_terms_from_song(song)
+
+    def __repr__(self):
+        song = self.song
+        if not song:
+            return super(Terms, self).__repr__()
+
+        return '<%s: %s - %s>' % (
+            self.__class__.__name__, song.get_artist(), song.get_title())
 
 
 class CommonTerms(Terms):
@@ -490,11 +488,6 @@ class Period(ExclusiveTerms):
         factor = super(Period, self).get_factor(song, exclusive)
         if exclusive:
             return factor
-
-        print("  %.2f * %.2f" % (
-            factor,
-            1.0 - min(
-                1, (self.diff.total_seconds() / self.decay.total_seconds()))))
 
         return factor * (
             1.0 - min(

@@ -86,13 +86,13 @@ class Blocking(object):
     def _dump_blocked(self):
         dump = os.path.join(
             self.get_cache_dir(), "autoqueue_block_cache")
-        try:
-            os.remove(dump)
-        except OSError:
-            pass
         if not self._blocked_artists:
+            try:
+                os.remove(dump)
+            except OSError:
+                pass
             return
-        with open(dump, 'r') as pickle_file:
+        with open(dump, 'w') as pickle_file:
             pickler = Pickler(pickle_file, -1)
             to_dump = (self._blocked_artists, self._blocked_artists_times)
             pickler.dump(to_dump)

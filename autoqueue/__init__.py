@@ -615,6 +615,8 @@ class AutoQueueBase(object):
             rating = song.get_rating()
             if rating is NotImplemented:
                 rating = THRESHOLD
+            for reason in result.get('reasons', []):
+                print("  %s" % reason)
             print("score: %.5f, play frequency %.5f" % (rating, frequency))
             comparison = rating
             if self.configuration.favor_new:
