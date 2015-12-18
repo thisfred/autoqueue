@@ -242,6 +242,11 @@ class Context(object):
         terms = get_terms_from_song(self.cache.last_song)
         predicate = Terms(ne_expanded_terms=frozenset(terms))
         self.predicates.append(predicate)
+        request = self.cache.current_request
+        if request:
+            terms = get_terms_from_song(request)
+            predicate = Terms(ne_expanded_terms=frozenset(terms))
+            self.predicates.append(predicate)
 
     def _add_geohash(self):
         self.predicates.append(Geohash(self.cache.last_song.get_geohashes()))

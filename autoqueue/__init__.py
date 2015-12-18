@@ -206,6 +206,7 @@ class Cache(object):
         self.weather_at = None
         self.found = False
         self.previous_terms = Counter()
+        self.current_request = None
 
     def add_to_previous_terms(self, song):
         self.previous_terms -= Counter(self.previous_terms.keys())
@@ -306,7 +307,13 @@ class AutoQueueBase(object):
                 self.queue_needs_songs():
             self.queue_song()
         self.blocking.unblock_artists()
-        self.requests.pop(song.get_filename())
+        self.pop_request(song)
+
+    def pop_request(self, song):
+        filename = song.get_filename()
+        if self.requests.has(filename):
+            self.cache.current_request = None
+        self.requests.pop(filename)
 
     def on_removed(self, songs):
         if not self.use_gaia:
@@ -530,6 +537,16 @@ class AutoQueueBase(object):
                 filename=result.get('filename'), tags=result.get('tags'))
             self.perform_search(search, [result])
             yield
+
+    def get_current_request(self):
+        if not self.cache.current_request:
+            filename = self.requests.get_first()
+            search = self.construct_filenames_search([filename])
+            songs = self.player.search(search)
+            if not songs:
+                return
+            self.cache.current_request = songs[0]
+        return self.cache.current_request
 
     def perform_search(self, search, results):
         songs = set(

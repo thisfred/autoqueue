@@ -12,6 +12,7 @@ class Requests(object):
             self.path, isolation_level='immediate')
         self.cursor = self.connection.cursor()
         self.create_table()
+        self.cached_song = None
 
     def create_table(self):
         self.cursor.execute(
