@@ -19,7 +19,7 @@ CLEANFILES = [SERVICE_FILE, 'MANIFEST']
 def replace_prefix(prefix):
     """Replace every '@prefix@' with prefix within 'filename' content."""
     # replace .service file, DATA_DIR constant
-    for filename in ([SERVICE_FILE]):
+    for filename in [SERVICE_FILE]:
         with open(filename + '.in') as in_file:
             content = in_file.read()
             with open(filename, 'w') as out_file:
@@ -56,18 +56,16 @@ DistUtilsExtra.auto.setup(
     description='A cross music player plug-in that queues similar tracks',
     long_description=(
         'A cross music player plug-in that adds similar tracks to the'
-        'queue. Currently works with quodlibet, rhythmbox and mpd.'),
+        'queue. Currently works with quodlibet and mpd.'),
     version='1.0.0',
-    packages=['autoqueue', 'mirage'],
+    packages=['autoqueue'],
     license='GNU GPL v2',
     author='Eric Casteleijn',
     author_email='thisfred@gmail.com',
     url='https://launchpad.net/autoqueue',
-    package_data={'mirage': ['res/*']},
     requires=[
-        'dateutil', 'scipy', 'ctypes', 'pylast', 'pywapi', 'geohash',
-        'requests', 'nltk'],
-    provides=['mirage', 'autoqueue'],
+        'dateutil', 'pylast', 'pywapi', 'geohash', 'requests', 'nltk'],
+    provides=['autoqueue'],
     cmdclass={
         'install': Install,
         'clean': Clean,
@@ -78,7 +76,4 @@ DistUtilsExtra.auto.setup(
         ('share/pyshared/quodlibet/plugins/events/',
          ['quodlibet_autoqueue.py']),
         ('share/pyshared/quodlibet/plugins/songsmenu/',
-         ['mirage_songs.py']),
-        ('lib/rhythmbox/plugins/rhythmbox_autoqueue',
-         ['rhythmbox_autoqueue/rhythmbox_autoqueue.rb-plugin',
-          'rhythmbox_autoqueue/__init__.py'])])
+         ['analyze_songs.py', 'miximize.py', 'request.py'])])

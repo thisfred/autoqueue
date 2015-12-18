@@ -712,7 +712,7 @@ def levenshtein(string1, string2):
     if len(string1) < len(string2):
         return levenshtein(string2, string1)
 
-    if len(string2) == 0:
+    if not string2:
         return len(string1)
 
     previous_row = list(range(len(string2) + 1))

@@ -1,6 +1,4 @@
 python-dateutil
-scipy
-ctypes
 pylast
 pywapi
 geohash

@@ -64,8 +64,7 @@ class Blocking(object):
         """Read the list of blocked artists from disk."""
         dump = os.path.join(self.get_cache_dir(), "autoqueue_block_cache")
         try:
-            pickle = open(dump, 'r')
-            try:
+            with open(dump, 'r') as pickle:
                 unpickler = Unpickler(pickle)
                 artists, times = unpickler.load()
                 if isinstance(artists, list):
@@ -74,8 +73,6 @@ class Blocking(object):
                     times = deque(times)
                 self._blocked_artists = artists
                 self._blocked_artists_times = times
-            finally:
-                pickle.close()
         except IOError:
             pass
 
@@ -93,10 +90,9 @@ class Blocking(object):
             os.remove(dump)
         except OSError:
             pass
-        if len(self._blocked_artists) == 0:
+        if not self._blocked_artists:
             return
-        pickle_file = open(dump, 'w')
-        pickler = Pickler(pickle_file, -1)
-        to_dump = (self._blocked_artists, self._blocked_artists_times)
-        pickler.dump(to_dump)
-        pickle_file.close()
+        with open(dump, 'r') as pickle_file:
+            pickler = Pickler(pickle_file, -1)
+            to_dump = (self._blocked_artists, self._blocked_artists_times)
+            pickler.dump(to_dump)

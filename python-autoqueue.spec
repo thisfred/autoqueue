@@ -21,15 +21,6 @@ artist for a configurable amount of time) It works pretty well in creating a
 consistent yet not wholly predictable listening experience.   Similarity is 
 looked up on last.fm and/or computed from acoustic analysis if you have 
 
-%package -n rhythmbox-autoqueue
-Summary:        Autoqueue plugin for rhythmbox
-Group:          Applications/Multimedia
-Requires:       python-autoqueue, rhythmbox
-
-%description -n rhythmbox-autoqueue
-A plugin for the Rhythmbox music player to create a playlist based on tracks
-similar to the currently playing track using python autoqueue.
-
 %package -n quodlibet-autoqueue
 Summary:        Autoqueue plugin for quodlibet
 Group:          Applications/Multimedia
@@ -62,13 +53,8 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %doc COPYRIGHT.txt README.txt
 %{python_sitelib}/autoqueue*
-%{python_sitelib}/mirage*
-%{python_sitelib}/mpd_*
 %{_libdir}/autoqueue/autoqueue-similarity-service
 %{_datadir}/dbus-1/services/org.autoqueue.service
-
-%files -n rhythmbox-autoqueue
-%{_libdir}/rhythmbox/plugins/rhythmbox_autoqueue
 
 %files -n quodlibet-autoqueue
 %{python_sitelib}/quodlibet/*

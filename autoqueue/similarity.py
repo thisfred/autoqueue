@@ -147,8 +147,8 @@ class GaiaAnalysis(Thread):
         if self.gaia_db.contains(encoded):
             return
         signame = self.get_signame(encoded)
-        if not os.path.exists(signame):
-            if not self.essentia_analyze(encoded, signame):
+        if not (os.path.exists(signame) or
+                self.essentia_analyze(encoded, signame)):
                 return
         try:
             point = self.load_point(signame)
@@ -291,6 +291,9 @@ class GaiaAnalysis(Thread):
                 score, name, request_point=request_point) * 1000,
              name)
             for name, score in total])
+        if request_point:
+            # Filter out the worst matches for the requested track
+            return result[:max(1, number / 2)]
         return result
 
     def compute_score(self, score, name, request_point=None):
@@ -878,13 +881,13 @@ class SimilarityService(dbus.service.Object):
 
     @method(dbus_interface=IFACE, in_signature='si', out_signature='a(is)')
     def get_ordered_gaia_tracks(self, filename, number):
-        """Get similar tracks by mirage acoustic analysis."""
+        """Get similar tracks by gaia acoustic analysis."""
         return self.similarity.get_ordered_gaia_tracks(
             str(filename), number)
 
     @method(dbus_interface=IFACE, in_signature='sis', out_signature='a(is)')
     def get_ordered_gaia_tracks_by_request(self, filename, number, request):
-        """Get similar tracks by mirage acoustic analysis."""
+        """Get similar tracks by gaia acoustic analysis."""
         return self.similarity.get_ordered_gaia_tracks_by_request(
             str(filename), number, str(request))
 
@@ -915,7 +918,7 @@ class SimilarityService(dbus.service.Object):
 
     @method(dbus_interface=IFACE, out_signature='b')
     def has_gaia(self):
-        """Get mirage installation status."""
+        """Get gaia installation status."""
         return GAIA
 
     def run(self):

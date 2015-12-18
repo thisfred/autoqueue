@@ -1212,8 +1212,7 @@ class Weekend(ExclusiveTerms):
     def applies_in_context(self, context):
         context_date = context.date
         weekday = context_date.isoweekday()
-        return weekday == 6 or weekday == 7 or (
-            weekday == 5 and context_date.hour >= 17)
+        return weekday in (6, 7) or (weekday == 5 and context_date.hour >= 17)
 
 
 class Thanksgiving(Period):
