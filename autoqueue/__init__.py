@@ -541,10 +541,14 @@ class AutoQueueBase(object):
     def get_current_request(self):
         if not self.cache.current_request:
             filename = self.requests.get_first()
+            if not filename:
+                return
+
             search = self.construct_filenames_search([filename])
             songs = self.player.search(search)
             if not songs:
                 return
+
             self.cache.current_request = songs[0]
         return self.cache.current_request
 
@@ -576,6 +580,7 @@ class AutoQueueBase(object):
     def adjust_scores(self, results, invert_scores):
         """Adjust scores based on similarity with previous song and context."""
         if self.configuration.contextualize:
+            self.get_current_request()
             self.context = Context(
                 context_date=self.eoq, configuration=self.configuration,
                 cache=self.cache)

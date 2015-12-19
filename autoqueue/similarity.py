@@ -212,12 +212,10 @@ class GaiaAnalysis(Thread):
         self.initialize()
         print("STARTING GAIA ANALYSIS THREAD")
         while True:
-            print("%d tracks in queue." % self.queue.qsize())
             cmd, filename = self.queue.get()
             while filename:
                 self.commands[cmd](filename)
                 try:
-                    print("%d tracks in queue." % self.queue.qsize())
                     cmd, filename = self.queue.get(block=False)
                 except Empty:
                     self.gaia_db = self.transform_and_save(
