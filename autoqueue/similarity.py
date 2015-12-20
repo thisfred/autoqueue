@@ -231,7 +231,7 @@ class GaiaAnalysis(Thread):
             self.queue.put((ADD, filename))
         while self.queue.qsize():
             print("waiting for analysis")
-            sleep(.5)
+            sleep(10)
         encoded = [f.encode('utf-8') for f in filenames]
         dataset = DataSet()
         number_of_tracks = len(filenames)

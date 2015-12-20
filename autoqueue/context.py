@@ -189,8 +189,9 @@ class Context(object):
         song = result['song']
         for predicate in self.predicates:
             in_context = predicate.applies_in_context(self)
-            if predicate.applies_to_song(song, exclusive=False) and in_context:
-                predicate.positive_score(result)
+            applies = predicate.applies_to_song(song, exclusive=False)
+            if applies and in_context:
+                predicate.positive_score(result, applies)
             elif predicate.applies_to_song(song, exclusive=True) \
                     and not in_context:
                 predicate.negative_score(result)
@@ -354,9 +355,9 @@ class Predicate(object):
     def get_factor(self, song, exclusive):
         return 1.0
 
-    def positive_score(self, result):
+    def positive_score(self, result, applies):
         result['score'] /= 1 + self.get_factor(result['song'], exclusive=False)
-        result.setdefault('reasons', []).append(self)
+        result.setdefault('reasons', []).append((self, applies))
 
     def negative_score(self, result):
         pass
