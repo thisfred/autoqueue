@@ -20,12 +20,23 @@ class Requests(object):
             "filename STRING);")
         self.connection.commit()
 
+
     def add(self, filename):
+        if not isinstance(filename, unicode):
+            try:
+                filename = filename.decode('utf-8')
+            except:
+                return
         self.cursor.execute(
             "INSERT INTO requests (filename) VALUES (?);", (filename,))
         self.connection.commit()
 
     def has(self, filename):
+        if not isinstance(filename, unicode):
+            try:
+                filename = filename.decode('utf-8')
+            except:
+                return
         self.cursor.execute(
             "SELECT 1 FROM requests WHERE filename = ? LIMIT 1;",
             (filename,))
@@ -41,6 +52,11 @@ class Requests(object):
             return row[0]
 
     def pop(self, filename):
+        if not isinstance(filename, unicode):
+            try:
+                filename = filename.decode('utf-8')
+            except:
+                return
         self.cursor.execute(
             "DELETE FROM requests WHERE filename = ? ORDER BY id LIMIT 1;",
             (filename,))
