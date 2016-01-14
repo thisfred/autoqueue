@@ -363,6 +363,7 @@ class AutoQueueBase(object):
             print('Get similar tracks for: %s' % filename)
             request = self.requests.get_first()
             if request:
+                print("*****" + request)
                 request = ensure_string(request)
                 if request:
                     self.similarity.get_ordered_gaia_tracks_by_request(
@@ -370,6 +371,8 @@ class AutoQueueBase(object):
                         reply_handler=self.gaia_reply_handler,
                         error_handler=self.error_handler, timeout=TIMEOUT)
                     return
+            else:
+                print("***** no requests")
             self.similarity.get_ordered_gaia_tracks(
                 filename, self.configuration.number,
                 reply_handler=self.gaia_reply_handler,
@@ -738,10 +741,10 @@ def levenshtein(string1, string2):
 def ensure_string(possible_string):
     """Convert unicode to utf-8 string, or return string or return None."""
     try:
-        if not isinstance(possible_string, str):
-            possible_string = str(possible_string, 'utf-8')
-    except UnicodeDecodeError:
-        print('Could not decode filename: %r' % possible_string)
+        if isinstance(possible_string, unicode):
+            return possible_string.encode('utf-8')
+    except:
+        print('Could not encode filename: %r' % possible_string)
         return None
 
     return possible_string

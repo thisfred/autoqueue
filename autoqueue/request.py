@@ -47,7 +47,7 @@ class Requests(object):
 
     def get_first(self):
         self.cursor.execute(
-            "SELECT filename FROM requests ORDER BY id LIMIT 1;")
+            "SELECT filename FROM requests ORDER BY id DESC LIMIT 1;")
         for row in self.cursor.fetchall():
             return row[0]
 
