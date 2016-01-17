@@ -1,7 +1,7 @@
 """
 AutoQueue: an automatic queueing plugin library.
 
-Copyright 2007-2014 Eric Casteleijn <thisfred@gmail.com>,
+Copyright 2007-2016 Eric Casteleijn <thisfred@gmail.com>,
                     Daniel Nouri <daniel.nouri@gmail.com>
                     Jasper OpdeCoul <jasper.opdecoul@gmail.com>
                     Graham White
@@ -21,37 +21,35 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
 
 import random
 import re
-
-import dbus
-import requests
-from builtins import object, range, str
 from collections import Counter
 from datetime import datetime, timedelta
+from builtins import object, range, str
+
+import dbus
 from dbus.mainloop.glib import DBusGMainLoop
 from future import standard_library
-
-from autoqueue.blocking import Blocking
-from autoqueue.context import Context, get_terms_from_song
-from autoqueue.request import Requests
-
-
-standard_library.install_aliases()
 
 try:
     import pywapi
     WEATHER = True
 except ImportError:
     WEATHER = False
-
 try:
     import geohash
     GEOHASH = True
 except ImportError:
     GEOHASH = False
+import requests
+from autoqueue.blocking import Blocking
+from autoqueue.context import Context, get_terms_from_song
+from autoqueue.request import Requests
+
+
+standard_library.install_aliases()
 
 DBusGMainLoop(set_as_default=True)
 
@@ -167,7 +165,8 @@ class Configuration(object):
             response = requests.get(
                 'http://ws.audioscrobbler.com/2.0/', params=parameters)
             page = response.json()
-        except:
+        except Exception as ex:
+            print(ex)
             print(response)
             return {}
         return page
@@ -179,14 +178,15 @@ class Configuration(object):
             'api_key': API_KEY,
             'format': 'json'}
         if self.geohash and GEOHASH:
-            lon, lat = geohash.decode(self.geohash)
+            lon, lat = geohash.decode(self.geohash)[:2]
             parameters['long'] = lon
             parameters['lat'] = lat
         if self.location:
             parameters['location'] = self.location
         return parameters
 
-    def _get_weather(self, location_id):
+    @staticmethod
+    def _get_weather(location_id):
         try:
             return pywapi.get_weather_from_yahoo(location_id)
         except Exception as exception:
@@ -206,7 +206,6 @@ class Cache(object):
         self.weather_at = None
         self.found = False
         self.previous_terms = Counter()
-        self.current_request = None
 
     def add_to_previous_terms(self, song):
         self.previous_terms -= Counter(self.previous_terms.keys())
@@ -253,7 +252,8 @@ class AutoQueueBase(object):
     def use_gaia(self):
         return self.configuration.use_gaia and self.has_gaia
 
-    def error_handler(self, *args, **kwargs):
+    @staticmethod
+    def error_handler(*args, **kwargs):
         """Log errors when calling D-Bus methods in a async way."""
         print('Error handler received: %r, %r' % (args, kwargs))
 
@@ -310,16 +310,14 @@ class AutoQueueBase(object):
         self.pop_request(song)
 
     def pop_request(self, song):
-        filename = song.get_filename()
-        if self.requests.has(filename):
-            self.cache.current_request = None
-        self.requests.pop(filename)
+        self.requests.pop(song.get_filename())
 
     def on_removed(self, songs):
         if not self.use_gaia:
             return
         for song in songs:
             self.remove_missing_track(song.get_filename())
+            self.pop_request(song)
 
     def queue_needs_songs(self):
         """Determine whether the queue needs more songs added."""
@@ -354,6 +352,42 @@ class AutoQueueBase(object):
             song.get_filename(), reply_handler=self.analyzed,
             empty_handler=self.gaia_reply_handler)
 
+    def get_best_request(self, filename):
+        all_requests = self.requests.get_requests()
+        if not all_requests:
+            self.similarity.get_ordered_gaia_tracks(
+                filename, self.configuration.number,
+                reply_handler=self.gaia_reply_handler,
+                error_handler=self.error_handler, timeout=TIMEOUT)
+        elif len(all_requests) == 1:
+            self.best_request_handler(all_requests[0])
+        else:
+            self.similarity.get_best_match(
+                filename, all_requests,
+                reply_handler=self.best_request_handler,
+                error_handler=self.error_handler, timeout=TIMEOUT)
+
+    def best_request_handler(self, request):
+        song = self.cache.last_song
+        filename = ensure_string(song.get_filename())
+        if not filename:
+            return
+        if request:
+            print("*****" + request)
+            request = ensure_string(request)
+            if request:
+                self.similarity.get_ordered_gaia_tracks_by_request(
+                    filename, self.configuration.number, request,
+                    reply_handler=self.gaia_reply_handler,
+                    error_handler=self.error_handler, timeout=TIMEOUT)
+                return
+        else:
+            print("***** no requests")
+        self.similarity.get_ordered_gaia_tracks(
+            filename, self.configuration.number,
+            reply_handler=self.gaia_reply_handler,
+            error_handler=self.error_handler, timeout=TIMEOUT)
+
     def analyzed(self):
         song = self.cache.last_song
         filename = ensure_string(song.get_filename())
@@ -361,22 +395,7 @@ class AutoQueueBase(object):
             return
         if self.use_gaia:
             print('Get similar tracks for: %s' % filename)
-            request = self.requests.get_first()
-            if request:
-                print("*****" + request)
-                request = ensure_string(request)
-                if request:
-                    self.similarity.get_ordered_gaia_tracks_by_request(
-                        filename, self.configuration.number, request,
-                        reply_handler=self.gaia_reply_handler,
-                        error_handler=self.error_handler, timeout=TIMEOUT)
-                    return
-            else:
-                print("***** no requests")
-            self.similarity.get_ordered_gaia_tracks(
-                filename, self.configuration.number,
-                reply_handler=self.gaia_reply_handler,
-                error_handler=self.error_handler, timeout=TIMEOUT)
+            self.get_best_request(filename)
         else:
             self.gaia_reply_handler([])
 
@@ -542,18 +561,16 @@ class AutoQueueBase(object):
             yield
 
     def get_current_request(self):
-        if not self.cache.current_request:
-            filename = self.requests.get_first()
-            if not filename:
-                return
+        filename = self.requests.get_first()
+        if not filename:
+            return
 
-            search = self.construct_filenames_search([filename])
-            songs = self.player.search(search)
-            if not songs:
-                return
+        search = self.construct_filenames_search([filename])
+        songs = self.player.search(search)
+        if not songs:
+            return
 
-            self.cache.current_request = songs[0]
-        return self.cache.current_request
+        return songs[0]
 
     def perform_search(self, search, results):
         songs = set(
@@ -583,10 +600,9 @@ class AutoQueueBase(object):
     def adjust_scores(self, results, invert_scores):
         """Adjust scores based on similarity with previous song and context."""
         if self.configuration.contextualize:
-            self.get_current_request()
             self.context = Context(
                 context_date=self.eoq, configuration=self.configuration,
-                cache=self.cache)
+                cache=self.cache, request=self.get_current_request())
             maximum_score = max(result['score'] for result in results) + 1
             for result in results[:]:
                 if 'song' not in result:
@@ -743,7 +759,7 @@ def ensure_string(possible_string):
     try:
         if isinstance(possible_string, unicode):
             return possible_string.encode('utf-8')
-    except:
+    except UnicodeEncodeError:
         print('Could not encode filename: %r' % possible_string)
         return None
 

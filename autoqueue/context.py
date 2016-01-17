@@ -158,10 +158,11 @@ class Context(object):
 
     """Object representing the current context."""
 
-    def __init__(self, context_date, configuration, cache):
+    def __init__(self, context_date, configuration, cache, request):
         self.date = context_date
         self.configuration = configuration
         self.cache = cache
+        self.request = request
         self.weather = cache.get_weather(configuration)
         self.predicates = []
         self.build_predicates()
@@ -222,7 +223,7 @@ class Context(object):
 
     def _add_artist_predicate(self):
         self._add_artist_predicate_from_song(self.cache.last_song)
-        self._add_artist_predicate_from_song(self.cache.current_request)
+        self._add_artist_predicate_from_song(self.request)
 
     def _add_terms_from_song(self, song):
         if not song:
@@ -231,7 +232,7 @@ class Context(object):
 
     def _add_terms(self):
         self._add_terms_from_song(self.cache.last_song)
-        self._add_terms_from_song(self.cache.current_request)
+        self._add_terms_from_song(self.request)
 
     def _add_geohash(self):
         self.predicates.append(Geohash(self.cache.last_song.get_geohashes()))

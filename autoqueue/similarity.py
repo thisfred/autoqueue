@@ -1,6 +1,6 @@
 """Autoqueue similarity service.
 
-Copyright 2011-2013 Eric Casteleijn <thisfred@gmail.com>,
+Copyright 2011-2016 Eric Casteleijn <thisfred@gmail.com>,
                     Graham White
 
 This program is free software; you can redistribute it and/or modify
@@ -23,10 +23,11 @@ import json
 import os
 import sqlite3
 import subprocess
-from builtins import object, str
 from datetime import datetime, timedelta
 from threading import Thread
 from time import sleep, strptime, time
+from queue import Empty, LifoQueue, PriorityQueue, Queue
+from builtins import object, str
 
 import dbus
 import dbus.service
@@ -35,10 +36,6 @@ from dbus.service import method
 from future import standard_library
 from gi.repository import GObject
 from pylast import LastFMNetwork, MalformedResponseError, NetworkError, WSError
-from queue import Empty, LifoQueue, PriorityQueue, Queue
-from autoqueue.utilities import player_get_data_dir
-
-standard_library.install_aliases()
 
 try:
     from gaia2 import DataSet, transform, DistanceFunctionFactory, View, Point
@@ -46,6 +43,10 @@ try:
     GAIA = True
 except ImportError:
     GAIA = False
+
+from autoqueue.utilities import player_get_data_dir
+
+standard_library.install_aliases()
 
 
 DBusGMainLoop(set_as_default=True)
@@ -149,7 +150,7 @@ class GaiaAnalysis(Thread):
         signame = self.get_signame(encoded)
         if not (os.path.exists(signame) or
                 self.essentia_analyze(encoded, signame)):
-                return
+            return
         try:
             point = self.load_point(signame)
             point.setName(encoded)
@@ -221,17 +222,13 @@ class GaiaAnalysis(Thread):
                     self.gaia_db = self.transform_and_save(
                         self.gaia_db, self.gaia_db_path)
                     break
-            print (
+            print(
                 "songs in db after processing queue: %d" %
                 self.gaia_db.size())
 
     def get_miximized_tracks(self, filenames):
         """Get list of tracks in ideal order."""
-        for filename in filenames:
-            self.queue.put((ADD, filename))
-        while self.queue.qsize():
-            print("waiting for analysis")
-            sleep(10)
+        self.analyze_and_wait(filenames)
         encoded = [f.encode('utf-8') for f in filenames]
         dataset = DataSet()
         number_of_tracks = len(filenames)
@@ -252,6 +249,31 @@ class GaiaAnalysis(Thread):
         for cluster in clusterer.clusters:
             result.extend([encoded.index(filename) for filename in cluster])
         return result
+
+    def analyze_and_wait(self, filenames):
+        for name in filenames:
+            self.queue.put((ADD, name))
+        size = self.queue.qsize()
+        while self.queue.qsize() > max(0, size - len(filenames)):
+            print("waiting for analysis")
+            sleep(10)
+
+    def get_best_match(self, filename, filenames):
+        self.analyze_and_wait([filename] + filenames)
+        encoded_filename = filename.encode('utf-8')
+        encoded = [f.encode('utf-8') for f in filenames]
+        point = self.gaia_db.point(encoded_filename)
+
+        best, best_name = None, None
+        for name in encoded:
+            if not self.contains_or_add(name):
+                continue
+            distance = self.metric(point, self.gaia_db.point(name))
+            print("%s, %s" % (distance, name))
+            if best is None or distance < best:
+                best, best_name = distance, name
+
+        return best_name
 
     def get_tracks(self, filename, number, request=None):
         """Get most similar tracks from the gaia database."""
@@ -850,6 +872,12 @@ class Similarity(object):
 
         return self.gaia_analyser.get_miximized_tracks(filenames)
 
+    def get_best_match(self, filename, filenames):
+        if not GAIA:
+            return
+
+        return self.gaia_analyser.get_best_match(filename, filenames)
+
 
 class SimilarityService(dbus.service.Object):
 
@@ -918,6 +946,11 @@ class SimilarityService(dbus.service.Object):
     def has_gaia(self):
         """Get gaia installation status."""
         return GAIA
+
+    @method(dbus_interface=IFACE, in_signature='sas', out_signature='s')
+    def get_best_match(self, filename, filenames):
+        return self.similarity.get_best_match(
+            str(filename), [str(f) for f in filenames])
 
     def run(self):
         """Run loop."""
