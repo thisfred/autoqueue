@@ -251,17 +251,23 @@ class GaiaAnalysis(Thread):
         return result
 
     def analyze_and_wait(self, filenames):
-        for name in filenames:
-            self.queue.put((ADD, name))
+        self.queue_filenames(filenames)
         size = self.queue.qsize()
         while self.queue.qsize() > max(0, size - len(filenames)):
             print("waiting for analysis")
             sleep(10)
 
+    def queue_filenames(self, filenames):
+        for name in filenames:
+            self.queue.put((ADD, name))
+
     def get_best_match(self, filename, filenames):
-        self.analyze_and_wait([filename] + filenames)
+        self.queue_filenames([filename] + filenames)
         encoded_filename = filename.encode('utf-8')
         encoded = [f.encode('utf-8') for f in filenames]
+        if not self.gaia_db.contains(encoded_filename):
+            return
+
         point = self.gaia_db.point(encoded_filename)
 
         best, best_name = None, None
