@@ -687,7 +687,7 @@ class AutoQueueBase(object):
     def maybe_enqueue_album(self, song):
         """Determine if a whole album should be queued, and do so."""
         if (self.configuration.whole_albums and song.get_tracknumber() == 1 and
-                random.random() > .5):
+                (song.get_playcount() == 0 or random.random() > .5)):
             album = song.get_album()
             album_artist = song.get_album_artist()
             album_id = song.get_musicbrainz_albumid()
@@ -707,7 +707,7 @@ class AutoQueueBase(object):
         songs = sorted([
             (song.get_discnumber(), song.get_tracknumber(), song)
             for song in self.player.search(search)])
-        if songs and all(self.allowed(song[2]) for song in songs):
+        if songs:
             for _, _, song in songs:
                 self.enqueue_song(song)
             return True
