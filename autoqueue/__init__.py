@@ -649,6 +649,9 @@ class AutoQueueBase(object):
                     random.random() > comparison:
                 continue
 
+            if not self.allowed(song):
+                continue
+
             if self.maybe_enqueue_album(song):
                 self.cache.found = True
                 return
