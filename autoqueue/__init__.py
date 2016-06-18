@@ -416,14 +416,15 @@ class AutoQueueBase(object):
         """Exexute processing asynchronous."""
         self.cache.found = False
         if results:
-            for _ in self.process_filename_results([{'score': match,
-                                                     'filename': filename}
-                                                    for match, filename
-                                                    in results]):
+            for _ in self.process_filename_results([
+                    {'score': match, 'filename': filename}
+                    for match, filename in results]):
                 yield
+
         if self.cache.found:
             self.continue_queueing()
             return
+
         self.get_similar_tracks()
 
     def get_similar_tracks(self):
