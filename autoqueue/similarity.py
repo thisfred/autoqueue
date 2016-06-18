@@ -61,8 +61,7 @@ DBUS_PATH = '/org/autoqueue/Similarity'
 API_KEY = "09d0975a99a4cab235b731d31abf0057"
 
 # XXX: obviously make this configurable
-ESSENTIA_EXTRACTOR_PATH = \
-    '/home/eric/github/essentia/build/src/examples/streaming_extractor_music'
+ESSENTIA_EXTRACTOR_PATH = '/usr/local/bin/essentia_streaming_extractor_music'
 
 ADD = 'add'
 REMOVE = 'remove'

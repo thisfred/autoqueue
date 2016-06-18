@@ -35,6 +35,7 @@ class Requests(object):
         filename = self._decode(filename)
         if filename is None:
             return
+
         self.cursor.execute(
             "INSERT INTO requests (filename) VALUES (?);", (filename,))
         self.connection.commit()
@@ -43,6 +44,7 @@ class Requests(object):
         filename = self._decode(filename)
         if filename is None:
             return
+
         self.cursor.execute(
             "SELECT 1 FROM requests WHERE filename = ? LIMIT 1;",
             (filename,))
@@ -50,12 +52,6 @@ class Requests(object):
             return True
 
         return False
-
-    def get_first(self):
-        self.cursor.execute(
-            "SELECT filename FROM requests ORDER BY id DESC LIMIT 1;")
-        for row in self.cursor.fetchall():
-            return row[0]
 
     def get_requests(self):
         self.cursor.execute("SELECT filename FROM requests;")
@@ -65,6 +61,7 @@ class Requests(object):
         filename = self._decode(filename)
         if filename is None:
             return
+
         self.cursor.execute(
             "DELETE FROM requests WHERE filename = ? ORDER BY id LIMIT 1;",
             (filename,))

@@ -247,6 +247,7 @@ class AutoQueueBase(object):
         self.player.set_variables_from_config(self.configuration)
         self.cache.set_nearby_artist(self.configuration)
         self.requests = Requests()
+        self.current_request = None
 
     @property
     def use_gaia(self):
@@ -372,15 +373,17 @@ class AutoQueueBase(object):
         filename = ensure_string(song.get_filename())
         if not filename:
             return
+
         if request:
             print("*****" + request)
-            request = ensure_string(request)
+            self.current_request = ensure_string(request)
             if request:
                 self.similarity.get_ordered_gaia_tracks_by_request(
-                    filename, self.configuration.number, request,
+                    filename, self.configuration.number, self.current_request,
                     reply_handler=self.gaia_reply_handler,
                     error_handler=self.error_handler, timeout=TIMEOUT)
                 return
+
         else:
             print("***** no requests")
         self.similarity.get_ordered_gaia_tracks(
@@ -561,7 +564,7 @@ class AutoQueueBase(object):
             yield
 
     def get_current_request(self):
-        filename = self.requests.get_first()
+        filename = self.current_request
         if not filename:
             return
 
