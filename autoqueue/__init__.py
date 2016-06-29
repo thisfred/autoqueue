@@ -644,13 +644,16 @@ class AutoQueueBase(object):
                 rating = THRESHOLD
             for reason in result.get('reasons', []):
                 print("  %s" % (reason,))
-            print("score: %.5f, play frequency %.5f" % (rating, frequency))
-            comparison = rating
-            if self.configuration.favor_new:
-                comparison -= frequency
-            if (frequency > 0 or not self.configuration.favor_new) and \
-                    random.random() > comparison:
-                continue
+
+            # If we have requests, just take the best pick always
+            if not self.requests:
+                print("score: %.5f, play frequency %.5f" % (rating, frequency))
+                comparison = rating
+                if self.configuration.favor_new:
+                    comparison -= frequency
+                if (frequency > 0 or not self.configuration.favor_new) and \
+                        random.random() > comparison:
+                    continue
 
             if not self.allowed(song):
                 continue
