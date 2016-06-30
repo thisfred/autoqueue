@@ -35,7 +35,7 @@ from dbus.mainloop.glib import DBusGMainLoop
 from dbus.service import method
 from future import standard_library
 from gi.repository import GObject
-from pylast import LastFMNetwork, MalformedResponseError, NetworkError, WSError
+from pylast import LastFMNetwork
 
 try:
     from gaia2 import DataSet, transform, DistanceFunctionFactory, View, Point
@@ -772,7 +772,7 @@ class Similarity(object):
         """Get similar tracks."""
         try:
             lastfm_track = self.network.get_track(artist_name, title)
-        except (WSError, NetworkError, MalformedResponseError) as e:
+        except Exception as e:
             print(e)
             return []
         tracks_to_update = {}
@@ -790,7 +790,7 @@ class Similarity(object):
                     'artist': similar_artist,
                     'title': similar_title})
                 results.append((match, similar_artist, similar_title))
-        except (WSError, NetworkError, MalformedResponseError) as e:
+        except Exception as e:
             print(e)
             return []
         self.update_similar_tracks(tracks_to_update)
@@ -801,7 +801,7 @@ class Similarity(object):
         """Get similar artists from lastfm."""
         try:
             lastfm_artist = self.network.get_artist(artist_name)
-        except (WSError, NetworkError, MalformedResponseError) as e:
+        except Exception as e:
             print(e)
             return []
         artists_to_update = {}
@@ -816,7 +816,7 @@ class Similarity(object):
                     'score': match,
                     'artist': name})
                 results.append((match, name))
-        except (WSError, NetworkError, MalformedResponseError) as e:
+        except Exception as e:
             print(e)
             return []
         self.update_similar_artists(artists_to_update)
