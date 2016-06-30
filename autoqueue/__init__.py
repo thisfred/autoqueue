@@ -34,7 +34,7 @@ from dbus.mainloop.glib import DBusGMainLoop
 from future import standard_library
 
 try:
-    import pywapi
+    import pyowm
     WEATHER = True
 except ImportError:
     WEATHER = False
@@ -102,25 +102,9 @@ class Configuration(object):
         self.use_gaia = True
         self.zipcode = ''
 
-    def get_location_id(self):
-        city = self.location.partition(',')[0].strip()
-        smallest_discance = 100
-        best_location_id = None
-        location_ids = pywapi.get_location_ids(city)
-        for location_id, name in list(location_ids.items()):
-            distance = levenshtein(name.lower(), self.location.lower())
-            if distance < smallest_discance:
-                best_location_id, smallest_discance = location_id, distance
-        return best_location_id
-
     def get_weather(self):
-        if self.zipcode:
-            return self._get_weather(self.zipcode)
-
         if self.location:
-            best_location_id = self.get_location_id()
-            if best_location_id:
-                return self._get_weather(best_location_id)
+            return self._get_weather(self.location)
 
         return {}
 
@@ -186,9 +170,14 @@ class Configuration(object):
         return parameters
 
     @staticmethod
-    def _get_weather(location_id):
+    def _get_weather(location):
         try:
-            return pywapi.get_weather_from_yahoo(location_id)
+            # If you use this code for anything else, please register for your
+            # own OWM API key for free, here:
+            #
+            # https://home.openweathermap.org/users/sign_up
+            owm = pyowm.OWM("35c8c197224e0fb5f7a771facb4243ae")
+            return owm.weather_at_place(location)
         except Exception as exception:
             print(repr(exception))
         return {}

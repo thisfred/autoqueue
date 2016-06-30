@@ -269,20 +269,16 @@ class Context(object):
         return date(*[int(i) for i in date_string.split(delimiter)])
 
     def get_astronomical_times(self, weather):
-        sunrise = weather.get('astronomy', {}).get('sunrise', '')
-        sunset = weather.get('astronomy', {}).get('sunset', '')
+        sunrise = weather.get_sunrise_time()
+        sunset = weather.get_sunset_time()
         predicates = []
         if sunrise and sunset:
-            sunrise = self.string_to_datetime(sunrise)
-            if sunrise:
-                predicates.append(Dawn(sunrise))
-            sunset = self.string_to_datetime(sunset)
-            if sunset:
-                predicates.append(Dusk(sunset))
-            predicates.append(
-                Daylight(start=sunrise, end=sunset))
-            predicates.append(
-                NotDaylight(start=sunrise, end=sunset))
+            sunrise = datetime.fromtimestamp(sunrise)
+            predicates.append(Dawn(sunrise))
+            sunset = datetime.fromtimestamp(sunset)
+            predicates.append(Dusk(sunset))
+            predicates.append(Daylight(start=sunrise, end=sunset))
+            predicates.append(NotDaylight(start=sunrise, end=sunset))
             predicates.append(Sun(start=sunrise, end=sunset))
         return predicates
 
@@ -299,16 +295,16 @@ class Context(object):
     @staticmethod
     def get_other_conditions(weather):
         predicates = []
-        for condition in weather.get(
-                'condition', {}).get('text', '').lower().strip().split('/'):
+        for condition in weather.get_detailed_status().lower().split('/'):
             condition = condition.strip()
             with open('weather_conditions.txt', 'a') as weather_file:
                 weather_file.write('%s\n' % condition)
             if condition:
                 results = []
                 unmodified = condition.split()[-1]
-                if unmodified in ('rain', 'rainy', 'drizzle', 'cloudy', 'fog',
-                                  'foggy', 'mist', 'misty', 'fair'):
+                if unmodified in ('rain', 'rainy', 'drizzle', 'clouds',
+                                  'clouds', 'fog', 'foggy', 'mist', 'misty',
+                                  'fair'):
                     continue
                 if unmodified not in results:
                     results.append(unmodified)
@@ -578,27 +574,19 @@ class Weather(ExclusiveTerms):
 
     @staticmethod
     def get_weather_conditions(context):
-        return context.weather.get(
-            'condition', {}).get('text', '').lower().strip().split('/')
+        return context.weather.get_detailed_status().lower().strip().split('/')
 
     @staticmethod
     def get_temperature(context):
-        temperature = context.weather.get('condition', {}).get('temp', '')
-        if not temperature:
-            return None
-
-        return int(temperature)
+        return context.weather.get_temperature('celsius').get('temp')
 
     @staticmethod
     def get_wind_speed(context):
-        return float(
-            context.weather.get('wind', {}).get('speed', '').strip() or '0')
+        return context.weather.get_wind().get('speed')
 
     @staticmethod
     def get_humidity(context):
-        return float(
-            context.weather.get('atmosphere', {}).get(
-                'humidity', '').strip() or '0')
+        return context.weather.get_humidity() or 0
 
 
 class Freezing(Weather):
@@ -794,7 +782,7 @@ class Sun(TimeRange, Weather):
         if super(Sun, self).applies_in_context(context):
             conditions = self.get_weather_conditions(context)
             for condition in conditions:
-                if 'partly cloudy' in condition or 'fair' in condition:
+                if 'few clouds' in condition or 'fair' in condition:
                     return True
 
         return False
@@ -827,7 +815,7 @@ class Cloudy(Weather):
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
         for condition in conditions:
-            if 'cloudy' in condition or 'overcast' in condition:
+            if 'clouds' in condition or 'overcast' in condition:
                 return True
 
         return False

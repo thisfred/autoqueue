@@ -1,6 +1,6 @@
 python-dateutil
 pylast
-pywapi
+pyowm
 geohash
 requests
 nltk
