@@ -103,7 +103,7 @@ class Configuration(object):
         self.zipcode = ''
 
     def get_weather(self):
-        if self.location:
+        if WEATHER and self.location:
             return self._get_weather(self.location)
 
         return {}
