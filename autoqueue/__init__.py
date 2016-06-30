@@ -177,7 +177,7 @@ class Configuration(object):
             #
             # https://home.openweathermap.org/users/sign_up
             owm = pyowm.OWM("35c8c197224e0fb5f7a771facb4243ae")
-            return owm.weather_at_place(location)
+            return owm.weather_at_place(location).get_weather()
         except Exception as exception:
             print(repr(exception))
         return {}
