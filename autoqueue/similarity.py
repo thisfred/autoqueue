@@ -190,8 +190,11 @@ class GaiaAnalysis(Thread):
     @staticmethod
     def essentia_analyze(filename, signame):
         """Perform essentia analysis of an audio file."""
+        env = os.environ.copy()
+        env['LD_LIBRARY_PATH'] = '/usr/local/lib'
         try:
-            subprocess.check_call([ESSENTIA_EXTRACTOR_PATH, filename, signame])
+            subprocess.check_call(
+                [ESSENTIA_EXTRACTOR_PATH, filename, signame], env=env)
             return True
         except Exception as e:
             print(e)
