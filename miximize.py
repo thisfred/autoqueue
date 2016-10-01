@@ -3,7 +3,7 @@ from __future__ import print_function
 
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
-from quodlibet import app
+from quodlibet import app, _
 from quodlibet.plugins.songsmenu import SongsMenuPlugin
 
 

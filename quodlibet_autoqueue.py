@@ -17,7 +17,7 @@ from datetime import datetime
 from autoqueue import AutoQueueBase
 from autoqueue.player import PlayerBase, SongBase
 from gi.repository import GLib, Gtk
-from quodlibet import app, config
+from quodlibet import app, config, _
 from quodlibet.plugins.events import EventPlugin
 from quodlibet.qltk.entry import ValidatingEntry
 from quodlibet.util import copool

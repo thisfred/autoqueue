@@ -5,6 +5,7 @@ from builtins import str
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
+from quodlibet import _
 from quodlibet.plugins.songsmenu import SongsMenuPlugin
 
 DBusGMainLoop(set_as_default=True)

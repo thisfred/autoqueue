@@ -1,3 +1,4 @@
+from quodlibet import _
 from quodlibet.plugins.songsmenu import SongsMenuPlugin
 from autoqueue.request import Requests
 
