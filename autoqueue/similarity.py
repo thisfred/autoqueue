@@ -321,7 +321,7 @@ class GaiaAnalysis(Thread):
             for name, score in total])
         if request_point:
             # Filter out the worst matches for the requested track
-            return result[:max(1, number / 4)]
+            return result[:1]
         return result
 
     def compute_score(self, score, name, request_point=None):

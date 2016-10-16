@@ -203,8 +203,10 @@ class Cache(object):
             self.previous_terms.update(terms)
 
     def get_weather(self, configuration):
-        if WEATHER and self.weather and \
-                datetime.now() < self.weather_at + FIVE_MINUTES:
+        if not WEATHER:
+            return None
+
+        if self.weather and datetime.now() < self.weather_at + FIVE_MINUTES:
             return self.weather
         self.weather = configuration.get_weather()
         self.weather_at = datetime.now()
@@ -414,6 +416,13 @@ class AutoQueueBase(object):
             self.continue_queueing()
             return
 
+        if self.current_request:
+            self.current_request = None
+            self.similarity.get_ordered_gaia_tracks(
+                filename, self.configuration.number,
+                reply_handler=self.gaia_reply_handler,
+                error_handler=self.error_handler, timeout=TIMEOUT)
+            return
         self.get_similar_tracks()
 
     def get_similar_tracks(self):
