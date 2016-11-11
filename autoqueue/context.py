@@ -132,10 +132,13 @@ def get_terms(words):
     return {term for word in words for term in expand(word)}
 
 
+def get_artist_tags(song):
+    return song.get_non_geo_tags(prefix='artist:', exclude_prefix='')
+
+
 @LRUCache
 def get_artist_terms_from_song(song):
-    tag_terms = get_terms(
-        song.get_non_geo_tags(prefix='artist:', exclude_prefix=''))
+    tag_terms = get_terms(get_artist_tags(song))
     return tag_terms
 
 
@@ -200,7 +203,7 @@ class Context(object):
     def build_predicates(self):
         """Construct predicates to check against the context."""
         self.add_standard_predicates()
-        self.add_december_predicate()
+        self.add_song_year_predicate()
         self.add_location_predicates()
         self.add_weather_predicates()
         self.add_birthday_predicates()
@@ -327,10 +330,8 @@ class Context(object):
         if self.configuration.geohash:
             self.predicates.append(Geohash([self.configuration.geohash]))
 
-    def add_december_predicate(self):
-        if self.date.month == 12:
-            # December is for retrospection
-            self.predicates.append(SongYear(self.date.year))
+    def add_song_year_predicate(self):
+        self.predicates.append(SongYear(self.date.year))
 
     def add_standard_predicates(self):
         self.predicates.extend(static_predicates)
@@ -557,7 +558,17 @@ class SongYear(Predicate):
         self.year = year
 
     def applies_to_song(self, song, exclusive):
+        return self.was_released(song)
+
+    def was_released(self, song):
         return self.year == song.get_year()
+
+    def artist_died(self, song):
+        year = str(self.year)
+        artist_tags = get_artist_tags(song)
+        return (
+            'dead' in artist_tags and
+            any(t.startswith(year) for t in artist_tags))
 
 
 class String(Terms):
