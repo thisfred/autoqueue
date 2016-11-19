@@ -628,6 +628,7 @@ class AutoQueueBase(object):
         self.pick_result(results)
 
     def pick_result(self, results):
+        number_of_results = len(results)
         for number, result in enumerate(sorted(results,
                                                key=lambda x: x['score'])):
             song = result.get('song')
@@ -644,8 +645,7 @@ class AutoQueueBase(object):
             for reason in result.get('reasons', []):
                 print("  %s" % (reason,))
 
-            # If we have requests, just take the best pick always
-            if not self.requests:
+            if number_of_results > 1:
                 print("score: %.5f, play frequency %.5f" % (rating, frequency))
                 comparison = rating
                 if self.configuration.favor_new:
