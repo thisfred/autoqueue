@@ -63,6 +63,5 @@ class Requests(object):
             return
 
         self.cursor.execute(
-            "DELETE FROM requests WHERE filename = ? ORDER BY id LIMIT 1;",
-            (filename,))
+            "DELETE FROM requests WHERE filename = ?;", (filename,))
         self.connection.commit()
