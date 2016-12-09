@@ -558,7 +558,7 @@ class SongYear(Predicate):
         self.year = year
 
     def applies_to_song(self, song, exclusive):
-        return self.was_released(song)
+        return self.was_released(song) or self.artist_died(song)
 
     def was_released(self, song):
         return self.year == song.get_year()
