@@ -417,6 +417,10 @@ class AutoQueueBase(object):
             return
 
         if self.current_request:
+            song = self.cache.last_song
+            filename = ensure_string(song.get_filename())
+            if not filename:
+                return
             self.current_request = None
             self.similarity.get_ordered_gaia_tracks(
                 filename, self.configuration.number,
