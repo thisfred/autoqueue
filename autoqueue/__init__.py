@@ -179,8 +179,27 @@ class Configuration(object):
             owm = pyowm.OWM("35c8c197224e0fb5f7a771facb4243ae")
             return owm.weather_at_place(location).get_weather()
         except Exception as exception:
+            global WEATHER
+            WEATHER = False
             print(repr(exception))
         return {}
+
+
+class PreviousTerms(object):
+
+    def __init__(self):
+        self.songs = []
+
+    def add(self, song):
+        self.songs.append(song)
+        self.songs = self.songs[-10:]
+
+    @property
+    def terms(self):
+        counter = Counter()
+        for song in self.songs:
+            counter.update(get_terms_from_song(song))
+        return {k for k, v in counter.items() if v > 1}
 
 
 class Cache(object):
@@ -194,13 +213,9 @@ class Cache(object):
         self.weather = None
         self.weather_at = None
         self.found = False
-        self.previous_terms = Counter()
-
-    def add_to_previous_terms(self, song):
-        self.previous_terms -= Counter(self.previous_terms.keys())
-        terms = get_terms_from_song(song)
-        for _ in range(2):
-            self.previous_terms.update(terms)
+        self.previous_terms = PreviousTerms()
+        self.miss_factor = 1
+        self.last_closest = -1
 
     def get_weather(self, configuration):
         if not WEATHER:
@@ -215,6 +230,18 @@ class Cache(object):
     def set_nearby_artist(self, configuration):
         if configuration.location or configuration.geohash:
             self.nearby_artists = configuration.get_performing_artists()
+
+    def process_closest(self, match):
+        if match == 0:
+            self.last_closest = -1
+            self.miss_factor = 1
+        elif match < self.last_closest or self.last_closest == -1:
+            self.miss_factor = 1
+            self.last_closest = match
+        else:
+            self.miss_factor += 1
+        print('* last closest * %s' % self.last_closest)
+        print('* miss factor * %s' % self.miss_factor)
 
 
 class AutoQueueBase(object):
@@ -370,7 +397,9 @@ class AutoQueueBase(object):
             self.current_request = ensure_string(request)
             if request:
                 self.similarity.get_ordered_gaia_tracks_by_request(
-                    filename, self.configuration.number, self.current_request,
+                    filename,
+                    self.configuration.number * self.cache.miss_factor,
+                    self.current_request,
                     reply_handler=self.gaia_reply_handler,
                     error_handler=self.error_handler, timeout=TIMEOUT)
                 return
@@ -407,6 +436,9 @@ class AutoQueueBase(object):
         """Exexute processing asynchronous."""
         self.cache.found = False
         if results:
+            self.cache.process_closest(results[0][0])
+
+
             for _ in self.process_filename_results([
                     {'score': match, 'filename': filename}
                     for match, filename in results]):
@@ -623,12 +655,17 @@ class AutoQueueBase(object):
         """Process results and queue best one(s)."""
         if not results:
             return
+
         for _ in self.search_database(results):
             yield
-        for _ in self.adjust_scores(results, invert_scores):
-            yield
+
+        if not self.current_request:
+            for _ in self.adjust_scores(results, invert_scores):
+                yield
+
         if not results:
             return
+
         self.pick_result(results)
 
     def pick_result(self, results):
@@ -674,8 +711,9 @@ class AutoQueueBase(object):
         if not results:
             return
         self.search_filenames(results)
-        for _ in self.adjust_scores(results, invert_scores=False):
-            yield
+        if not self.current_request:
+            for _ in self.adjust_scores(results, invert_scores=False):
+                yield
         if not results:
             return
         self.pick_result(results)
@@ -709,7 +747,7 @@ class AutoQueueBase(object):
         return False
 
     def enqueue_song(self, song):
-        self.cache.add_to_previous_terms(song)
+        self.cache.previous_terms.add(song)
         self.player.enqueue(song)
 
     def enqueue_album(self, album, album_artist, album_id):

@@ -216,7 +216,7 @@ class Context(object):
             self.predicates.append(Artist(artist))
 
     def _add_common_terms(self):
-        common = CommonTerms.from_counter(self.cache.previous_terms)
+        common = Terms(self.cache.previous_terms.terms)
         self.predicates.append(common)
 
     def _add_artist_predicate_from_song(self, song):
@@ -426,19 +426,6 @@ class Terms(Predicate):
 
         return '<%s: %s - %s>' % (
             self.__class__.__name__, song.get_artist(), song.get_title())
-
-
-class CommonTerms(Terms):
-
-    def __init__(self, ne_expanded_terms=frozenset()):
-        super(CommonTerms, self).__init__(ne_expanded_terms)
-        self.counter = None
-
-    @classmethod
-    def from_counter(cls, counter):
-        instance = cls(counter.keys())
-        instance.counter = counter
-        return instance
 
 
 class ArtistTerms(Terms):
