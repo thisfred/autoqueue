@@ -14,9 +14,10 @@ from datetime import datetime
 from autoqueue import AutoQueueBase
 from autoqueue.player import PlayerBase, SongBase
 from gi.repository import GLib, Gtk
-from quodlibet import _, app, config
+from quodlibet import _, app
+from quodlibet.plugins import PluginConfig
 from quodlibet.plugins.events import EventPlugin
-from quodlibet.qltk.entry import ValidatingEntry
+from quodlibet.qltk.entry import UndoEntry, ValidatingEntry
 from quodlibet.util import copool
 
 INT_SETTINGS = {
@@ -75,6 +76,14 @@ STR_SETTINGS = {
     'extra_context': {
         'value': '',
         'label': 'extra context'}}
+
+
+plugin_config = PluginConfig("autoqueue")
+
+defaults = plugin_config.defaults
+for settings in (BOOL_SETTINGS, INT_SETTINGS, STR_SETTINGS):
+    for setting, configuration in settings.items():
+        defaults.set(setting, configuration['value'])
 
 
 def escape(the_string):
@@ -159,6 +168,7 @@ class Song(SongBase):
 
     def get_filename(self):
         """Get the filename of the song."""
+        return ""
         return self.song("~filename")
 
     def get_length(self):
@@ -203,7 +213,7 @@ class Song(SongBase):
             return None
 
 
-class AutoQueue(EventPlugin, AutoQueueBase):
+class AutoQueue(AutoQueueBase, EventPlugin):
 
     """The actual plugin class."""
 
@@ -212,21 +222,17 @@ class AutoQueue(EventPlugin, AutoQueueBase):
     PLUGIN_VERSION = "0.2"
     PLUGIN_DESC = ("Queue similar songs.")
 
-    __enabled = False
-
     def __init__(self):
-        EventPlugin.__init__(self)
+        self._enabled = False
         AutoQueueBase.__init__(self, Player())
         self._generators = deque()
 
     def enabled(self):
         """Handle user enabling the plugin."""
-        print("enabled")
         self.__enabled = True
 
     def disabled(self):
         """Handle user disabling the plugin."""
-        print("disabled")
         self.__enabled = False
 
     def plugin_on_song_ended(self, song, skipped):
@@ -247,81 +253,38 @@ class AutoQueue(EventPlugin, AutoQueueBase):
         """Triggered when songs are removed from the library."""
         GLib.idle_add(self.on_removed, [Song(s) for s in songs])
 
-    def PluginPreferences(self, parent):  # pylint: disable=C0103
+    def PluginPreferences(self, parent):
         """Set and unset preferences from gui or config file."""
 
-        def bool_changed(widget):
-            """Boolean setting changed."""
-            if widget.get_active():
-                setattr(self.configuration, widget.get_name(), True)
-            else:
-                setattr(self.configuration, widget.get_name(), False)
-            config.set(
-                'plugins',
-                'autoqueue_%s' % widget.get_name(),
-                widget.get_active() and 'true' or 'false')
+        def changed(entry, key):
+            if entry.get_property('sensitive'):
+                plugin_config.set(key, entry.get_text())
 
-        def str_changed(entry, key):
-            """String setting changed."""
-            value = entry.get_text()
-            config.set('plugins', 'autoqueue_%s' % key, value)
-            setattr(self.configuration, key, value)
-
-        def int_changed(entry, key):
-            """Integer setting changed."""
-            value = entry.get_text()
-            if value:
-                config.set('plugins', 'autoqueue_%s' % key, value)
-                setattr(self.configuration, key, int(value))
-
-        table = Gtk.Table()
+        table = Gtk.Table(n_columns=2)
         table.set_col_spacings(3)
-        i = 0
-        j = 0
-        for setting in BOOL_SETTINGS:
-            button = Gtk.CheckButton(label=BOOL_SETTINGS[setting]['label'])
-            button.set_name(setting)
-            button.set_active(
-                config.get(
-                    "plugins", "autoqueue_%s" % setting).lower() == 'true')
-            button.connect('toggled', bool_changed)
+        table.props.expand = False
+        for (j, (setting, configuration)) in enumerate(BOOL_SETTINGS.items()):
+
+            button = plugin_config.ConfigCheckButton(
+                    configuration['label'],
+                    setting, populate=True)
+            i = j % 2
             table.attach(button, i, i + 1, j, j + 1)
-            if i == 1:
-                i = 0
-                j += 1
-            else:
-                i += 1
-        for setting in INT_SETTINGS:
-            j += 1
-            label = Gtk.Label('%s:' % INT_SETTINGS[setting]['label'])
-            entry = Gtk.Entry()
+            last = j
+        for (j, (setting, configuration)) in enumerate(
+                list(INT_SETTINGS.items()) + list(STR_SETTINGS.items())):
+            index = last + j + 1
+            label = Gtk.Label(label='%s:' % configuration['label'])
+            label.set_alignment(0.0, 0.5)
+            label.set_use_underline(True)
             table.attach(
-                label, 0, 1, j, j + 1,
+                label, 0, 1, index, index + 1,
                 xoptions=Gtk.AttachOptions.FILL | Gtk.AttachOptions.SHRINK)
-            table.attach(
-                entry, 1, 2, j, j + 1,
-                xoptions=Gtk.AttachOptions.FILL | Gtk.AttachOptions.SHRINK)
-            entry.connect('changed', int_changed, setting)
-            try:
-                entry.set_text(
-                    config.get('plugins', 'autoqueue_%s' % setting))
-            except:
-                pass
-        for setting in STR_SETTINGS:
-            j += 1
-            label = Gtk.Label('%s:' % STR_SETTINGS[setting]['label'])
-            entry = ValidatingEntry()
-            table.attach(
-                label, 0, 1, j, j + 1,
-                xoptions=Gtk.AttachOptions.FILL | Gtk.AttachOptions.SHRINK)
-            table.attach(
-                entry, 1, 2, j, j + 1,
-                xoptions=Gtk.AttachOptions.FILL | Gtk.AttachOptions.SHRINK)
-            entry.connect('changed', str_changed, setting)
-            try:
-                entry.set_text(config.get('plugins', 'autoqueue_%s' % setting))
-            except:
-                pass
+
+            entry = UndoEntry()
+            entry.set_text(plugin_config.get(setting))
+            entry.connect('changed', changed, setting)
+            table.attach(entry, 1, 2, index, index + 1)
 
         return table
 
@@ -398,32 +361,6 @@ class Player(PlayerBase):
             escape(artist), escape(artist))
         return search
 
-    def set_variables_from_config(self, configuration):
-        """Initialize user settings from the configuration storage."""
-        for key, vdict in INT_SETTINGS.items():
-            try:
-                setattr(configuration, key, config.getint(
-                    "plugins", "autoqueue_%s" % key))
-            except:
-                setattr(configuration, key, vdict['value'])
-                config.set("plugins", "autoqueue_%s" % key, vdict['value'])
-        for key, vdict in BOOL_SETTINGS.items():
-            try:
-                setattr(configuration, key, config.get(
-                    "plugins", "autoqueue_%s" % key).lower() == 'true')
-            except:
-                setattr(configuration, key, vdict['value'])
-                config.set("plugins", "autoqueue_%s" %
-                           key, vdict['value'] and 'true' or 'false')
-        for key, vdict in STR_SETTINGS.items():
-            try:
-                setattr(
-                    configuration, key, config.get(
-                        "plugins", "autoqueue_%s" % key))
-            except:
-                setattr(configuration, key, vdict['value'])
-                config.set("plugins", "autoqueue_%s" % key, vdict['value'])
-
     def get_queue_length(self):
         """Get the current length of the queue."""
         if app.window is None:
@@ -443,7 +380,6 @@ class Player(PlayerBase):
         try:
             songs = app.library.query(search)
         except Exception as e:
-            print(repr(search), repr(e))
             return []
         return [Song(song) for song in songs]
 

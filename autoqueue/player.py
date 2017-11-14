@@ -165,10 +165,6 @@ class PlayerBase(metaclass=ABCMeta):
         """Construct a search for songs with these tags."""
 
     @abstractmethod
-    def set_variables_from_config(self, configuration):
-        """Initialize user settings from the configuration storage."""
-
-    @abstractmethod
     def get_queue_length(self):
         """Get the current length of the queue."""
 

@@ -1,10 +1,10 @@
 """Block artists's songs from being picked for a period after playing."""
 
 
-from pickle import Pickler, Unpickler
+import os
 from collections import deque
 from datetime import datetime, timedelta
-import os
+from pickle import Pickler, Unpickler
 
 try:
     import xdg.BaseDirectory
@@ -64,7 +64,7 @@ class Blocking(object):
         """Read the list of blocked artists from disk."""
         dump = os.path.join(self.get_cache_dir(), "autoqueue_block_cache")
         try:
-            with open(dump, 'r') as pickle:
+            with open(dump, 'rb') as pickle:
                 unpickler = Unpickler(pickle)
                 artists, times = unpickler.load()
                 if isinstance(artists, list):
@@ -92,7 +92,7 @@ class Blocking(object):
             except OSError:
                 pass
             return
-        with open(dump, 'w') as pickle_file:
+        with open(dump, 'wb') as pickle_file:
             pickler = Pickler(pickle_file, -1)
             to_dump = (self._blocked_artists, self._blocked_artists_times)
             pickler.dump(to_dump)

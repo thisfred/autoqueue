@@ -260,7 +260,6 @@ class AutoQueueBase(object):
             sim, dbus_interface='org.autoqueue.SimilarityInterface')
         self.has_gaia = self.similarity.has_gaia()
         self.player = player
-        self.player.set_variables_from_config(self.configuration)
         self.cache.set_nearby_artist(self.configuration)
         self.requests = Requests()
         self.current_request = None
@@ -390,13 +389,13 @@ class AutoQueueBase(object):
 
     def best_request_handler(self, request):
         song = self.cache.last_song
-        filename = ensure_string(song.get_filename())
+        filename = song.get_filename()
         if not filename:
             return
 
         if request:
             print("*****" + request)
-            self.current_request = ensure_string(request)
+            self.current_request = request
             if request:
                 self.similarity.get_ordered_gaia_tracks_by_request(
                     filename,
@@ -415,7 +414,7 @@ class AutoQueueBase(object):
 
     def analyzed(self):
         song = self.cache.last_song
-        filename = ensure_string(song.get_filename())
+        filename = song.get_filename()
         if not filename:
             return
         if self.use_gaia:
@@ -455,7 +454,7 @@ class AutoQueueBase(object):
 
         if self.current_request:
             song = self.cache.last_song
-            filename = ensure_string(song.get_filename())
+            filename = song.get_filename()
             if not filename:
                 return
             self.current_request = None
@@ -552,7 +551,6 @@ class AutoQueueBase(object):
 
     def analyze_and_callback(self, filename, reply_handler=no_op,
                              empty_handler=no_op):
-        filename = ensure_string(filename)
         if not filename:
             return
         if self.use_gaia:
@@ -807,15 +805,3 @@ def levenshtein(string1, string2):
         previous_row = current_row
 
     return previous_row[-1]
-
-
-def ensure_string(possible_string):
-    """Convert unicode to utf-8 string, or return string or return None."""
-    try:
-        if isinstance(possible_string, unicode):
-            return possible_string.encode('utf-8')
-    except UnicodeEncodeError:
-        print('Could not encode filename: %r' % possible_string)
-        return None
-
-    return possible_string
