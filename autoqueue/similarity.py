@@ -196,6 +196,11 @@ class GaiaAnalysis(Thread):
             subprocess.check_call(
                 [ESSENTIA_EXTRACTOR_PATH, filename, signame], env=env)
             return True
+
+        except subprocess.CalledProcessError as e:
+            # It always returns with a non-zero exit value now :(
+            return True
+
         except Exception as e:
             print(e)
             return False

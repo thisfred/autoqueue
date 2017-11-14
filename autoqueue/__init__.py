@@ -25,11 +25,15 @@ from __future__ import absolute_import, division, print_function
 
 import random
 import re
+from builtins import object, range, str
 from collections import Counter
 from datetime import datetime, timedelta
-from builtins import object, range, str
 
 import dbus
+import requests
+from autoqueue.blocking import Blocking
+from autoqueue.context import Context, get_terms_from_song
+from autoqueue.request import Requests
 from dbus.mainloop.glib import DBusGMainLoop
 from future import standard_library
 
@@ -43,10 +47,6 @@ try:
     GEOHASH = True
 except ImportError:
     GEOHASH = False
-import requests
-from autoqueue.blocking import Blocking
-from autoqueue.context import Context, get_terms_from_song
-from autoqueue.request import Requests
 
 
 standard_library.install_aliases()
@@ -231,10 +231,13 @@ class Cache(object):
         if configuration.location or configuration.geohash:
             self.nearby_artists = configuration.get_performing_artists()
 
+    def reset_closest(self):
+        self.last_closest = -1
+        self.miss_factor = 1
+
     def process_closest(self, match):
         if match == 0:
-            self.last_closest = -1
-            self.miss_factor = 1
+            self.reset_closest()
         elif match < self.last_closest or self.last_closest == -1:
             self.miss_factor = 1
             self.last_closest = match
@@ -329,7 +332,11 @@ class AutoQueueBase(object):
         self.pop_request(song)
 
     def pop_request(self, song):
-        self.requests.pop(song.get_filename())
+        filename = song.get_filename()
+        if self.requests.has(filename):
+            self.requests.pop(filename)
+            if self.current_request == filename:
+                self.current_request = None
 
     def on_removed(self, songs):
         if not self.use_gaia:
@@ -436,12 +443,15 @@ class AutoQueueBase(object):
         """Exexute processing asynchronous."""
         self.cache.found = False
         if results:
-            self.cache.process_closest(results[0][0])
-
+            if self.current_request:
+                self.cache.process_closest(results[0][0])
+            else:
+                self.cache.reset_closest()
 
             for _ in self.process_filename_results([
                     {'score': match, 'filename': filename}
-                    for match, filename in results]):
+                    for match, filename
+                    in results[:self.configuration.number]]):
                 yield
 
         if self.cache.found:
