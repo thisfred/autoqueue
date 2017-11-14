@@ -14,17 +14,6 @@ class Requests(object):
         self.create_table()
         self.cached_song = None
 
-    @staticmethod
-    def _decode(filename):
-        if isinstance(filename, unicode):
-            return filename
-
-        try:
-            return filename.decode('utf-8')
-
-        except UnicodeDecodeError:
-            pass
-
     def create_table(self):
         self.cursor.execute(
             "CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY, "
@@ -32,19 +21,11 @@ class Requests(object):
         self.connection.commit()
 
     def add(self, filename):
-        filename = self._decode(filename)
-        if filename is None:
-            return
-
         self.cursor.execute(
             "INSERT INTO requests (filename) VALUES (?);", (filename,))
         self.connection.commit()
 
     def has(self, filename):
-        filename = self._decode(filename)
-        if filename is None:
-            return
-
         self.cursor.execute(
             "SELECT 1 FROM requests WHERE filename = ? LIMIT 1;",
             (filename,))
@@ -58,10 +39,6 @@ class Requests(object):
         return [row[0] for row in self.cursor.fetchall()]
 
     def pop(self, filename):
-        filename = self._decode(filename)
-        if filename is None:
-            return
-
         self.cursor.execute(
             "DELETE FROM requests WHERE filename = ?;", (filename,))
         self.connection.commit()

@@ -47,11 +47,15 @@ class AnalyzeSongsPlugin(SongsMenuPlugin):
         filenames = []
         for song in songs:
             filename = song('~filename')
-            if not isinstance(filename, str):
+            try:
+                filename.encode('utf-8')
+            except UnicodeEncodeError:
                 try:
-                    filename = str(filename, 'utf-8')
-                except:
-                    print("Could not decode filename: %r" % song('~filename'))
+                    filename = filename.decode('utf-8')
+                except UnicodeDecodeError:
+                    print(
+                        "Could not figure out filename encoding: %r" %
+                        song('~filename'))
                     continue
             filenames.append(filename)
         self.similarity.analyze_tracks(

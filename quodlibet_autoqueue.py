@@ -168,7 +168,6 @@ class Song(SongBase):
 
     def get_filename(self):
         """Get the filename of the song."""
-        return ""
         return self.song("~filename")
 
     def get_length(self):
@@ -229,10 +228,12 @@ class AutoQueue(AutoQueueBase, EventPlugin):
 
     def enabled(self):
         """Handle user enabling the plugin."""
+        print("enabled")
         self.__enabled = True
 
     def disabled(self):
         """Handle user disabling the plugin."""
+        print("disabled")
         self.__enabled = False
 
     def plugin_on_song_ended(self, song, skipped):
@@ -380,6 +381,7 @@ class Player(PlayerBase):
         try:
             songs = app.library.query(search)
         except Exception as e:
+            print(repr(search), repr(e))
             return []
         return [Song(song) for song in songs]
 
