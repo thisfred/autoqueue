@@ -1,8 +1,8 @@
 """Autoqueue setup."""
-from __future__ import print_function
-from setuptools import setup
 import os
 import sys
+
+from setuptools import setup
 
 SERVICE_FILE = 'org.autoqueue.service'
 

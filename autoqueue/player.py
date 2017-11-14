@@ -1,15 +1,7 @@
 """Abstract Base Classes for interaction with music player."""
-from __future__ import division, print_function, absolute_import
 
 from abc import ABCMeta, abstractmethod
-
-from builtins import object
 from datetime import datetime
-from future import standard_library
-from future.utils import with_metaclass
-
-
-standard_library.install_aliases()
 
 try:
     import geohash
@@ -18,7 +10,7 @@ except ImportError:
     GEOHASH = False
 
 
-class SongBase(with_metaclass(ABCMeta, object)):
+class SongBase(metaclass=ABCMeta):
 
     """A wrapper object around player specific song objects."""
 
@@ -146,7 +138,7 @@ class SongBase(with_metaclass(ABCMeta, object)):
         return geohashes
 
 
-class PlayerBase(with_metaclass(ABCMeta, object)):
+class PlayerBase(metaclass=ABCMeta):
 
     @abstractmethod
     def construct_album_search(self, album, album_artist=None, album_id=None):

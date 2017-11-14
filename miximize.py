@@ -1,9 +1,8 @@
 """Add selected songs to the queue in ideal order."""
-from __future__ import print_function
 
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
-from quodlibet import app, _
+from quodlibet import _, app
 from quodlibet.plugins.songsmenu import SongsMenuPlugin
 
 

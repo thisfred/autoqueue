@@ -1,9 +1,6 @@
 """Context awareness filters."""
 
-from __future__ import absolute_import, division, print_function
-
 import re
-from builtins import object, str
 from collections import OrderedDict
 from datetime import date, datetime, time, timedelta
 

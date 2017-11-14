@@ -21,11 +21,9 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
-from __future__ import absolute_import, division, print_function
 
 import random
 import re
-from builtins import object, range, str
 from collections import Counter
 from datetime import datetime, timedelta
 
@@ -35,7 +33,6 @@ from autoqueue.blocking import Blocking
 from autoqueue.context import Context, get_terms_from_song
 from autoqueue.request import Requests
 from dbus.mainloop.glib import DBusGMainLoop
-from future import standard_library
 
 try:
     import pyowm
@@ -48,8 +45,6 @@ try:
 except ImportError:
     GEOHASH = False
 
-
-standard_library.install_aliases()
 
 DBusGMainLoop(set_as_default=True)
 

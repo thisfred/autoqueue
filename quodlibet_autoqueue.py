@@ -8,16 +8,13 @@ This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation
 """
-from __future__ import print_function
-from builtins import str
-
 from collections import deque
 from datetime import datetime
 
 from autoqueue import AutoQueueBase
 from autoqueue.player import PlayerBase, SongBase
 from gi.repository import GLib, Gtk
-from quodlibet import app, config, _
+from quodlibet import _, app, config
 from quodlibet.plugins.events import EventPlugin
 from quodlibet.qltk.entry import ValidatingEntry
 from quodlibet.util import copool

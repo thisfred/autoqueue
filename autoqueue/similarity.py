@@ -17,7 +17,6 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
 """
-from __future__ import absolute_import, print_function
 
 import json
 import os
@@ -26,16 +25,15 @@ import subprocess
 from datetime import datetime, timedelta
 from threading import Thread
 from time import sleep, strptime, time
-from queue import Empty, LifoQueue, PriorityQueue, Queue
-from builtins import object, str
 
 import dbus
 import dbus.service
+from autoqueue.utilities import player_get_data_dir
 from dbus.mainloop.glib import DBusGMainLoop
 from dbus.service import method
-from future import standard_library
 from gi.repository import GObject
 from pylast import LastFMNetwork
+from queue import Empty, LifoQueue, PriorityQueue, Queue
 
 try:
     from gaia2 import DataSet, transform, DistanceFunctionFactory, View, Point
@@ -43,10 +41,6 @@ try:
     GAIA = True
 except ImportError:
     GAIA = False
-
-from autoqueue.utilities import player_get_data_dir
-
-standard_library.install_aliases()
 
 
 DBusGMainLoop(set_as_default=True)

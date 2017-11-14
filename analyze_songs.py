@@ -1,7 +1,4 @@
 """Acoustic analysis songs plugin."""
-from __future__ import print_function
-from builtins import str
-
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
