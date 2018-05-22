@@ -20,7 +20,7 @@ setup(
     author_email='thisfred@gmail.com',
     url='https://launchpad.net/autoqueue',
     requires=[
-        'dateutil', 'pylast', 'pyowm', 'geohash', 'requests', 'nltk'],
+        'dateutil', 'pylast', 'pyowm', 'pygeohash', 'requests', 'nltk'],
     provides=['autoqueue'],
     data_files=[
         ('lib/autoqueue', ['bin/autoqueue-similarity-service']),

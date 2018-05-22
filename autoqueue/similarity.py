@@ -332,7 +332,7 @@ class GaiaAnalysis(Thread):
         """
         if not self.gaia_db.contains(encoded_filename):
             print("%s not found in gaia db" % encoded_filename)
-            self.queue.put((ADD, str(encoded_filename)))
+            self.queue.put((ADD, encoded_filename))
             return False
 
         return True
@@ -896,30 +896,29 @@ class SimilarityService(dbus.service.Object):
     @method(dbus_interface=IFACE, in_signature='s')
     def remove_track_by_filename(self, filename):
         """Remove tracks from database."""
-        self.similarity.remove_track_by_filename(str(filename))
+        self.similarity.remove_track_by_filename(filename)
 
     @method(dbus_interface=IFACE, in_signature='s')
     def analyze_track(self, filename):
         """Perform analysis of a track."""
-        self.similarity.analyze_track(str(filename))
+        self.similarity.analyze_track(filename)
 
     @method(dbus_interface=IFACE, in_signature='as')
     def analyze_tracks(self, filenames):
         """Perform analysis of multiple tracks."""
         self.similarity.analyze_tracks([
-            str(filename) for filename in filenames])
+            filename for filename in filenames])
 
     @method(dbus_interface=IFACE, in_signature='si', out_signature='a(is)')
     def get_ordered_gaia_tracks(self, filename, number):
         """Get similar tracks by gaia acoustic analysis."""
-        return self.similarity.get_ordered_gaia_tracks(
-            str(filename), number)
+        return self.similarity.get_ordered_gaia_tracks(filename, number)
 
     @method(dbus_interface=IFACE, in_signature='sis', out_signature='a(is)')
     def get_ordered_gaia_tracks_by_request(self, filename, number, request):
         """Get similar tracks by gaia acoustic analysis."""
         return self.similarity.get_ordered_gaia_tracks_by_request(
-            str(filename), number, str(request))
+            filename, number, request)
 
     @method(dbus_interface=IFACE, in_signature='ss', out_signature='a(iss)')
     def get_ordered_similar_tracks(self, artist_name, title):
@@ -928,8 +927,7 @@ class SimilarityService(dbus.service.Object):
         Sorted by descending match score.
 
         """
-        return self.similarity.get_ordered_similar_tracks(
-            str(artist_name), str(title))
+        return self.similarity.get_ordered_similar_tracks(artist_name, title)
 
     @method(dbus_interface=IFACE, in_signature='as', out_signature='a(is)')
     def get_ordered_similar_artists(self, artists):
@@ -938,13 +936,12 @@ class SimilarityService(dbus.service.Object):
         Sorted by descending match score.
 
         """
-        return self.similarity.get_ordered_similar_artists(
-            [str(a) for a in artists])
+        return self.similarity.get_ordered_similar_artists(artists)
 
     @method(dbus_interface=IFACE, in_signature='as', out_signature='ai')
     def miximize(self, filenames):
         """Return ideally ordered list of filenames."""
-        return self.similarity.miximize([str(f) for f in filenames])
+        return self.similarity.miximize(filenames)
 
     @method(dbus_interface=IFACE, out_signature='b')
     def has_gaia(self):
@@ -953,8 +950,7 @@ class SimilarityService(dbus.service.Object):
 
     @method(dbus_interface=IFACE, in_signature='sas', out_signature='s')
     def get_best_match(self, filename, filenames):
-        return self.similarity.get_best_match(
-            str(filename), [str(f) for f in filenames])
+        return self.similarity.get_best_match(filename, filenames)
 
     def run(self):
         """Run loop."""

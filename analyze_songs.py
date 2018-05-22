@@ -41,6 +41,7 @@ class AnalyzeSongsPlugin(SongsMenuPlugin):
 
     def plugin_songs(self, songs):
         """Add the work to the coroutine pool."""
+        print('added {} songs'.format(len(songs)))
         GLib.idle_add(self.doit, songs)
 
     def doit(self, songs):
@@ -52,7 +53,7 @@ class AnalyzeSongsPlugin(SongsMenuPlugin):
             except UnicodeEncodeError:
                 try:
                     filename = filename.decode('utf-8')
-                except UnicodeDecodeError:
+                except (UnicodeDecodeError, AttributeError):
                     print(
                         "Could not figure out filename encoding: %r" %
                         song('~filename'))

@@ -40,9 +40,12 @@ STOPWORDS = {
 EXCLUSIONS = {
     'air': {'breeze.n.01', 'wind.n.01'},
     'black': {'dark.n.01'},
+    'closer': {'person.n.01'},
     'cloud': {'fog.n.02'},
     'clouds': {'fog.n.02'},
     'calm': {'wind.n.01'},
+    'days': {'day.n.04'},
+    'down': {'eat.v.01'},
     'fall': {'fall.n.01', 'dusky.s.01', 'twilight.n.01'},
     'friday': {'day.n.04'},
     'jan': {'january.n.01'},
@@ -69,6 +72,9 @@ EXCLUSIONS = {
     'wed': {'wednesday.n.00'},
     'wednesday': {'day.n.04'},
 }
+
+GLOBAL_EXCLUSIONS = {
+    'be.v.01', 'be.v.03'}
 
 static_predicates = []
 
@@ -121,7 +127,8 @@ def expand(word):
 
     for synset in wordnet.synsets(stemmed):
         for term in expand_synset(synset):
-            if term not in EXCLUSIONS.get(word, []):
+            if (term not in GLOBAL_EXCLUSIONS and
+                    term not in EXCLUSIONS.get(word, [])):
                 yield term
 
 

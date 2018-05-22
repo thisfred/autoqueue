@@ -3,12 +3,6 @@
 from abc import ABCMeta, abstractmethod
 from datetime import datetime
 
-try:
-    import geohash
-    GEOHASH = True
-except ImportError:
-    GEOHASH = False
-
 
 class SongBase(metaclass=ABCMeta):
 
@@ -126,15 +120,6 @@ class SongBase(metaclass=ABCMeta):
         song_tags = self.get_stripped_tags()
         geohashes = [
             t.split(':')[1] for t in song_tags if t.startswith('geohash:')]
-        if GEOHASH:
-            for ghash in geohashes[:]:
-                try:
-                    geohashes.extend(geohash.neighbors(ghash))
-                except ValueError:
-                    # invalid geohash
-                    print(
-                        "Invalid geohash: %s in %s - %s" % (
-                            ghash, self.get_artist(), self.get_title()))
         return geohashes
 
 

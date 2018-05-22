@@ -14,16 +14,13 @@ from datetime import datetime
 from autoqueue import AutoQueueBase
 from autoqueue.player import PlayerBase, SongBase
 from gi.repository import GLib, Gtk
-from quodlibet import _, app
-from quodlibet.plugins import PluginConfig
+from quodlibet import _, app, config
+from quodlibet.plugins import PluginConfig, PluginConfigMixin
 from quodlibet.plugins.events import EventPlugin
-from quodlibet.qltk.entry import UndoEntry, ValidatingEntry
+from quodlibet.qltk.entry import UndoEntry
 from quodlibet.util import copool
 
 INT_SETTINGS = {
-    'artist_block_time': {
-        'value': 1,
-        'label': 'block artist (days)'},
     'desired_queue_length': {
         'value': 4440,
         'label': 'queue (seconds)'},
@@ -32,9 +29,6 @@ INT_SETTINGS = {
         'label': 'number of tracks to look up'}}
 
 BOOL_SETTINGS = {
-    'verbose': {
-        'value': False,
-        'label': 'log to console'},
     'use_gaia': {
         'value': True,
         'label': 'use gaia similarity'},
@@ -67,9 +61,12 @@ STR_SETTINGS = {
     'location': {
         'value': '',
         'label': 'location ([City], [State] or [City], [Country])'},
+    'city_id': {
+        'value': '',
+        'label': 'see http://bulk.openweathermap.org/sample/'},
     'zipcode': {
         'value': '',
-        'label': 'zipcode'},
+        'label': 'zipcode (us only)'},
     'geohash': {
         'value': '',
         'label': 'geohash (see geohash.org)'},
@@ -212,7 +209,7 @@ class Song(SongBase):
             return None
 
 
-class AutoQueue(AutoQueueBase, EventPlugin):
+class AutoQueue(AutoQueueBase, EventPlugin, PluginConfigMixin):
 
     """The actual plugin class."""
 
@@ -220,11 +217,42 @@ class AutoQueue(AutoQueueBase, EventPlugin):
     PLUGIN_NAME = _("Auto Queue")  # noqa
     PLUGIN_VERSION = "0.2"
     PLUGIN_DESC = ("Queue similar songs.")
+    CONFIG_SECTION = 'autoqueue'
 
     def __init__(self):
         self._enabled = False
         AutoQueueBase.__init__(self, Player())
         self._generators = deque()
+        self.configuration.desired_queue_length = config.getint(
+            'plugins', 'autoqueue_desired_queue_length', default=900)
+        self.configuration.number = config.getint(
+            'plugins', 'autoqueue_number', default=20)
+        self.configuration.restrictions = self.config_get(
+            'restrictions', default='')
+        self.configuration.extra_context = self.config_get(
+            'extra_context', default='')
+        self.configuration.whole_albums = self.config_get_bool(
+            'whole_albums', default=True)
+        self.configuration.southern_hemisphere = self.config_get_bool(
+            'southern_hemisphere', default=False)
+        self.configuration.favor_new = self.config_get_bool(
+            'favor_new', default=True)
+        self.configuration.use_lastfm = self.config_get_bool(
+            'use_lastfm', default=True)
+        self.configuration.use_groupings = self.config_get_bool(
+            'use_groupings', default=True)
+        self.configuration.location = self.config_get(
+            'location', default='')
+        self.configuration.city_id = self.config_get(
+            'city_id', default='')
+        self.configuration.geohash = self.config_get(
+            'geohash', default='')
+        self.configuration.birthdays = self.config_get(
+            'birthdays', default='')
+        self.configuration.use_gaia = self.config_get_bool(
+            'use_gaia', default=True)
+        self.configuration.zipcode = self.config_get(
+            'zipcode', default='')
 
     def enabled(self):
         """Handle user enabling the plugin."""
@@ -257,10 +285,6 @@ class AutoQueue(AutoQueueBase, EventPlugin):
     def PluginPreferences(self, parent):
         """Set and unset preferences from gui or config file."""
 
-        def changed(entry, key):
-            if entry.get_property('sensitive'):
-                plugin_config.set(key, entry.get_text())
-
         table = Gtk.Table(n_columns=2)
         table.set_col_spacings(3)
         table.props.expand = False
@@ -284,7 +308,7 @@ class AutoQueue(AutoQueueBase, EventPlugin):
 
             entry = UndoEntry()
             entry.set_text(plugin_config.get(setting))
-            entry.connect('changed', changed, setting)
+            entry.connect('changed', self.config_entry_changed, setting)
             table.attach(entry, 1, 2, index, index + 1)
 
         return table

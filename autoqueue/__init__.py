@@ -40,7 +40,7 @@ try:
 except ImportError:
     WEATHER = False
 try:
-    import geohash
+    import pygeohash
     GEOHASH = True
 except ImportError:
     GEOHASH = False
@@ -92,14 +92,15 @@ class Configuration(object):
         self.use_lastfm = True
         self.use_groupings = True
         self.location = ''
+        self.city_id = ''
         self.geohash = ''
         self.birthdays = ''
         self.use_gaia = True
         self.zipcode = ''
 
     def get_weather(self):
-        if WEATHER and self.location:
-            return self._get_weather(self.location)
+        if WEATHER and (self.zipcode or self.city_id):
+            return self._get_weather()
 
         return {}
 
@@ -157,22 +158,26 @@ class Configuration(object):
             'api_key': API_KEY,
             'format': 'json'}
         if self.geohash and GEOHASH:
-            lon, lat = geohash.decode(self.geohash)[:2]
+            lon, lat = pygeohash.decode(self.geohash)[:2]
             parameters['long'] = lon
             parameters['lat'] = lat
         if self.location:
             parameters['location'] = self.location
         return parameters
 
-    @staticmethod
-    def _get_weather(location):
+    def _get_weather(self):
         try:
             # If you use this code for anything else, please register for your
             # own OWM API key for free, here:
             #
             # https://home.openweathermap.org/users/sign_up
             owm = pyowm.OWM("35c8c197224e0fb5f7a771facb4243ae")
-            return owm.weather_at_place(location).get_weather()
+            if self.zipcode:
+                return owm.weather_at_zip_code(
+                    self.zipcode, country='US').get_weather()
+
+            return owm.weather_at_id(self.city_id).get_weather()
+
         except Exception as exception:
             global WEATHER
             WEATHER = False
@@ -273,12 +278,17 @@ class AutoQueueBase(object):
         """Log errors when calling D-Bus methods in a async way."""
         print('Error handler received: %r, %r' % (args, kwargs))
 
+    def is_playing_or_in_queue(self, filename):
+        for qsong in self.get_last_songs():
+            if qsong.get_filename() == filename:
+                return True
+        return False
+
     def allowed(self, song):
         """Check whether a song is allowed to be queued."""
         filename = song.get_filename()
-        for qsong in self.get_last_songs():
-            if qsong.get_filename() == filename:
-                return False
+        if self.is_playing_or_in_queue(filename):
+            return False
 
         if self.requests.has(filename):
             return True
@@ -373,7 +383,9 @@ class AutoQueueBase(object):
             empty_handler=self.gaia_reply_handler)
 
     def get_best_request(self, filename):
-        all_requests = self.requests.get_requests()
+        all_requests = [
+            filename for filename in self.requests.get_requests()
+            if not self.is_playing_or_in_queue(filename)]
         if not all_requests:
             self.similarity.get_ordered_gaia_tracks(
                 filename, self.configuration.number,
@@ -689,7 +701,7 @@ class AutoQueueBase(object):
             for reason in result.get('reasons', []):
                 print("  %s" % (reason,))
 
-            if number_of_results > 1:
+            if number_of_results > 1 and result.get('score') > 0:
                 print("score: %.5f, play frequency %.5f" % (rating, frequency))
                 comparison = rating
                 if self.configuration.favor_new:
@@ -758,10 +770,10 @@ class AutoQueueBase(object):
         search = self.player.construct_album_search(
             album=album, album_artist=album_artist, album_id=album_id)
         songs = sorted([
-            (song.get_discnumber(), song.get_tracknumber(), song)
-            for song in self.player.search(search)])
+            (song.get_discnumber(), song.get_tracknumber(), i, song)
+            for i, song in enumerate(self.player.search(search))])
         if songs:
-            for _, _, song in songs:
+            for _, _, _, song in songs:
                 self.enqueue_song(song)
             return True
         return False
