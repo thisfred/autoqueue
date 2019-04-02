@@ -36,11 +36,13 @@ from dbus.mainloop.glib import DBusGMainLoop
 
 try:
     import pyowm
+
     WEATHER = True
 except ImportError:
     WEATHER = False
 try:
     import pygeohash
+
     GEOHASH = True
 except ImportError:
     GEOHASH = False
@@ -52,16 +54,31 @@ DBusGMainLoop(set_as_default=True)
 # get and use your own (free) last.fm api key from here:
 # http://www.last.fm/api/account
 API_KEY = "09d0975a99a4cab235b731d31abf0057"
-THRESHOLD = .5
+THRESHOLD = 0.5
 TIMEOUT = 3000
 FIVE_MINUTES = timedelta(minutes=5)
 DEFAULT_NUMBER = 20
 DEFAULT_LENGTH = 15 * 60
 BANNED_ALBUMS = [
-    'ep', 'greatest hits', 'the greatest hits', 'demo', 'the best of',
-    'the very best of', 'live', 'demos', 'self titled', 'untitled album',
-    '[non-album tracks]', 'single', 'singles', '7"', 'covers', 'album',
-    'split 7"', 's/t']
+    "ep",
+    "greatest hits",
+    "the greatest hits",
+    "demo",
+    "the best of",
+    "the very best of",
+    "live",
+    "demos",
+    "self titled",
+    "untitled album",
+    "[non-album tracks]",
+    "single",
+    "singles",
+    '7"',
+    "covers",
+    "album",
+    'split 7"',
+    "s/t",
+]
 
 
 def no_op(*args, **kwargs):
@@ -79,7 +96,6 @@ def tag_score(song, tags):
 
 
 class Configuration(object):
-
     def __init__(self):
         self.contextualize = True
         self.desired_queue_length = DEFAULT_LENGTH
@@ -91,12 +107,12 @@ class Configuration(object):
         self.favor_new = True
         self.use_lastfm = True
         self.use_groupings = True
-        self.location = ''
-        self.city_id = ''
-        self.geohash = ''
-        self.birthdays = ''
+        self.location = ""
+        self.city_id = ""
+        self.geohash = ""
+        self.birthdays = ""
         self.use_gaia = True
-        self.zipcode = ''
+        self.zipcode = ""
 
     def get_weather(self):
         if WEATHER and (self.zipcode or self.city_id):
@@ -115,24 +131,24 @@ class Configuration(object):
         parameters = self._build_parameters()
         while True:
             page = self._get_page(parameters)
-            if 'events' not in page:
+            if "events" not in page:
                 print(page)
                 return
-            total_pages = int(page['events']['@attr']['totalPages'])
-            page_number = int(page['events']['@attr']['page'])
+            total_pages = int(page["events"]["@attr"]["totalPages"])
+            page_number = int(page["events"]["@attr"]["page"])
             yield page
             if page_number == total_pages:
                 return
-            parameters['page'] = page_number + 1
+            parameters["page"] = page_number + 1
             page = self._get_page(parameters)
 
     @staticmethod
     def _get_artists(page):
         artists = []
-        for event in page['events']['event']:
+        for event in page["events"]["event"]:
             if not isinstance(event, dict):
                 continue
-            found = event['artists']['artist']
+            found = event["artists"]["artist"]
             if not isinstance(found, list):
                 found = [found]
             artists.extend(found)
@@ -143,7 +159,8 @@ class Configuration(object):
         response = None
         try:
             response = requests.get(
-                'http://ws.audioscrobbler.com/2.0/', params=parameters)
+                "http://ws.audioscrobbler.com/2.0/", params=parameters
+            )
             page = response.json()
         except Exception as ex:
             print(ex)
@@ -153,16 +170,17 @@ class Configuration(object):
 
     def _build_parameters(self):
         parameters = {
-            'method': 'geo.getevents',
-            'limit': 25,
-            'api_key': API_KEY,
-            'format': 'json'}
+            "method": "geo.getevents",
+            "limit": 25,
+            "api_key": API_KEY,
+            "format": "json",
+        }
         if self.geohash and GEOHASH:
             lon, lat = pygeohash.decode(self.geohash)[:2]
-            parameters['long'] = lon
-            parameters['lat'] = lat
+            parameters["long"] = lon
+            parameters["lat"] = lat
         if self.location:
-            parameters['location'] = self.location
+            parameters["location"] = self.location
         return parameters
 
     def _get_weather(self):
@@ -173,8 +191,7 @@ class Configuration(object):
             # https://home.openweathermap.org/users/sign_up
             owm = pyowm.OWM("35c8c197224e0fb5f7a771facb4243ae")
             if self.zipcode:
-                return owm.weather_at_zip_code(
-                    self.zipcode, country='US').get_weather()
+                return owm.weather_at_zip_code(self.zipcode, country="US").get_weather()
 
             return owm.weather_at_id(self.city_id).get_weather()
 
@@ -186,7 +203,6 @@ class Configuration(object):
 
 
 class PreviousTerms(object):
-
     def __init__(self):
         self.songs = []
 
@@ -203,7 +219,6 @@ class PreviousTerms(object):
 
 
 class Cache(object):
-
     def __init__(self):
         self.song = None
         self.running = False
@@ -243,8 +258,8 @@ class Cache(object):
             self.last_closest = match
         else:
             self.miss_factor += 1
-        print('* last closest * %s' % self.last_closest)
-        print('* miss factor * %s' % self.miss_factor)
+        print("* last closest * %s" % self.last_closest)
+        print("* miss factor * %s" % self.miss_factor)
 
 
 class AutoQueueBase(object):
@@ -259,10 +274,11 @@ class AutoQueueBase(object):
         self.cache = Cache()
         bus = dbus.SessionBus()
         sim = bus.get_object(
-            'org.autoqueue', '/org/autoqueue/Similarity',
-            follow_name_owner_changes=True)
+            "org.autoqueue", "/org/autoqueue/Similarity", follow_name_owner_changes=True
+        )
         self.similarity = dbus.Interface(
-            sim, dbus_interface='org.autoqueue.SimilarityInterface')
+            sim, dbus_interface="org.autoqueue.SimilarityInterface"
+        )
         self.has_gaia = self.similarity.has_gaia()
         self.player = player
         self.cache.set_nearby_artist(self.configuration)
@@ -276,7 +292,7 @@ class AutoQueueBase(object):
     @staticmethod
     def error_handler(*args, **kwargs):
         """Log errors when calling D-Bus methods in a async way."""
-        print('Error handler received: %r, %r' % (args, kwargs))
+        print("Error handler received: %r, %r" % (args, kwargs))
 
     def is_playing_or_in_queue(self, filename):
         for qsong in self.get_last_songs():
@@ -293,15 +309,15 @@ class AutoQueueBase(object):
         if self.requests.has(filename):
             return True
 
-        date_search = re.compile("([0-9]{4}-)?%02d-%02d" % (
-            self.eoq.month, self.eoq.day))
+        date_search = re.compile(
+            "([0-9]{4}-)?%02d-%02d" % (self.eoq.month, self.eoq.day)
+        )
         for tag in song.get_stripped_tags():
             if date_search.match(tag):
                 return True
 
         for artist in song.get_artists():
-            if artist in self.blocking.get_blocked_artists(
-                    self.get_last_songs()):
+            if artist in self.blocking.get_blocked_artists(self.get_last_songs()):
                 return False
 
         return True
@@ -329,8 +345,7 @@ class AutoQueueBase(object):
         self.cache.song = song
         if self.cache.running:
             return
-        if self.configuration.desired_queue_length == 0 or \
-                self.queue_needs_songs():
+        if self.configuration.desired_queue_length == 0 or self.queue_needs_songs():
             self.queue_song()
         self.blocking.unblock_artists()
         self.pop_request(song)
@@ -361,8 +376,7 @@ class AutoQueueBase(object):
     def construct_filenames_search(self, filenames):
         return self.player.construct_files_search(filenames)
 
-    def construct_search(self, artist=None, title=None, tags=None,
-                         filename=None):
+    def construct_search(self, artist=None, title=None, tags=None, filename=None):
         """Construct a search based on several criteria."""
         if filename:
             return self.player.construct_file_search(filename)
@@ -379,25 +393,35 @@ class AutoQueueBase(object):
         self.cache.last_songs = self.get_last_songs()
         song = self.cache.last_song = self.cache.last_songs.pop()
         self.analyze_and_callback(
-            song.get_filename(), reply_handler=self.analyzed,
-            empty_handler=self.gaia_reply_handler)
+            song.get_filename(),
+            reply_handler=self.analyzed,
+            empty_handler=self.gaia_reply_handler,
+        )
 
     def get_best_request(self, filename):
         all_requests = [
-            filename for filename in self.requests.get_requests()
-            if not self.is_playing_or_in_queue(filename)]
+            filename
+            for filename in self.requests.get_requests()
+            if not self.is_playing_or_in_queue(filename)
+        ]
         if not all_requests:
             self.similarity.get_ordered_gaia_tracks(
-                filename, self.configuration.number,
+                filename,
+                self.configuration.number,
                 reply_handler=self.gaia_reply_handler,
-                error_handler=self.error_handler, timeout=TIMEOUT)
+                error_handler=self.error_handler,
+                timeout=TIMEOUT,
+            )
         elif len(all_requests) == 1:
             self.best_request_handler(all_requests[0])
         else:
             self.similarity.get_best_match(
-                filename, all_requests,
+                filename,
+                all_requests,
                 reply_handler=self.best_request_handler,
-                error_handler=self.error_handler, timeout=TIMEOUT)
+                error_handler=self.error_handler,
+                timeout=TIMEOUT,
+            )
 
     def best_request_handler(self, request):
         song = self.cache.last_song
@@ -414,15 +438,20 @@ class AutoQueueBase(object):
                     self.configuration.number * self.cache.miss_factor,
                     self.current_request,
                     reply_handler=self.gaia_reply_handler,
-                    error_handler=self.error_handler, timeout=TIMEOUT)
+                    error_handler=self.error_handler,
+                    timeout=TIMEOUT,
+                )
                 return
 
         else:
             print("***** no requests")
         self.similarity.get_ordered_gaia_tracks(
-            filename, self.configuration.number,
+            filename,
+            self.configuration.number,
             reply_handler=self.gaia_reply_handler,
-            error_handler=self.error_handler, timeout=TIMEOUT)
+            error_handler=self.error_handler,
+            timeout=TIMEOUT,
+        )
 
     def analyzed(self):
         song = self.cache.last_song
@@ -430,7 +459,7 @@ class AutoQueueBase(object):
         if not filename:
             return
         if self.use_gaia:
-            print('Get similar tracks for: %s' % filename)
+            print("Get similar tracks for: %s" % filename)
             self.get_best_request(filename)
         else:
             self.gaia_reply_handler([])
@@ -454,10 +483,12 @@ class AutoQueueBase(object):
             else:
                 self.cache.reset_closest()
 
-            for _ in self.process_filename_results([
-                    {'score': match, 'filename': filename}
-                    for match, filename
-                    in results[:self.configuration.number]]):
+            for _ in self.process_filename_results(
+                [
+                    {"score": match, "filename": filename}
+                    for match, filename in results[: self.configuration.number]
+                ]
+            ):
                 yield
 
         if self.cache.found:
@@ -471,9 +502,12 @@ class AutoQueueBase(object):
                 return
             self.current_request = None
             self.similarity.get_ordered_gaia_tracks(
-                filename, self.configuration.number,
+                filename,
+                self.configuration.number,
                 reply_handler=self.gaia_reply_handler,
-                error_handler=self.error_handler, timeout=TIMEOUT)
+                error_handler=self.error_handler,
+                timeout=TIMEOUT,
+            )
             return
         self.get_similar_tracks()
 
@@ -486,11 +520,14 @@ class AutoQueueBase(object):
         artist_name = last_song.get_artist()
         title = last_song.get_title()
         if artist_name and title:
-            print('Get similar tracks for: %s - %s' % (artist_name, title))
+            print("Get similar tracks for: %s - %s" % (artist_name, title))
             self.similarity.get_ordered_similar_tracks(
-                artist_name, title,
+                artist_name,
+                title,
                 reply_handler=self.similar_tracks_handler,
-                error_handler=self.error_handler, timeout=TIMEOUT)
+                error_handler=self.error_handler,
+                timeout=TIMEOUT,
+            )
         else:
             self.similar_tracks_handler([])
 
@@ -502,15 +539,18 @@ class AutoQueueBase(object):
 
     def similar_tracks_handler(self, results):
         """Handler for similar tracks returned from dbus."""
-        self.player.execute_async(
-            self._similar_tracks_handler, results=results)
+        self.player.execute_async(self._similar_tracks_handler, results=results)
 
     def _similar_tracks_handler(self, results=None):
         """Exexute processing asynchronous."""
         self.cache.found = False
-        for _ in self.process_results([{'score': match, 'artist': artist,
-                                        'title': title} for match, artist,
-                                       title in results], invert_scores=True):
+        for _ in self.process_results(
+            [
+                {"score": match, "artist": artist, "title": title}
+                for match, artist, title in results
+            ],
+            invert_scores=True,
+        ):
             yield
         if self.cache.found:
             self.continue_queueing()
@@ -518,25 +558,27 @@ class AutoQueueBase(object):
         self.get_similar_artists()
 
     def get_similar_artists(self):
-        artists = [
-            a.encode('utf-8') for a in self.cache.last_song.get_artists()]
-        print('Get similar artists for %s' % artists)
+        artists = [a.encode("utf-8") for a in self.cache.last_song.get_artists()]
+        print("Get similar artists for %s" % artists)
         self.similarity.get_ordered_similar_artists(
-            artists, reply_handler=self.similar_artists_handler,
-            error_handler=self.error_handler, timeout=TIMEOUT)
+            artists,
+            reply_handler=self.similar_artists_handler,
+            error_handler=self.error_handler,
+            timeout=TIMEOUT,
+        )
 
     def similar_artists_handler(self, results):
         """Handler for similar artists returned from dbus."""
-        self.player.execute_async(
-            self._similar_artists_handler, results=results)
+        self.player.execute_async(self._similar_artists_handler, results=results)
 
     def _similar_artists_handler(self, results=None):
         """Exexute processing asynchronous."""
         self.cache.found = False
         if results:
-            for _ in self.process_results([{'score': match, 'artist': artist}
-                                           for match, artist in results],
-                                          invert_scores=True):
+            for _ in self.process_results(
+                [{"score": match, "artist": artist} for match, artist in results],
+                invert_scores=True,
+            ):
                 yield
 
         if self.cache.found:
@@ -545,8 +587,9 @@ class AutoQueueBase(object):
 
         if self.configuration.use_groupings:
             for _ in self.process_results(
-                    self.get_ordered_similar_by_tag(self.cache.last_song),
-                    invert_scores=True):
+                self.get_ordered_similar_by_tag(self.cache.last_song),
+                invert_scores=True,
+            ):
                 yield
 
             if self.cache.found:
@@ -558,49 +601,57 @@ class AutoQueueBase(object):
             return
         song = self.cache.last_song = self.cache.last_songs.pop()
         self.analyze_and_callback(
-            song.get_filename(), reply_handler=self.analyzed,
-            empty_handler=self.gaia_reply_handler)
+            song.get_filename(),
+            reply_handler=self.analyzed,
+            empty_handler=self.gaia_reply_handler,
+        )
 
-    def analyze_and_callback(self, filename, reply_handler=no_op,
-                             empty_handler=no_op):
+    def analyze_and_callback(self, filename, reply_handler=no_op, empty_handler=no_op):
         if not filename:
             return
         if self.use_gaia:
-            print('Analyzing: %s' % filename)
+            print("Analyzing: %s" % filename)
             self.similarity.analyze_track(
-                filename, reply_handler=reply_handler,
-                error_handler=self.error_handler, timeout=TIMEOUT)
+                filename,
+                reply_handler=reply_handler,
+                error_handler=self.error_handler,
+                timeout=TIMEOUT,
+            )
         else:
             empty_handler([])
 
     @staticmethod
     def satisfies(song, criteria):
         """Check whether the song satisfies any of the criteria."""
-        filename = criteria.get('filename')
+        filename = criteria.get("filename")
         if filename:
             return filename == song.get_filename()
-        title = criteria.get('title')
-        artist = criteria.get('artist')
+        title = criteria.get("title")
+        artist = criteria.get("artist")
         if title:
             return (
-                song.get_title().lower() == title.lower() and
-                song.get_artist().lower() == artist.lower())
+                song.get_title().lower() == title.lower()
+                and song.get_artist().lower() == artist.lower()
+            )
         if artist:
             artist_lower = artist.lower()
             for song_artist in song.get_artists():
                 if song_artist.lower() == artist_lower:
                     return True
             return False
-        tags = criteria.get('tags')
+        tags = criteria.get("tags")
         song_tags = song.get_tags()
         for tag in tags:
-            if (tag in song_tags or 'artist:%s' % (tag,) in song_tags or
-                    'album:%s' % (tag,) in song_tags):
+            if (
+                tag in song_tags
+                or "artist:%s" % (tag,) in song_tags
+                or "album:%s" % (tag,) in song_tags
+            ):
                 return True
         return False
 
     def search_filenames(self, results):
-        filenames = [r['filename'] for r in results]
+        filenames = [r["filename"] for r in results]
         search = self.construct_filenames_search(filenames)
         self.perform_search(search, results)
 
@@ -608,8 +659,11 @@ class AutoQueueBase(object):
         """Search for songs in results."""
         for result in results:
             search = self.construct_search(
-                artist=result.get('artist'), title=result.get('title'),
-                filename=result.get('filename'), tags=result.get('tags'))
+                artist=result.get("artist"),
+                title=result.get("title"),
+                filename=result.get("filename"),
+                tags=result.get("tags"),
+            )
             self.perform_search(search, [result])
             yield
 
@@ -627,42 +681,48 @@ class AutoQueueBase(object):
 
     def perform_search(self, search, results):
         songs = set(
-            self.player.search(
-                search, restrictions=self.configuration.restrictions))
+            self.player.search(search, restrictions=self.configuration.restrictions)
+        )
         found = set()
         for result in results:
             for song in songs - found:
                 if self.satisfies(song, result):
-                    result['song'] = song
+                    result["song"] = song
                     found.add(song)
                     break
             else:
                 if not self.configuration.restrictions:
-                    filename = result.get('filename')
+                    filename = result.get("filename")
                     if filename:
                         self.remove_missing_track(filename)
 
     def remove_missing_track(self, filename):
-        print('Remove similarity for %s' % filename)
+        print("Remove similarity for %s" % filename)
         if not isinstance(filename, str):
-            filename = str(filename, 'utf-8')
+            filename = str(filename, "utf-8")
         self.similarity.remove_track_by_filename(
-            filename, reply_handler=no_op,
-            error_handler=self.error_handler, timeout=TIMEOUT)
+            filename,
+            reply_handler=no_op,
+            error_handler=self.error_handler,
+            timeout=TIMEOUT,
+        )
 
     def adjust_scores(self, results, invert_scores):
         """Adjust scores based on similarity with previous song and context."""
         if self.configuration.contextualize:
             self.context = Context(
-                context_date=self.eoq, configuration=self.configuration,
-                cache=self.cache, request=self.get_current_request())
-            maximum_score = max(result['score'] for result in results) + 1
+                context_date=self.eoq,
+                configuration=self.configuration,
+                cache=self.cache,
+                request=self.get_current_request(),
+            )
+            maximum_score = max(result["score"] for result in results) + 1
             for result in results[:]:
-                if 'song' not in result:
+                if "song" not in result:
                     results.remove(result)
                     continue
                 if invert_scores:
-                    result['score'] = maximum_score - result['score']
+                    result["score"] = maximum_score - result["score"]
                 self.context.adjust_score(result)
                 yield
 
@@ -685,9 +745,8 @@ class AutoQueueBase(object):
 
     def pick_result(self, results):
         number_of_results = len(results)
-        for number, result in enumerate(sorted(results,
-                                               key=lambda x: x['score'])):
-            song = result.get('song')
+        for number, result in enumerate(sorted(results, key=lambda x: x["score"])):
+            song = result.get("song")
             if not song:
                 print("'song' not found in %s" % result)
                 continue
@@ -698,16 +757,17 @@ class AutoQueueBase(object):
             rating = song.get_rating()
             if rating is NotImplemented:
                 rating = THRESHOLD
-            for reason in result.get('reasons', []):
+            for reason in result.get("reasons", []):
                 print("  %s" % (reason,))
 
-            if number_of_results > 1 and result.get('score') > 0:
+            if number_of_results > 1 and result.get("score") > 0:
                 print("score: %.5f, play frequency %.5f" % (rating, frequency))
                 comparison = rating
                 if self.configuration.favor_new:
                     comparison -= frequency
-                if (frequency > 0 or not self.configuration.favor_new) and \
-                        random.random() > comparison:
+                if (
+                    frequency > 0 or not self.configuration.favor_new
+                ) and random.random() > comparison:
                     continue
 
             if not self.allowed(song):
@@ -735,24 +795,31 @@ class AutoQueueBase(object):
 
     @staticmethod
     def log_lookup(number, result):
-        look_for = str(result.get('artist', ''))
+        look_for = str(result.get("artist", ""))
         if look_for:
-            title = str(result.get('title', ''))
+            title = str(result.get("title", ""))
             if title:
-                look_for += ' - ' + title
-        elif 'filename' in result:
-            look_for = str(result['filename'])
-        elif 'tags' in result:
-            look_for = result['tags']
+                look_for += " - " + title
+        elif "filename" in result:
+            look_for = str(result["filename"])
+        elif "tags" in result:
+            look_for = result["tags"]
         else:
             print(repr(result))
             look_for = str(result)
-        print('%03d: %06d %s' % (number + 1, result.get('score', 0), look_for))
+        print("%03d: %06d %s" % (number + 1, result.get("score", 0), look_for))
 
     def maybe_enqueue_album(self, song):
         """Determine if a whole album should be queued, and do so."""
-        if (self.configuration.whole_albums and song.get_tracknumber() == 1 and
-                (song.get_playcount() == 0 or random.random() > .5)):
+        if (
+            self.configuration.whole_albums
+            and song.get_tracknumber() == 1
+            and (
+                song.get_filename() in self.get_requests()
+                or song.get_playcount() == 0
+                or random.random() > 0.5
+            )
+        ):
             album = song.get_album()
             album_artist = song.get_album_artist()
             album_id = song.get_musicbrainz_albumid()
@@ -768,10 +835,14 @@ class AutoQueueBase(object):
     def enqueue_album(self, album, album_artist, album_id):
         """Try to enqueue whole album."""
         search = self.player.construct_album_search(
-            album=album, album_artist=album_artist, album_id=album_id)
-        songs = sorted([
-            (song.get_discnumber(), song.get_tracknumber(), i, song)
-            for i, song in enumerate(self.player.search(search))])
+            album=album, album_artist=album_artist, album_id=album_id
+        )
+        songs = sorted(
+            [
+                (song.get_discnumber(), song.get_tracknumber(), i, song)
+                for i, song in enumerate(self.player.search(search))
+            ]
+        )
         if songs:
             for _, _, _, song in songs:
                 self.enqueue_song(song)
@@ -790,12 +861,12 @@ class AutoQueueBase(object):
             return []
         search = self.construct_search(tags=list(tag_set))
         songs = sorted(
-            [(tag_score(song, tag_set), song)
-             for song in self.player.search(search)],
-            reverse=True)
+            [(tag_score(song, tag_set), song) for song in self.player.search(search)],
+            reverse=True,
+        )
         return [
-            {'score': score, 'filename': song.get_filename()}
-            for score, song in songs]
+            {"score": score, "filename": song.get_filename()} for score, song in songs
+        ]
 
 
 def levenshtein(string1, string2):
