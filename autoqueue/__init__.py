@@ -815,7 +815,7 @@ class AutoQueueBase(object):
             self.configuration.whole_albums
             and song.get_tracknumber() == 1
             and (
-                song.get_filename() in self.get_requests()
+                song.get_filename() in self.requests.get_requests()
                 or song.get_playcount() == 0
                 or random.random() > 0.5
             )
