@@ -415,6 +415,7 @@ class AutoQueueBase(object):
         elif len(all_requests) == 1:
             self.best_request_handler(all_requests[0])
         else:
+            print(f"{len(all_requests)} requests left in queue.")
             self.similarity.get_best_match(
                 filename,
                 all_requests,
@@ -811,13 +812,16 @@ class AutoQueueBase(object):
 
     def maybe_enqueue_album(self, song):
         """Determine if a whole album should be queued, and do so."""
+        current_requests = self.requests.get_requests()
         if (
             self.configuration.whole_albums
             and song.get_tracknumber() == 1
             and (
-                song.get_filename() in self.requests.get_requests()
-                or song.get_playcount() == 0
-                or random.random() > 0.5
+                song.get_filename() in current_requests
+                or (
+                    not current_requests
+                    and (song.get_playcount() == 0 or random.random() > 0.5)
+                )
             )
         ):
             album = song.get_album()

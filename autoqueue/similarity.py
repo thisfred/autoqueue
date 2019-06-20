@@ -25,6 +25,7 @@ import subprocess
 from datetime import datetime, timedelta
 from threading import Thread
 from time import sleep, strptime, time
+from functools import total_ordering
 
 import dbus
 import dbus.service
@@ -33,21 +34,23 @@ from dbus.mainloop.glib import DBusGMainLoop
 from dbus.service import method
 from gi.repository import GObject
 from pylast import LastFMNetwork
-from queue import Empty, LifoQueue, PriorityQueue, Queue
+from Queue import Empty, LifoQueue, PriorityQueue, Queue
 
 try:
     from gaia2 import DataSet, transform, DistanceFunctionFactory, View, Point
     import yaml
+
     GAIA = True
 except ImportError:
     GAIA = False
+print("Gaia installed:", GAIA)
 
 
 DBusGMainLoop(set_as_default=True)
 
-DBUS_BUSNAME = 'org.autoqueue'
-IFACE = 'org.autoqueue.SimilarityInterface'
-DBUS_PATH = '/org/autoqueue/Similarity'
+DBUS_BUSNAME = "org.autoqueue"
+IFACE = "org.autoqueue.SimilarityInterface"
+DBUS_PATH = "/org/autoqueue/Similarity"
 
 # If you change even a single character of code, I would ask that you
 # get and use your own (free) last.fm api key from here:
@@ -55,12 +58,13 @@ DBUS_PATH = '/org/autoqueue/Similarity'
 API_KEY = "09d0975a99a4cab235b731d31abf0057"
 
 # XXX: obviously make this configurable
-ESSENTIA_EXTRACTOR_PATH = '/usr/local/bin/essentia_streaming_extractor_music'
+ESSENTIA_EXTRACTOR_PATH = "/usr/local/bin/essentia_streaming_extractor_music"
 
-ADD = 'add'
-REMOVE = 'remove'
+ADD = "add"
+REMOVE = "remove"
 
 
+@total_ordering
 class SQLCommand(object):
 
     """A SQL command object."""
@@ -68,6 +72,15 @@ class SQLCommand(object):
     def __init__(self, sql_statements):
         self.sql = sql_statements
         self.result_queue = Queue()
+
+    def __eq__(self, other):
+        return self.sql == other.sql
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __lt__(self, other):
+        return self.sql < other.sql
 
 
 class GaiaAnalysis(Thread):
@@ -78,9 +91,7 @@ class GaiaAnalysis(Thread):
         super(GaiaAnalysis, self).__init__()
         self.gaia_db_path = db_path
         self.gaia_db = None
-        self.commands = {
-            ADD: self._analyze,
-            REMOVE: self._remove_point}
+        self.commands = {ADD: self._analyze, REMOVE: self._remove_point}
         self.queue = queue
         self.transformed = False
         self.metric = None
@@ -90,12 +101,14 @@ class GaiaAnalysis(Thread):
         self.gaia_db = self.initialize_gaia_db()
         try:
             self.metric = DistanceFunctionFactory.create(
-                'euclidean', self.gaia_db.layout())
+                "euclidean", self.gaia_db.layout()
+            )
         except Exception as ex:
             print(repr(ex))
             self.gaia_db = self.transform(self.gaia_db)
             self.metric = DistanceFunctionFactory.create(
-                'euclidean', self.gaia_db.layout())
+                "euclidean", self.gaia_db.layout()
+            )
             self.transformed = True
 
     def initialize_gaia_db(self):
@@ -111,22 +124,26 @@ class GaiaAnalysis(Thread):
     @staticmethod
     def transform(dataset):
         """Transform dataset for distance computations."""
-        dataset = transform(dataset, 'fixlength')
-        dataset = transform(dataset, 'cleaner')
+        dataset = transform(dataset, "fixlength")
+        dataset = transform(dataset, "cleaner")
         # dataset = transform(dataset, 'remove', {'descriptorNames': '*mfcc*'})
-        for field in ('*beats_position*', '*bpm_estimates*', '*bpm_intervals*',
-                      '*onset_times*', '*oddtoevenharmonicenergyratio*'):
+        for field in (
+            "*beats_position*",
+            "*bpm_estimates*",
+            "*bpm_intervals*",
+            "*onset_times*",
+            "*oddtoevenharmonicenergyratio*",
+        ):
             try:
-                dataset = transform(
-                    dataset, 'remove', {'descriptorNames': field})
+                dataset = transform(dataset, "remove", {"descriptorNames": field})
             except Exception as ex:
                 print(repr(ex))
-        dataset = transform(dataset, 'normalize')
+        dataset = transform(dataset, "normalize")
         dataset = transform(
-            dataset, 'pca', {
-                'dimension': 30,
-                'descriptorNames': ['*'],
-                'resultName': 'pca30'})
+            dataset,
+            "pca",
+            {"dimension": 30, "descriptorNames": ["*"], "resultName": "pca30"},
+        )
         return dataset
 
     def load_gaia_db(self):
@@ -137,12 +154,11 @@ class GaiaAnalysis(Thread):
 
     def _analyze(self, filename):
         """Analyze an audio file."""
-        encoded = filename.encode('utf-8')
+        encoded = filename.encode("utf-8")
         if self.gaia_db.contains(encoded):
             return
         signame = self.get_signame(encoded)
-        if not (os.path.exists(signame) or
-                self.essentia_analyze(encoded, signame)):
+        if not (os.path.exists(signame) or self.essentia_analyze(encoded, signame)):
             return
         try:
             point = self.load_point(signame)
@@ -154,8 +170,8 @@ class GaiaAnalysis(Thread):
 
     def _remove_point(self, filename):
         """Remove a point from the gaia database."""
-        encoded = filename.encode('utf-8')
-        print('removing %s' % encoded)
+        encoded = filename.encode("utf-8")
+        print("removing %s" % encoded)
         try:
             self.gaia_db.removePoint(encoded)
             signame = self.get_signame(encoded)
@@ -167,10 +183,10 @@ class GaiaAnalysis(Thread):
     def load_point(signame):
         """Load point data from JSON file."""
         point = Point()
-        with open(signame, 'r') as sig:
+        with open(signame, "r") as sig:
             jsonsig = json.load(sig)
-            if jsonsig.get('metadata', {}).get('tags'):
-                del jsonsig['metadata']['tags']
+            if jsonsig.get("metadata", {}).get("tags"):
+                del jsonsig["metadata"]["tags"]
             yamlsig = yaml.dump(jsonsig)
         point.loadFromString(yamlsig)
         return point
@@ -179,16 +195,15 @@ class GaiaAnalysis(Thread):
     def get_signame(full_path):
         """Get the path for the analysis data file for this filename."""
         filename = os.path.split(full_path)[-1]
-        return os.path.join('/tmp', filename + '.sig')
+        return os.path.join("/tmp", filename + ".sig")
 
     @staticmethod
     def essentia_analyze(filename, signame):
         """Perform essentia analysis of an audio file."""
         env = os.environ.copy()
-        env['LD_LIBRARY_PATH'] = '/usr/local/lib'
+        env["LD_LIBRARY_PATH"] = "/usr/local/lib"
         try:
-            subprocess.check_call(
-                [ESSENTIA_EXTRACTOR_PATH, filename, signame], env=env)
+            subprocess.check_call([ESSENTIA_EXTRACTOR_PATH, filename, signame], env=env)
             return True
 
         except subprocess.CalledProcessError as e:
@@ -203,8 +218,7 @@ class GaiaAnalysis(Thread):
         """Transform dataset and save to disk."""
         if not self.transformed:
             dataset = self.transform(dataset)
-            self.metric = DistanceFunctionFactory.create(
-                'euclidean', dataset.layout())
+            self.metric = DistanceFunctionFactory.create("euclidean", dataset.layout())
             self.transformed = True
         dataset.save(path)
         return dataset
@@ -219,18 +233,18 @@ class GaiaAnalysis(Thread):
                 self.commands[cmd](filename)
                 try:
                     cmd, filename = self.queue.get(block=False)
+                    print(f"{len(self.queue)} songs left to analyze.")
                 except Empty:
                     self.gaia_db = self.transform_and_save(
-                        self.gaia_db, self.gaia_db_path)
+                        self.gaia_db, self.gaia_db_path
+                    )
                     break
-            print(
-                "songs in db after processing queue: %d" %
-                self.gaia_db.size())
+            print("songs in db after processing queue: %d" % self.gaia_db.size())
 
     def get_miximized_tracks(self, filenames):
         """Get list of tracks in ideal order."""
         self.analyze_and_wait(filenames)
-        encoded = [f.encode('utf-8') for f in filenames]
+        encoded = [f.encode("utf-8") for f in filenames]
         dataset = DataSet()
         number_of_tracks = len(filenames)
         for filename in encoded:
@@ -242,8 +256,11 @@ class GaiaAnalysis(Thread):
         matrix = {}
         for filename in encoded:
             matrix[filename] = {
-                name: score for score, name in self.get_neighbours(
-                    dataset, filename, number_of_tracks)}
+                name: score
+                for score, name in self.get_neighbours(
+                    dataset, filename, number_of_tracks
+                )
+            }
         clusterer = Clusterer(encoded, lambda f1, f2: matrix[f1][f2])
         clusterer.cluster()
         result = []
@@ -264,8 +281,8 @@ class GaiaAnalysis(Thread):
 
     def get_best_match(self, filename, filenames):
         self.queue_filenames([filename] + filenames)
-        encoded_filename = filename.encode('utf-8')
-        encoded = [f.encode('utf-8') for f in filenames]
+        encoded_filename = filename.encode("utf-8")
+        encoded = [f.encode("utf-8") for f in filenames]
         if not self.gaia_db.contains(encoded_filename):
             return
 
@@ -285,39 +302,41 @@ class GaiaAnalysis(Thread):
     def get_tracks(self, filename, number, request=None):
         """Get most similar tracks from the gaia database."""
         while self.gaia_db is None:
-            sleep(.1)
-        encoded = filename.encode('utf-8')
+            sleep(0.1)
+        encoded = filename.encode("utf-8")
         if not self.contains_or_add(encoded):
             return []
         encoded_request = None
         if request:
-            encoded_request = request.encode('utf-8')
+            encoded_request = request.encode("utf-8")
             if not self.contains_or_add(encoded_request):
                 encoded_request = None
         neighbours = self.get_neighbours(
-            self.gaia_db, encoded, number, encoded_request=encoded_request)
+            self.gaia_db, encoded, number, encoded_request=encoded_request
+        )
         print("total found %d" % len(neighbours))
         print(neighbours[0][0], neighbours[-1][0])
         return neighbours
 
-    def get_neighbours(self, dataset, encoded_filename, number,
-                       encoded_request=None):
+    def get_neighbours(self, dataset, encoded_filename, number, encoded_request=None):
         """Get a number of nearest neighbours."""
         view = View(dataset)
-        request_point = self.gaia_db.point(
-            encoded_request) if encoded_request else None
+        request_point = self.gaia_db.point(encoded_request) if encoded_request else None
         try:
-            total = view.nnSearch(
-                encoded_filename, self.metric).get(number + 1)[1:]
+            total = view.nnSearch(encoded_filename, self.metric).get(number + 1)[1:]
         except Exception as e:
             print(e)
             return []
 
-        result = sorted([
-            (self.compute_score(
-                score, name, request_point=request_point) * 1000,
-             name)
-            for name, score in total])
+        result = sorted(
+            [
+                (
+                    self.compute_score(score, name, request_point=request_point) * 1000,
+                    name,
+                )
+                for name, score in total
+            ]
+        )
         return result
 
     def compute_score(self, score, name, request_point=None):
@@ -352,13 +371,13 @@ class DatabaseWrapper(Thread):
 
     def run(self):
         print("STARTING DATABASE WRAPPER THREAD")
-        connection = sqlite3.connect(self.path, isolation_level='immediate')
+        connection = sqlite3.connect(self.path, isolation_level="immediate")
         cursor = connection.cursor()
         commit_needed = False
         while True:
             _, cmd = self.queue.get()
             sql = cmd.sql
-            if sql == ('STOP',):
+            if sql == ("STOP",):
                 cmd.result_queue.put(None)
                 connection.close()
                 break
@@ -368,7 +387,7 @@ class DatabaseWrapper(Thread):
                 cursor.execute(*sql)
             except Exception as e:
                 print(e, repr(sql))
-            if not sql[0].upper().startswith('SELECT'):
+            if not sql[0].upper().startswith("SELECT"):
                 commit_needed = True
             for row in cursor.fetchall():
                 result.append(row)
@@ -400,8 +419,9 @@ class Pair(object):
         return self.song1 == other.song1 and self.song2 == other.song2
 
     def __repr__(self):
-        return '<Pair {song1}, {song2}: {distance}>'.format(
-            song1=self.song1, song2=self.song2, distance=self.distance)
+        return "<Pair {song1}, {song2}: {distance}>".format(
+            song1=self.song1, song2=self.song2, distance=self.distance
+        )
 
 
 class Clusterer(object):
@@ -417,9 +437,10 @@ class Clusterer(object):
     def build_similarity_matrix(self, songs, comparison_function):
         """Build the similarity matrix."""
         for song1 in songs:
-            for song2 in songs[songs.index(song1) + 1:]:
+            for song2 in songs[songs.index(song1) + 1 :]:
                 self.similarities.append(
-                    Pair(song1, song2, comparison_function(song1, song2)))
+                    Pair(song1, song2, comparison_function(song1, song2))
+                )
         # sort in reverse, since we'll be popping off the end
         self.similarities.sort(reverse=True, key=lambda x: x.distance)
 
@@ -512,8 +533,7 @@ class Similarity(object):
         self.cache_time = 90
         if GAIA:
             self.gaia_queue = LifoQueue()
-            self.gaia_analyser = GaiaAnalysis(
-                self.gaia_db_path, self.gaia_queue)
+            self.gaia_analyser = GaiaAnalysis(self.gaia_db_path, self.gaia_queue)
             self.gaia_analyser.daemon = True
             self.gaia_analyser.start()
 
@@ -537,8 +557,7 @@ class Similarity(object):
 
     def get_ordered_gaia_tracks_by_request(self, filename, number, request):
         start_time = time()
-        tracks = self.gaia_analyser.get_tracks(
-            filename, number, request=request)
+        tracks = self.gaia_analyser.get_tracks(filename, number, request=request)
         print("finding gaia matches took %f s" % (time() - start_time,))
         return tracks
 
@@ -567,13 +586,12 @@ class Similarity(object):
         artist_id = self.get_artist(artist_name)[0]
         sql = (
             "SELECT * FROM tracks WHERE artist = ? AND title = ?;",
-            (artist_id, title))
+            (artist_id, title),
+        )
         command = self.get_sql_command(sql, priority=3)
         for row in command.result_queue.get():
             return row
-        sql2 = (
-            "INSERT INTO tracks (artist, title) VALUES (?, ?);",
-            (artist_id, title))
+        sql2 = ("INSERT INTO tracks (artist, title) VALUES (?, ?);", (artist_id, title))
         command = self.get_sql_command(sql2, priority=2)
         command.result_queue.get()
         command = self.get_sql_command(sql, priority=3)
@@ -596,7 +614,8 @@ class Similarity(object):
             " track_2_track.track1 = tracks.id INNER JOIN artists ON"
             " artists.id = tracks.artist WHERE track_2_track.track2"
             " = ? ORDER BY track_2_track.match DESC;",
-            (track_id, track_id))
+            (track_id, track_id),
+        )
         command = self.get_sql_command(sql, priority=0)
         return command.result_queue.get()
 
@@ -613,16 +632,17 @@ class Similarity(object):
             "SELECT match, name FROM artist_2_artist INNER JOIN"
             " artists ON artist_2_artist.artist1 = artists.id WHERE"
             " artist_2_artist.artist2 = ? ORDER BY match DESC;",
-            (artist_id, artist_id))
+            (artist_id, artist_id),
+        )
         command = self.get_sql_command(sql, priority=0)
         return command.result_queue.get()
 
     def get_artist_match(self, artist1, artist2):
         """Get artist match score from database."""
         sql = (
-            "SELECT match FROM artist_2_artist WHERE artist1 = ?"
-            " AND artist2 = ?;",
-            (artist1, artist2))
+            "SELECT match FROM artist_2_artist WHERE artist1 = ?" " AND artist2 = ?;",
+            (artist1, artist2),
+        )
         command = self.get_sql_command(sql, priority=2)
         for row in command.result_queue.get():
             return row[0]
@@ -632,7 +652,8 @@ class Similarity(object):
         """Get track match score from database."""
         sql = (
             "SELECT match FROM track_2_track WHERE track1 = ? AND track2 = ?;",
-            (track1, track2))
+            (track1, track2),
+        )
         command = self.get_sql_command(sql, priority=2)
         for row in command.result_queue.get():
             return row[0]
@@ -640,56 +661,76 @@ class Similarity(object):
 
     def update_artist_match(self, artist1, artist2, match):
         """Write match score to the database."""
-        self.execute_sql((
-            "UPDATE artist_2_artist SET match = ? WHERE artist1 = ? AND"
-            " artist2 = ?;",
-            (match, artist1, artist2)), priority=10)
+        self.execute_sql(
+            (
+                "UPDATE artist_2_artist SET match = ? WHERE artist1 = ? AND"
+                " artist2 = ?;",
+                (match, artist1, artist2),
+            ),
+            priority=10,
+        )
 
     def update_track_match(self, track1, track2, match):
         """Write match score to the database."""
-        self.execute_sql((
-            "UPDATE track_2_track SET match = ? WHERE track1 = ? AND"
-            " track2 = ?;",
-            (match, track1, track2)), priority=10)
+        self.execute_sql(
+            (
+                "UPDATE track_2_track SET match = ? WHERE track1 = ? AND"
+                " track2 = ?;",
+                (match, track1, track2),
+            ),
+            priority=10,
+        )
 
     def insert_artist_match(self, artist1, artist2, match):
         """Write match score to the database."""
-        self.execute_sql((
-            "INSERT INTO artist_2_artist (artist1, artist2, match) VALUES"
-            " (?, ?, ?);",
-            (artist1, artist2, match)), priority=10)
+        self.execute_sql(
+            (
+                "INSERT INTO artist_2_artist (artist1, artist2, match) VALUES"
+                " (?, ?, ?);",
+                (artist1, artist2, match),
+            ),
+            priority=10,
+        )
 
     def insert_track_match(self, track1, track2, match):
         """Write match score to the database."""
-        self.execute_sql((
-            "INSERT INTO track_2_track (track1, track2, match) VALUES"
-            " (?, ?, ?);",
-            (track1, track2, match)), priority=10)
+        self.execute_sql(
+            (
+                "INSERT INTO track_2_track (track1, track2, match) VALUES"
+                " (?, ?, ?);",
+                (track1, track2, match),
+            ),
+            priority=10,
+        )
 
     def update_artist(self, artist_id):
         """Write artist information to the database."""
-        self.execute_sql((
-            "UPDATE artists SET updated = DATETIME('now') WHERE id = ?;",
-            (artist_id,)), priority=10)
+        self.execute_sql(
+            (
+                "UPDATE artists SET updated = DATETIME('now') WHERE id = ?;",
+                (artist_id,),
+            ),
+            priority=10,
+        )
 
     def update_track(self, track_id):
         """Write track information to the database."""
-        self.execute_sql((
-            "UPDATE tracks SET updated = DATETIME('now') WHERE id = ?",
-            (track_id,)), priority=10)
+        self.execute_sql(
+            ("UPDATE tracks SET updated = DATETIME('now') WHERE id = ?", (track_id,)),
+            priority=10,
+        )
 
     def update_similar_artists(self, artists_to_update):
         """Write similar artist information to the database."""
         for artist_id, similar in list(artists_to_update.items()):
             for artist in similar:
-                row = self.get_artist(artist['artist'])
+                row = self.get_artist(artist["artist"])
                 if row:
                     id2 = row[0]
                     if self.get_artist_match(artist_id, id2):
-                        self.update_artist_match(
-                            artist_id, id2, artist['score'])
+                        self.update_artist_match(artist_id, id2, artist["score"])
                         continue
-                    self.insert_artist_match(artist_id, id2, artist['score'])
+                    self.insert_artist_match(artist_id, id2, artist["score"])
             self.update_artist(artist_id)
 
     def update_similar_tracks(self, tracks_to_update):
@@ -697,59 +738,84 @@ class Similarity(object):
         for track_id, similar in list(tracks_to_update.items()):
             for track in similar:
                 row = self.get_track_from_artist_and_title(
-                    track['artist'], track['title'])
+                    track["artist"], track["title"]
+                )
                 if row:
                     id2 = row[0]
                     if self.get_track_match(track_id, id2):
-                        self.update_track_match(track_id, id2, track['score'])
+                        self.update_track_match(track_id, id2, track["score"])
                         continue
-                    self.insert_track_match(track_id, id2, track['score'])
+                    self.insert_track_match(track_id, id2, track["score"])
             self.update_track(track_id)
 
     def create_db(self):
         """Set up a database for the artist and track similarity scores."""
-        self.execute_sql((
-            'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name'
-            ' VARCHAR(100), updated DATE, UNIQUE(name));',), priority=0)
         self.execute_sql(
-            ('CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER,'
-             ' artist2 INTEGER, match INTEGER, UNIQUE(artist1, artist2));',),
-            priority=0)
-        self.execute_sql((
-            'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, artist'
-            ' INTEGER, title VARCHAR(100), updated DATE, '
-            'UNIQUE(artist, title));',), priority=0)
-        self.execute_sql((
-            'CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, track2'
-            ' INTEGER, match INTEGER, UNIQUE(track1, track2));',), priority=0)
-        self.execute_sql((
-            "CREATE INDEX IF NOT EXISTS a2aa1x ON artist_2_artist "
-            "(artist1);",), priority=0)
-        self.execute_sql((
-            "CREATE INDEX IF NOT EXISTS a2aa2x ON artist_2_artist "
-            "(artist2);",), priority=0)
+            (
+                "CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY, name"
+                " VARCHAR(100), updated DATE, UNIQUE(name));",
+            ),
+            priority=0,
+        )
+        self.execute_sql(
+            (
+                "CREATE TABLE IF NOT EXISTS artist_2_artist (artist1 INTEGER,"
+                " artist2 INTEGER, match INTEGER, UNIQUE(artist1, artist2));",
+            ),
+            priority=0,
+        )
+        self.execute_sql(
+            (
+                "CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY, artist"
+                " INTEGER, title VARCHAR(100), updated DATE, "
+                "UNIQUE(artist, title));",
+            ),
+            priority=0,
+        )
+        self.execute_sql(
+            (
+                "CREATE TABLE IF NOT EXISTS track_2_track (track1 INTEGER, track2"
+                " INTEGER, match INTEGER, UNIQUE(track1, track2));",
+            ),
+            priority=0,
+        )
+        self.execute_sql(
+            ("CREATE INDEX IF NOT EXISTS a2aa1x ON artist_2_artist " "(artist1);",),
+            priority=0,
+        )
+        self.execute_sql(
+            ("CREATE INDEX IF NOT EXISTS a2aa2x ON artist_2_artist " "(artist2);",),
+            priority=0,
+        )
         self.execute_sql(
             ("CREATE INDEX IF NOT EXISTS t2tt1x ON track_2_track (track1);",),
-            priority=0)
+            priority=0,
+        )
         self.execute_sql(
             ("CREATE INDEX IF NOT EXISTS t2tt2x ON track_2_track (track2);",),
-            priority=0)
+            priority=0,
+        )
 
     def delete_orphan_artist(self, artist):
         """Delete artists that have no tracks."""
         sql = (
-            'SELECT artists.id FROM artists WHERE artists.name = ? AND '
-            'artists.id NOT IN (SELECT tracks.artist from tracks);',
-            (artist,))
+            "SELECT artists.id FROM artists WHERE artists.name = ? AND "
+            "artists.id NOT IN (SELECT tracks.artist from tracks);",
+            (artist,),
+        )
         command = self.get_sql_command(sql, priority=10)
         for row in command.result_queue.get():
             artist_id = row[0]
-            self.execute_sql((
-                'DELETE FROM artist_2_artist WHERE artist1 = ? OR artist2 = '
-                '?;', (artist_id, artist_id)), priority=10)
             self.execute_sql(
-                ('DELETE FROM artists WHERE id = ?', (artist_id,)),
-                priority=10)
+                (
+                    "DELETE FROM artist_2_artist WHERE artist1 = ? OR artist2 = " "?;",
+                    (artist_id, artist_id),
+                ),
+                priority=10,
+            )
+            self.execute_sql(
+                ("DELETE FROM artists WHERE id = ?", (artist_id,)), priority=10
+            )
 
     def analyze_track(self, filename):
         """Perform gaia analysis of a track."""
@@ -766,8 +832,7 @@ class Similarity(object):
             for filename in filenames:
                 self.gaia_queue.put((ADD, filename))
 
-    def get_similar_tracks_from_lastfm(self, artist_name, title, track_id,
-                                       cutoff=0):
+    def get_similar_tracks_from_lastfm(self, artist_name, title, track_id, cutoff=0):
         """Get similar tracks."""
         try:
             lastfm_track = self.network.get_track(artist_name, title)
@@ -784,10 +849,9 @@ class Similarity(object):
                 item = similar.item
                 similar_artist = item.artist.get_name()
                 similar_title = item.title
-                tracks_to_update.setdefault(track_id, []).append({
-                    'score': match,
-                    'artist': similar_artist,
-                    'title': similar_title})
+                tracks_to_update.setdefault(track_id, []).append(
+                    {"score": match, "artist": similar_artist, "title": similar_title}
+                )
                 results.append((match, similar_artist, similar_title))
         except Exception as e:
             print(e)
@@ -795,8 +859,7 @@ class Similarity(object):
         self.update_similar_tracks(tracks_to_update)
         return results
 
-    def get_similar_artists_from_lastfm(self, artist_name, artist_id,
-                                        cutoff=0):
+    def get_similar_artists_from_lastfm(self, artist_name, artist_id, cutoff=0):
         """Get similar artists from lastfm."""
         try:
             lastfm_artist = self.network.get_artist(artist_name)
@@ -811,9 +874,9 @@ class Similarity(object):
                 if match <= cutoff:
                     continue
                 name = similar.item.get_name()
-                artists_to_update.setdefault(artist_id, []).append({
-                    'score': match,
-                    'artist': name})
+                artists_to_update.setdefault(artist_id, []).append(
+                    {"score": match, "artist": name}
+                )
                 results.append((match, name))
         except Exception as e:
             print(e)
@@ -828,18 +891,16 @@ class Similarity(object):
 
         """
         now = datetime.now()
-        track = self.get_track_from_artist_and_title(
-            artist_name, title)
+        track = self.get_track_from_artist_and_title(artist_name, title)
         track_id, updated = track[0], track[3]
         if updated:
             updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
             if updated + timedelta(self.cache_time) > now:
                 print(
-                    "Getting similar tracks from db for: %s - %s" % (
-                        artist_name, title))
+                    "Getting similar tracks from db for: %s - %s" % (artist_name, title)
+                )
                 return self.get_similar_tracks(track_id)
-        return self.get_similar_tracks_from_lastfm(
-            artist_name, title, track_id)
+        return self.get_similar_tracks_from_lastfm(artist_name, title, track_id)
 
     def get_ordered_similar_artists(self, artists):
         """Get similar artists from the database.
@@ -855,16 +916,12 @@ class Similarity(object):
             artist = self.get_artist(artist_name)
             artist_id, updated = artist[0], artist[2]
             if updated:
-                updated = datetime(
-                    *strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
+                updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
                 if updated + timedelta(self.cache_time) > now:
-                    print(
-                        "Getting similar artists from db for: %s " %
-                        artist_name)
+                    print("Getting similar artists from db for: %s " % artist_name)
                     result = self.get_similar_artists(artist_id)
             if not result:
-                result = self.get_similar_artists_from_lastfm(
-                    artist_name, artist_id)
+                result = self.get_similar_artists_from_lastfm(artist_name, artist_id)
             results.extend(result)
         results.sort(reverse=True)
         return results
@@ -889,38 +946,37 @@ class SimilarityService(dbus.service.Object):
 
     def __init__(self, bus_name, object_path):
         self.similarity = Similarity()
-        dbus.service.Object.__init__(
-            self, bus_name=bus_name, object_path=object_path)
+        dbus.service.Object.__init__(self, bus_name=bus_name, object_path=object_path)
         self.loop = GObject.MainLoop()
 
-    @method(dbus_interface=IFACE, in_signature='s')
+    @method(dbus_interface=IFACE, in_signature="s")
     def remove_track_by_filename(self, filename):
         """Remove tracks from database."""
         self.similarity.remove_track_by_filename(filename)
 
-    @method(dbus_interface=IFACE, in_signature='s')
+    @method(dbus_interface=IFACE, in_signature="s")
     def analyze_track(self, filename):
         """Perform analysis of a track."""
         self.similarity.analyze_track(filename)
 
-    @method(dbus_interface=IFACE, in_signature='as')
+    @method(dbus_interface=IFACE, in_signature="as")
     def analyze_tracks(self, filenames):
         """Perform analysis of multiple tracks."""
-        self.similarity.analyze_tracks([
-            filename for filename in filenames])
+        self.similarity.analyze_tracks([filename for filename in filenames])
 
-    @method(dbus_interface=IFACE, in_signature='si', out_signature='a(is)')
+    @method(dbus_interface=IFACE, in_signature="si", out_signature="a(is)")
     def get_ordered_gaia_tracks(self, filename, number):
         """Get similar tracks by gaia acoustic analysis."""
         return self.similarity.get_ordered_gaia_tracks(filename, number)
 
-    @method(dbus_interface=IFACE, in_signature='sis', out_signature='a(is)')
+    @method(dbus_interface=IFACE, in_signature="sis", out_signature="a(is)")
     def get_ordered_gaia_tracks_by_request(self, filename, number, request):
         """Get similar tracks by gaia acoustic analysis."""
         return self.similarity.get_ordered_gaia_tracks_by_request(
-            filename, number, request)
+            filename, number, request
+        )
 
-    @method(dbus_interface=IFACE, in_signature='ss', out_signature='a(iss)')
+    @method(dbus_interface=IFACE, in_signature="ss", out_signature="a(iss)")
     def get_ordered_similar_tracks(self, artist_name, title):
         """Get similar tracks from last.fm/the database.
 
@@ -929,7 +985,7 @@ class SimilarityService(dbus.service.Object):
         """
         return self.similarity.get_ordered_similar_tracks(artist_name, title)
 
-    @method(dbus_interface=IFACE, in_signature='as', out_signature='a(is)')
+    @method(dbus_interface=IFACE, in_signature="as", out_signature="a(is)")
     def get_ordered_similar_artists(self, artists):
         """Get similar artists from the database.
 
@@ -938,17 +994,17 @@ class SimilarityService(dbus.service.Object):
         """
         return self.similarity.get_ordered_similar_artists(artists)
 
-    @method(dbus_interface=IFACE, in_signature='as', out_signature='ai')
+    @method(dbus_interface=IFACE, in_signature="as", out_signature="ai")
     def miximize(self, filenames):
         """Return ideally ordered list of filenames."""
         return self.similarity.miximize(filenames)
 
-    @method(dbus_interface=IFACE, out_signature='b')
+    @method(dbus_interface=IFACE, out_signature="b")
     def has_gaia(self):
         """Get gaia installation status."""
         return GAIA
 
-    @method(dbus_interface=IFACE, in_signature='sas', out_signature='s')
+    @method(dbus_interface=IFACE, in_signature="sas", out_signature="s")
     def get_best_match(self, filename, filenames):
         return self.similarity.get_best_match(filename, filenames)
 
