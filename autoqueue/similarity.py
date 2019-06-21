@@ -167,6 +167,7 @@ class GaiaAnalysis(Thread):
             os.remove(signame)
         except Exception as exc:
             print(exc)
+        print("{} songs left to analyze.".format(self.queue.qsize()))
 
     def _remove_point(self, filename):
         """Remove a point from the gaia database."""
@@ -233,7 +234,6 @@ class GaiaAnalysis(Thread):
                 self.commands[cmd](filename)
                 try:
                     cmd, filename = self.queue.get(block=False)
-                    print("{} songs left to analyze.".format(len(self.queue)))
                 except Empty:
                     self.gaia_db = self.transform_and_save(
                         self.gaia_db, self.gaia_db_path
