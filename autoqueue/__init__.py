@@ -415,7 +415,7 @@ class AutoQueueBase(object):
         elif len(all_requests) == 1:
             self.best_request_handler(all_requests[0])
         else:
-            print(f"{len(all_requests)} requests left in queue.")
+            print("{} requests left in queue.".format(len(all_requests)))
             self.similarity.get_best_match(
                 filename,
                 all_requests,

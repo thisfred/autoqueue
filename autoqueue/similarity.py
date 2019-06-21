@@ -233,7 +233,7 @@ class GaiaAnalysis(Thread):
                 self.commands[cmd](filename)
                 try:
                     cmd, filename = self.queue.get(block=False)
-                    print(f"{len(self.queue)} songs left to analyze.")
+                    print("{} songs left to analyze.".format(len(self.queue)))
                 except Empty:
                     self.gaia_db = self.transform_and_save(
                         self.gaia_db, self.gaia_db_path
