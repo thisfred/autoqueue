@@ -304,6 +304,7 @@ class AutoQueueBase(object):
         """Check whether a song is allowed to be queued."""
         filename = song.get_filename()
         if self.is_playing_or_in_queue(filename):
+            print("playing or in queue")
             return False
 
         if self.requests.has(filename):
@@ -318,6 +319,7 @@ class AutoQueueBase(object):
 
         for artist in song.get_artists():
             if artist in self.blocking.get_blocked_artists(self.get_last_songs()):
+                print("artist blocked")
                 return False
 
         return True
@@ -767,8 +769,10 @@ class AutoQueueBase(object):
                 if self.configuration.favor_new:
                     comparison -= frequency
                 if (
-                    frequency > 0 or not self.configuration.favor_new
+                    (frequency > 0 or not self.configuration.favor_new)
+                    and not self.requests.get_requests()
                 ) and random.random() > comparison:
+                    print("randomly skipped")
                     continue
 
             if not self.allowed(song):
@@ -778,10 +782,9 @@ class AutoQueueBase(object):
                 self.cache.found = True
                 return
 
-            if self.allowed(song):
-                self.enqueue_song(song)
-                self.cache.found = True
-                return
+            self.enqueue_song(song)
+            self.cache.found = True
+            return
 
     def process_filename_results(self, results):
         if not results:
