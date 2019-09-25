@@ -29,10 +29,11 @@ from datetime import datetime, timedelta
 
 import dbus
 import requests
+from dbus.mainloop.glib import DBusGMainLoop
+
 from autoqueue.blocking import Blocking
 from autoqueue.context import Context, get_terms_from_song
 from autoqueue.request import Requests
-from dbus.mainloop.glib import DBusGMainLoop
 
 try:
     import pyowm
@@ -754,29 +755,32 @@ class AutoQueueBase(object):
                 print("'song' not found in %s" % result)
                 continue
             self.log_lookup(number, result)
-            frequency = song.get_play_frequency()
-            if frequency is NotImplemented:
-                frequency = 1
-            rating = song.get_rating()
-            if rating is NotImplemented:
-                rating = THRESHOLD
-            for reason in result.get("reasons", []):
-                print("  %s" % (reason,))
+            current_requests = self.requests.get_requests()
+            if song.get_filename() not in current_requests:
+                rating = song.get_rating()
+                if rating is NotImplemented:
+                    rating = THRESHOLD
+                for reason in result.get("reasons", []):
+                    print("  %s" % (reason,))
 
-            if number_of_results > 1 and result.get("score") > 0:
-                print("score: %.5f, play frequency %.5f" % (rating, frequency))
-                comparison = rating
-                if self.configuration.favor_new:
-                    comparison -= frequency
-                if (
-                    (frequency > 0 or not self.configuration.favor_new)
-                    and not self.requests.get_requests()
-                ) and random.random() > comparison:
-                    print("randomly skipped")
+                if number_of_results > 1 and result.get("score") > 0:
+                    wait_days = (song.get_length() / 60) - (
+                        datetime.now() - datetime.fromtimestamp(song.get_last_started())
+                    ).days
+                    if wait_days > 0:
+                        # a 60 minute track will be played at most once every 60 days.
+                        print(
+                            "played too recently. (need to wait %s more days)"
+                            % (wait_days,)
+                        )
+                        continue
+                    print("score: %d" % (rating,))
+                    if not current_requests and random.random() > rating:
+                        print("randomly skipped")
+                        continue
+
+                if not self.allowed(song):
                     continue
-
-            if not self.allowed(song):
-                continue
 
             if self.maybe_enqueue_album(song):
                 self.cache.found = True
