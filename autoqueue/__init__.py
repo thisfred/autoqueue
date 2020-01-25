@@ -80,6 +80,7 @@ BANNED_ALBUMS = [
     'split 7"',
     "s/t",
 ]
+ONE_DAY = 86400
 
 
 def no_op(*args, **kwargs):
@@ -374,7 +375,7 @@ class AutoQueueBase(object):
 
     @property
     def eoq(self):
-        return datetime.now() + timedelta(0, self.player.get_queue_length())
+        return datetime.now() + timedelta(seconds=self.player.get_queue_length())
 
     def construct_filenames_search(self, filenames):
         return self.player.construct_files_search(filenames)
@@ -763,18 +764,18 @@ class AutoQueueBase(object):
                 for reason in result.get("reasons", []):
                     print("  %s" % (reason,))
 
-                if number_of_results > 1 and result.get("score") > 0:
-                    wait_days = (song.get_length() / 60) - (
-                        datetime.now() - datetime.fromtimestamp(song.get_last_started())
-                    ).days
-                    if wait_days > 0:
+                if number_of_results > 1:
+                    wait_seconds = (song.get_length() / 60) * ONE_DAY - (
+                        self.eoq - datetime.fromtimestamp(song.get_last_started())
+                    ).total_seconds()
+                    if wait_seconds > 0:
                         # a 60 minute track will be played at most once every 60 days.
                         print(
                             "played too recently. (need to wait %s more days)"
-                            % (wait_days,)
+                            % (wait_seconds / ONE_DAY,)
                         )
                         continue
-                    print("score: %d" % (rating,))
+                    print("score: %03.2f" % (rating,))
                     if not current_requests and random.random() > rating:
                         print("randomly skipped")
                         continue
