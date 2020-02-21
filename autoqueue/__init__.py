@@ -436,18 +436,22 @@ class AutoQueueBase(object):
 
         if request:
             print("*****" + request)
-            self.current_request = request
-            if request:
-                self.similarity.get_ordered_gaia_tracks_by_request(
-                    filename,
-                    self.configuration.number * self.cache.miss_factor,
-                    self.current_request,
-                    reply_handler=self.gaia_reply_handler,
-                    error_handler=self.error_handler,
-                    timeout=TIMEOUT,
-                )
+            if request in self.requests.get_podcast_requests():
+                print("urgent")
+                self.gaia_reply_handler([(0, request)])
                 return
 
+            print("not urgent")
+            self.current_request = request
+            self.similarity.get_ordered_gaia_tracks_by_request(
+                filename,
+                self.configuration.number * self.cache.miss_factor,
+                self.current_request,
+                reply_handler=self.gaia_reply_handler,
+                error_handler=self.error_handler,
+                timeout=TIMEOUT,
+            )
+            return
         else:
             print("***** no requests")
         self.similarity.get_ordered_gaia_tracks(
