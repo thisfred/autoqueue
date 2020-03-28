@@ -61,24 +61,25 @@ FIVE_MINUTES = timedelta(minutes=5)
 DEFAULT_NUMBER = 20
 DEFAULT_LENGTH = 15 * 60
 BANNED_ALBUMS = [
+    "[non-album tracks]",
+    "album",
+    "covers",
+    "demo",
+    "demos",
     "ep",
     "greatest hits",
-    "the greatest hits",
-    "demo",
-    "the best of",
-    "the very best of",
     "live",
-    "demos",
+    "podcast",
+    "s/t",
     "self titled",
-    "untitled album",
-    "[non-album tracks]",
     "single",
     "singles",
+    "the best of",
+    "the greatest hits",
+    "the very best of",
+    "untitled album",
     '7"',
-    "covers",
-    "album",
     'split 7"',
-    "s/t",
 ]
 ONE_DAY = 86400
 

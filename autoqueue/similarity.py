@@ -23,18 +23,19 @@ import os
 import sqlite3
 import subprocess
 from datetime import datetime, timedelta
+from functools import total_ordering
+from Queue import Empty, LifoQueue, PriorityQueue, Queue
 from threading import Thread
 from time import sleep, strptime, time
-from functools import total_ordering
 
 import dbus
 import dbus.service
-from autoqueue.utilities import player_get_data_dir
 from dbus.mainloop.glib import DBusGMainLoop
 from dbus.service import method
 from gi.repository import GObject
 from pylast import LastFMNetwork
-from Queue import Empty, LifoQueue, PriorityQueue, Queue
+
+from autoqueue.utilities import player_get_data_dir
 
 try:
     from gaia2 import DataSet, transform, DistanceFunctionFactory, View, Point
@@ -154,7 +155,11 @@ class GaiaAnalysis(Thread):
 
     def _analyze(self, filename):
         """Analyze an audio file."""
-        encoded = filename.encode("utf-8")
+        try:
+            encoded = filename.encode("utf-8")
+        except UnicodeDecodeError:
+            print("could not decode", filename)
+            return
         if self.gaia_db.contains(encoded):
             return
         signame = self.get_signame(encoded)
