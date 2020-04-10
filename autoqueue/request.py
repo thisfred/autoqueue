@@ -15,7 +15,7 @@ class Requests(object):
     def create_table(self):
         self.cursor.execute(
             "CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY, "
-            "filename STRING);"
+            "filename STRING, added STRING DEFAULT CURRENT_TIMESTAMP);"
         )
         self.connection.commit()
 
@@ -42,7 +42,8 @@ class Requests(object):
 
     def get_podcast_requests(self):
         self.cursor.execute(
-            "SELECT filename FROM requests WHERE filename LIKE '%newsbeuter%';"
+            "SELECT filename FROM requests WHERE filename LIKE '%newsbeuter%' AND "
+            "added > datetime('now', '-1 days');"
         )
         return [row[0] for row in self.cursor.fetchall()]
 
