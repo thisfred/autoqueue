@@ -19,8 +19,17 @@ class Requests(object):
         )
         self.connection.commit()
 
-    def add(self, filename):
-        self.cursor.execute("INSERT INTO requests (filename) VALUES (?);", (filename,))
+    def add(self, filename, track_added=None):
+        if not track_added:
+            self.cursor.execute(
+                "INSERT INTO requests (filename) VALUES (?);", (filename,)
+            )
+        else:
+            self.cursor.execute(
+                "INSERT INTO requests (filename, added) VALUES (?, ?);",
+                (filename, track_added),
+            )
+
         self.connection.commit()
 
     def has(self, filename):
