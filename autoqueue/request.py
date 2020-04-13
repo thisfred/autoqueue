@@ -51,8 +51,7 @@ class Requests(object):
 
     def get_podcast_requests(self):
         self.cursor.execute(
-            "SELECT filename FROM requests WHERE filename LIKE '%newsbeuter%' AND "
-            "added > datetime('now', '-1 days');"
+            "SELECT filename FROM requests WHERE added > datetime('now', '-1 days');"
         )
         return [row[0] for row in self.cursor.fetchall()]
 
