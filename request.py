@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from dateutil.tz import tzutc
 from quodlibet import _
 from quodlibet.plugins.songsmenu import SongsMenuPlugin
@@ -25,5 +23,4 @@ class RequestPlugin(SongsMenuPlugin):
     def plugin_songs(self, songs):
         """Add the work to the coroutine pool."""
         for song in songs:
-            added = datetime.fromtimestamp(song("~#added"), tz=UTC)
-            self.requests.add(song("~filename"), added)
+            self.requests.add(song("~filename"))

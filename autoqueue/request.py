@@ -4,7 +4,7 @@ import sqlite3
 from autoqueue.utilities import player_get_data_dir
 
 
-class Requests(object):
+class Requests:
     def __init__(self):
         self.path = os.path.join(player_get_data_dir(), "requests.db")
         self.connection = sqlite3.connect(self.path, isolation_level="immediate")
@@ -19,17 +19,8 @@ class Requests(object):
         )
         self.connection.commit()
 
-    def add(self, filename, track_added=None):
-        if not track_added:
-            self.cursor.execute(
-                "INSERT INTO requests (filename) VALUES (?);", (filename,)
-            )
-        else:
-            self.cursor.execute(
-                "INSERT INTO requests (filename, added) VALUES (?, ?);",
-                (filename, track_added),
-            )
-
+    def add(self, filename):
+        self.cursor.execute("INSERT INTO requests (filename) VALUES (?);", (filename,))
         self.connection.commit()
 
     def has(self, filename):
