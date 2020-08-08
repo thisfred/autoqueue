@@ -96,6 +96,7 @@ class GaiaAnalysis(Thread):
         self.queue = queue
         self.transformed = False
         self.metric = None
+        self.queued = set()
 
     def initialize(self):
         """Handle more expensive initialization."""
@@ -155,11 +156,16 @@ class GaiaAnalysis(Thread):
 
     def _analyze(self, filename):
         """Analyze an audio file."""
+        if filename in self.queued:
+            print("already seen")
+            print("{} songs left to analyze.".format(self.queue.qsize()))
+            return
+        self.queued.add(filename)
         try:
             encoded = filename.encode("utf-8")
         except UnicodeDecodeError:
             print("could not decode", filename)
-            return
+            encoded = filename
         if self.gaia_db.contains(encoded):
             return
         signame = self.get_signame(encoded)

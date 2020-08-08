@@ -414,7 +414,7 @@ class AutoQueueBase(object):
                 filename,
                 self.configuration.number,
                 reply_handler=self.gaia_reply_handler,
-                error_handler=self.error_handler,
+                error_handler=self.gaia_error_handler,
                 timeout=TIMEOUT,
             )
         elif len(all_requests) == 1:
@@ -425,9 +425,18 @@ class AutoQueueBase(object):
                 filename,
                 all_requests,
                 reply_handler=self.best_request_handler,
-                error_handler=self.error_handler,
+                error_handler=self.best_request_error_handler,
                 timeout=TIMEOUT,
             )
+
+    def best_request_error_handler(self, *args, **kwargs):
+        self.error_handler(*args, **kwargs)
+        all_requests = [
+            filename
+            for filename in self.requests.get_requests()
+            if not self.is_playing_or_in_queue(filename)
+        ]
+        self.gaia_reply_handler([(0, all_requests[0])])
 
     def best_request_handler(self, request):
         song = self.cache.last_song
@@ -449,7 +458,7 @@ class AutoQueueBase(object):
                 self.configuration.number * self.cache.miss_factor,
                 self.current_request,
                 reply_handler=self.gaia_reply_handler,
-                error_handler=self.error_handler,
+                error_handler=self.gaia_error_handler,
                 timeout=TIMEOUT,
             )
             return
@@ -459,7 +468,7 @@ class AutoQueueBase(object):
             filename,
             self.configuration.number,
             reply_handler=self.gaia_reply_handler,
-            error_handler=self.error_handler,
+            error_handler=self.gaia_error_handler,
             timeout=TIMEOUT,
         )
 
@@ -477,6 +486,10 @@ class AutoQueueBase(object):
     def gaia_reply_handler(self, results):
         """Handler for (gaia) similar tracks returned from dbus."""
         self.player.execute_async(self._gaia_reply_handler, results=results)
+
+    def gaia_error_handler(self, *args, **kwargs):
+        self.error_handler(*args, **kwargs)
+        self.player.execute_async(self._gaia_reply_handler)
 
     def continue_queueing(self):
         if not self.queue_needs_songs():
@@ -515,7 +528,7 @@ class AutoQueueBase(object):
                 filename,
                 self.configuration.number,
                 reply_handler=self.gaia_reply_handler,
-                error_handler=self.error_handler,
+                error_handler=self.gaia_error_handler,
                 timeout=TIMEOUT,
             )
             return
@@ -624,7 +637,7 @@ class AutoQueueBase(object):
             self.similarity.analyze_track(
                 filename,
                 reply_handler=reply_handler,
-                error_handler=self.error_handler,
+                error_handler=self.gaia_error_handler,
                 timeout=TIMEOUT,
             )
         else:
