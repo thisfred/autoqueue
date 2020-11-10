@@ -32,10 +32,12 @@ class Requests:
 
         return False
 
-    def get_requests(self):
-        podcasts = self.get_podcast_requests()
-        if podcasts:
-            return podcasts
+    def get_requests(self, prefer_podcasts=True):
+        if prefer_podcasts:
+            print("looking for new requests")
+            podcasts = self.get_podcast_requests()
+            if podcasts:
+                return podcasts
 
         self.cursor.execute("SELECT filename FROM requests;")
         return [row[0] for row in self.cursor.fetchall()]
@@ -47,5 +49,8 @@ class Requests:
         return [row[0] for row in self.cursor.fetchall()]
 
     def pop(self, filename):
-        self.cursor.execute("DELETE FROM requests WHERE filename = ?;", (filename,))
+        self.cursor.execute(
+            "DELETE FROM requests WHERE filename = ? OR added < datetime('now', '-7 days');",
+            (filename,),
+        )
         self.connection.commit()
