@@ -111,14 +111,12 @@ class Configuration(object):
         self.use_lastfm = True
         self.use_groupings = True
         self.location = ""
-        self.city_id = ""
         self.geohash = ""
         self.birthdays = ""
         self.use_gaia = True
-        self.zipcode = ""
 
     def get_weather(self):
-        if WEATHER and (self.zipcode or self.city_id):
+        if WEATHER and self.geohash:
             return self._get_weather()
 
         return {}
@@ -179,7 +177,7 @@ class Configuration(object):
             "format": "json",
         }
         if self.geohash and GEOHASH:
-            lon, lat = pygeohash.decode(self.geohash)[:2]
+            lat, lon = pygeohash.decode(self.geohash)[:2]
             parameters["long"] = lon
             parameters["lat"] = lat
         if self.location:
@@ -193,11 +191,10 @@ class Configuration(object):
             #
             # https://home.openweathermap.org/users/sign_up
             owm = pyowm.OWM("35c8c197224e0fb5f7a771facb4243ae")
-            if self.zipcode:
-                return owm.weather_at_zip_code(self.zipcode, country="US").get_weather()
-
-            return owm.weather_at_id(self.city_id).get_weather()
-
+            lat, lon = [float(v) for v in pygeohash.decode(self.geohash)[:2]]
+            manager = owm.weather_manager()
+            location = manager.one_call(lat=lat, lon=lon, units="metric")
+            return location.current
         except Exception as exception:
             global WEATHER
             WEATHER = False
@@ -239,7 +236,11 @@ class Cache(object):
         if not WEATHER:
             return None
 
-        if self.weather and datetime.now() < self.weather_at + FIVE_MINUTES:
+        if (
+            self.weather
+            and self.weather_at
+            and datetime.now() < (self.weather_at + FIVE_MINUTES)
+        ):
             return self.weather
         self.weather = configuration.get_weather()
         self.weather_at = datetime.now()

@@ -11,8 +11,6 @@ published by the Free Software Foundation
 from collections import deque
 from datetime import datetime
 
-from autoqueue import AutoQueueBase
-from autoqueue.player import PlayerBase, SongBase
 from gi.repository import GLib, Gtk
 from quodlibet import _, app, config
 from quodlibet.plugins import PluginConfig, PluginConfigMixin
@@ -20,59 +18,40 @@ from quodlibet.plugins.events import EventPlugin
 from quodlibet.qltk.entry import UndoEntry
 from quodlibet.util import copool
 
+from autoqueue import AutoQueueBase
+from autoqueue.player import PlayerBase, SongBase
+
 INT_SETTINGS = {
-    'desired_queue_length': {
-        'value': 4440,
-        'label': 'queue (seconds)'},
-    'number': {
-        'value': 40,
-        'label': 'number of tracks to look up'}}
+    "desired_queue_length": {"value": 4440, "label": "queue (seconds)"},
+    "number": {"value": 40, "label": "number of tracks to look up"},
+}
 
 BOOL_SETTINGS = {
-    'use_gaia': {
-        'value': True,
-        'label': 'use gaia similarity'},
-    'use_lastfm': {
-        'value': True,
-        'label': 'use last.fm similarity'},
-    'use_groupings': {
-        'value': True,
-        'label': 'use grouping similarity'},
-    'contextualize': {
-        'value': True,
-        'label': 'queue context appropriate tracks first.'},
-    'southern_hemisphere': {
-        'value': False,
-        'label': 'southern hemisphere'},
-    'whole_albums': {
-        'value': True,
-        'label': 'queue whole albums'},
-    'favor_new': {
-        'value': True,
-        'label': 'favor tracks that have never been played'}}
+    "use_gaia": {"value": True, "label": "use gaia similarity"},
+    "use_lastfm": {"value": True, "label": "use last.fm similarity"},
+    "use_groupings": {"value": True, "label": "use grouping similarity"},
+    "contextualize": {
+        "value": True,
+        "label": "queue context appropriate tracks first.",
+    },
+    "southern_hemisphere": {"value": False, "label": "southern hemisphere"},
+    "whole_albums": {"value": True, "label": "queue whole albums"},
+    "favor_new": {"value": True, "label": "favor tracks that have never been played"},
+}
 
 STR_SETTINGS = {
-    'restrictions': {
-        'value': '',
-        'label': 'restrict'},
-    'birthdays': {
-        'value': '',
-        'label': 'birthdays, comma separated list of name:mm/dd values'},
-    'location': {
-        'value': '',
-        'label': 'location ([City], [State] or [City], [Country])'},
-    'city_id': {
-        'value': '',
-        'label': 'see http://bulk.openweathermap.org/sample/'},
-    'zipcode': {
-        'value': '',
-        'label': 'zipcode (us only)'},
-    'geohash': {
-        'value': '',
-        'label': 'geohash (see geohash.org)'},
-    'extra_context': {
-        'value': '',
-        'label': 'extra context'}}
+    "restrictions": {"value": "", "label": "restrict"},
+    "birthdays": {
+        "value": "",
+        "label": "birthdays, comma separated list of name:mm/dd values",
+    },
+    "location": {
+        "value": "",
+        "label": "location ([City], [State] or [City], [Country])",
+    },
+    "geohash": {"value": "", "label": "geohash (see geohash.org)"},
+    "extra_context": {"value": "", "label": "extra context"},
+}
 
 
 plugin_config = PluginConfig("autoqueue")
@@ -80,7 +59,7 @@ plugin_config = PluginConfig("autoqueue")
 defaults = plugin_config.defaults
 for settings in (BOOL_SETTINGS, INT_SETTINGS, STR_SETTINGS):
     for setting, configuration in settings.items():
-        defaults.set(setting, configuration['value'])
+        defaults.set(setting, configuration["value"])
 
 
 def escape(the_string):
@@ -90,9 +69,9 @@ def escape(the_string):
 
 def remove_role(artist):
     """Remove performer role from string."""
-    if not artist.endswith(')'):
+    if not artist.endswith(")"):
         return artist
-    return artist.split('(')[0].strip()
+    return artist.split("(")[0].strip()
 
 
 class Song(SongBase):
@@ -107,16 +86,18 @@ class Song(SongBase):
         """Return lowercase UNICODE name of artists and performers."""
         artists = [artist.lower() for artist in self.song.list("artist")]
         performers = [artist.lower() for artist in self.song.list("performer")]
-        if hasattr(self.song, '_song'):
+        if hasattr(self.song, "_song"):
             for tag in self.song._song:
-                if tag.startswith('performer:'):
+                if tag.startswith("performer:"):
                     performers.extend(
-                        [artist.lower() for artist in self.song.list(tag)])
+                        [artist.lower() for artist in self.song.list(tag)]
+                    )
         else:
             for tag in self.song:
-                if tag.startswith('performer:'):
+                if tag.startswith("performer:"):
                     performers.extend(
-                        [artist.lower() for artist in self.song.list(tag)])
+                        [artist.lower() for artist in self.song.list(tag)]
+                    )
         artists.extend([remove_role(p) for p in performers])
         return list(set(artists))
 
@@ -139,14 +120,14 @@ class Song(SongBase):
 
     def get_musicbrainz_albumid(self):
         """Return musicbrainz album_id if any."""
-        return self.song.comma('musicbrainz_albumid')
+        return self.song.comma("musicbrainz_albumid")
 
     def get_tracknumber(self):
         """Get integer tracknumber."""
-        tracknumber = self.song('tracknumber')
+        tracknumber = self.song("tracknumber")
         if isinstance(tracknumber, int):
             return tracknumber
-        tracknumber = tracknumber.split('/')
+        tracknumber = tracknumber.split("/")
         try:
             return int(tracknumber[0])
         except ValueError:
@@ -155,7 +136,7 @@ class Song(SongBase):
     def get_discnumber(self):
         """Get disc number."""
         try:
-            return int(self.song('discnumber').split('/')[0])
+            return int(self.song("discnumber").split("/")[0])
         except ValueError:
             return 1
 
@@ -179,7 +160,7 @@ class Song(SongBase):
             # XXX: WTF: playcount can be an empty string??
             playcount = 0
         try:
-            skipcount = int(self.song('~#skipcount'))
+            skipcount = int(self.song("~#skipcount"))
         except ValueError:
             # XXX: WTF: skipcount can be an empty string??
             skipcount = 0
@@ -216,43 +197,36 @@ class AutoQueue(AutoQueueBase, EventPlugin, PluginConfigMixin):
     PLUGIN_ID = "AutoQueue"
     PLUGIN_NAME = _("Auto Queue")  # noqa
     PLUGIN_VERSION = "0.2"
-    PLUGIN_DESC = ("Queue similar songs.")
-    CONFIG_SECTION = 'autoqueue'
+    PLUGIN_DESC = "Queue similar songs."
+    CONFIG_SECTION = "autoqueue"
 
     def __init__(self):
         self._enabled = False
         AutoQueueBase.__init__(self, Player())
         self._generators = deque()
         self.configuration.desired_queue_length = config.getint(
-            'plugins', 'autoqueue_desired_queue_length', default=900)
+            "plugins", "autoqueue_desired_queue_length", default=900
+        )
         self.configuration.number = config.getint(
-            'plugins', 'autoqueue_number', default=20)
-        self.configuration.restrictions = self.config_get(
-            'restrictions', default='')
-        self.configuration.extra_context = self.config_get(
-            'extra_context', default='')
+            "plugins", "autoqueue_number", default=20
+        )
+        self.configuration.restrictions = self.config_get("restrictions", default="")
+        self.configuration.extra_context = self.config_get("extra_context", default="")
         self.configuration.whole_albums = self.config_get_bool(
-            'whole_albums', default=True)
+            "whole_albums", default=True
+        )
         self.configuration.southern_hemisphere = self.config_get_bool(
-            'southern_hemisphere', default=False)
-        self.configuration.favor_new = self.config_get_bool(
-            'favor_new', default=True)
-        self.configuration.use_lastfm = self.config_get_bool(
-            'use_lastfm', default=True)
+            "southern_hemisphere", default=False
+        )
+        self.configuration.favor_new = self.config_get_bool("favor_new", default=True)
+        self.configuration.use_lastfm = self.config_get_bool("use_lastfm", default=True)
         self.configuration.use_groupings = self.config_get_bool(
-            'use_groupings', default=True)
-        self.configuration.location = self.config_get(
-            'location', default='')
-        self.configuration.city_id = self.config_get(
-            'city_id', default='')
-        self.configuration.geohash = self.config_get(
-            'geohash', default='')
-        self.configuration.birthdays = self.config_get(
-            'birthdays', default='')
-        self.configuration.use_gaia = self.config_get_bool(
-            'use_gaia', default=True)
-        self.configuration.zipcode = self.config_get(
-            'zipcode', default='')
+            "use_groupings", default=True
+        )
+        self.configuration.location = self.config_get("location", default="")
+        self.configuration.geohash = self.config_get("geohash", default="")
+        self.configuration.birthdays = self.config_get("birthdays", default="")
+        self.configuration.use_gaia = self.config_get_bool("use_gaia", default=True)
 
     def enabled(self):
         """Handle user enabling the plugin."""
@@ -291,35 +265,40 @@ class AutoQueue(AutoQueueBase, EventPlugin, PluginConfigMixin):
         for (j, (setting, configuration)) in enumerate(BOOL_SETTINGS.items()):
 
             button = plugin_config.ConfigCheckButton(
-                    configuration['label'],
-                    setting, populate=True)
+                configuration["label"], setting, populate=True
+            )
             i = j % 2
             table.attach(button, i, i + 1, j, j + 1)
             last = j
         for (j, (setting, configuration)) in enumerate(
-                list(INT_SETTINGS.items()) + list(STR_SETTINGS.items())):
+            list(INT_SETTINGS.items()) + list(STR_SETTINGS.items())
+        ):
             index = last + j + 1
-            label = Gtk.Label(label='%s:' % configuration['label'])
+            label = Gtk.Label(label="%s:" % configuration["label"])
             label.set_alignment(0.0, 0.5)
             label.set_use_underline(True)
             table.attach(
-                label, 0, 1, index, index + 1,
-                xoptions=Gtk.AttachOptions.FILL | Gtk.AttachOptions.SHRINK)
+                label,
+                0,
+                1,
+                index,
+                index + 1,
+                xoptions=Gtk.AttachOptions.FILL | Gtk.AttachOptions.SHRINK,
+            )
 
             entry = UndoEntry()
             entry.set_text(plugin_config.get(setting))
-            entry.connect('changed', self.config_entry_changed, setting)
+            entry.connect("changed", self.config_entry_changed, setting)
             table.attach(entry, 1, 2, index, index + 1)
 
         return table
 
 
 class Player(PlayerBase):
-
     def execute_async(self, method, *args, **kwargs):
         """Execute a method asynchronously."""
-        if 'funcid' not in kwargs:
-            kwargs['funcid'] = method.__name__ + str(datetime.now())
+        if "funcid" not in kwargs:
+            kwargs["funcid"] = method.__name__ + str(datetime.now())
         copool.add(method, *args, **kwargs)
 
     def construct_album_search(self, album, album_artist=None, album_id=None):
@@ -330,15 +309,15 @@ class Player(PlayerBase):
         if album_artist:
             search = '&(%s, albumartist="%s")' % (search, escape(album_artist))
         if album_id:
-            search = (
-                '&(%s, |(musicbrainz_albumid="%s", musicbrainz_albumid=""))' %
-                (search, album_id))
+            search = '&(%s, |(musicbrainz_albumid="%s", musicbrainz_albumid=""))' % (
+                search,
+                album_id,
+            )
         return search
 
     def construct_files_search(self, filenames):
         """Construct a search for songs with any of these filenames."""
-        return '~filename=|(%s)' % (
-            ','.join(['"%s"' % escape(f) for f in filenames]),)
+        return "~filename=|(%s)" % (",".join(['"%s"' % escape(f) for f in filenames]),)
 
     def construct_file_search(self, filename):
         """Construct a search that looks for songs with this filename."""
@@ -350,7 +329,9 @@ class Player(PlayerBase):
     def construct_track_search(self, artist, title):
         """Construct an artist and title search."""
         search = '&(artist = "%s", title = "%s", version="")' % (
-            escape(artist), escape(title))
+            escape(artist),
+            escape(title),
+        )
         if "(" in title:
             split = title.split("(")
             if not split[0]:
@@ -364,26 +345,27 @@ class Player(PlayerBase):
             versioned = '&(artist = "%s", title = "%s", version="%s")' % (
                 escape(artist),
                 escape(vtitle),
-                escape(version))
+                escape(version),
+            )
             search = "|(%s, %s)" % (search, versioned)
         return search
 
     def construct_tag_search(self, tags):
         """Construct a tags search."""
-        search = ''
+        search = ""
         search_tags = []
         for tag in tags:
             stripped = escape(tag)
             search_tags.append(
                 '|(grouping = "%s",grouping = "artist:%s",'
-                'grouping = "album:%s")' % (stripped, stripped, stripped))
+                'grouping = "album:%s")' % (stripped, stripped, stripped)
+            )
         search = "|(%s)" % (",".join(search_tags))
         return search
 
     def construct_artist_search(self, artist):
         """Construct a search that looks for songs with this artist."""
-        search = '|(artist = "%s",performer="%s")' % (
-            escape(artist), escape(artist))
+        search = '|(artist = "%s",performer="%s")' % (escape(artist), escape(artist))
         return search
 
     def get_queue_length(self):
@@ -391,8 +373,7 @@ class Player(PlayerBase):
         if app.window is None:
             return 0
         playlist = app.window.playlist
-        return sum(
-            [row.get("~#length", 0) for row in playlist.q.get()])
+        return sum([row.get("~#length", 0) for row in playlist.q.get()])
 
     def enqueue(self, song):
         """Put the song at the end of the queue."""
@@ -401,7 +382,7 @@ class Player(PlayerBase):
     def search(self, search, restrictions=None):
         """Perform a player search."""
         if restrictions:
-            search = '&(%s,%s)' % (search, restrictions)
+            search = "&(%s,%s)" % (search, restrictions)
         try:
             songs = app.library.query(search)
         except Exception as e:

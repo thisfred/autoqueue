@@ -1,6 +1,6 @@
 """Autoqueue similarity service.
 
-Copyright 2011-2016 Eric Casteleijn <thisfred@gmail.com>,
+Copyright 2011-2020 Eric Casteleijn <thisfred@gmail.com>,
                     Graham White
 
 This program is free software; you can redistribute it and/or modify
@@ -24,9 +24,11 @@ import sqlite3
 import subprocess
 from datetime import datetime, timedelta
 from functools import total_ordering
-from Queue import Empty, LifoQueue, PriorityQueue, Queue
+from pathlib import Path
+from queue import Empty, LifoQueue, PriorityQueue, Queue
 from threading import Thread
 from time import sleep, strptime, time
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import dbus
 import dbus.service
@@ -38,8 +40,8 @@ from pylast import LastFMNetwork
 from autoqueue.utilities import player_get_data_dir
 
 try:
-    from gaia2 import DataSet, transform, DistanceFunctionFactory, View, Point
     import yaml
+    from gaia2 import DataSet, DistanceFunctionFactory, Point, View, transform
 
     GAIA = True
 except ImportError:
@@ -58,8 +60,8 @@ DBUS_PATH = "/org/autoqueue/Similarity"
 # http://www.last.fm/api/account
 API_KEY = "09d0975a99a4cab235b731d31abf0057"
 
-# XXX: obviously make this configurable
-ESSENTIA_EXTRACTOR_PATH = "/usr/local/bin/essentia_streaming_extractor_music"
+# XXX: make this configurable
+ESSENTIA_EXTRACTOR_PATH = "essentia_streaming_extractor_music"
 
 ADD = "add"
 REMOVE = "remove"
@@ -72,7 +74,7 @@ class SQLCommand(object):
 
     def __init__(self, sql_statements):
         self.sql = sql_statements
-        self.result_queue = Queue()
+        self.result_queue: Queue = Queue()
 
     def __eq__(self, other):
         return self.sql == other.sql
@@ -90,17 +92,11 @@ class GaiaAnalysis(Thread):
 
     def __init__(self, db_path, queue):
         super(GaiaAnalysis, self).__init__()
+        self.transformed = False
         self.gaia_db_path = db_path
-        self.gaia_db = None
+        self.gaia_db = self.initialize_gaia_db()
         self.commands = {ADD: self._analyze, REMOVE: self._remove_point}
         self.queue = queue
-        self.transformed = False
-        self.metric = None
-        self.queued = set()
-
-    def initialize(self):
-        """Handle more expensive initialization."""
-        self.gaia_db = self.initialize_gaia_db()
         try:
             self.metric = DistanceFunctionFactory.create(
                 "euclidean", self.gaia_db.layout()
@@ -112,8 +108,10 @@ class GaiaAnalysis(Thread):
                 "euclidean", self.gaia_db.layout()
             )
             self.transformed = True
+        self.queued = set()
+        self.analyzed = 0
 
-    def initialize_gaia_db(self):
+    def initialize_gaia_db(self) -> DataSet:
         """Load or initialize the gaia database."""
         if not os.path.isfile(self.gaia_db_path):
             dataset = DataSet()
@@ -129,17 +127,8 @@ class GaiaAnalysis(Thread):
         dataset = transform(dataset, "fixlength")
         dataset = transform(dataset, "cleaner")
         # dataset = transform(dataset, 'remove', {'descriptorNames': '*mfcc*'})
-        for field in (
-            "*beats_position*",
-            "*bpm_estimates*",
-            "*bpm_intervals*",
-            "*onset_times*",
-            "*oddtoevenharmonicenergyratio*",
-        ):
-            try:
-                dataset = transform(dataset, "remove", {"descriptorNames": field})
-            except Exception as ex:
-                print(repr(ex))
+        for field in ("*beats_position*",):
+            dataset = transform(dataset, "remove", {"descriptorNames": field})
         dataset = transform(dataset, "normalize")
         dataset = transform(
             dataset,
@@ -154,45 +143,37 @@ class GaiaAnalysis(Thread):
         dataset.load(self.gaia_db_path)
         return dataset
 
-    def _analyze(self, filename):
+    def _analyze(self, filename: str) -> None:
         """Analyze an audio file."""
         if filename in self.queued:
             print("already seen")
             print("{} songs left to analyze.".format(self.queue.qsize()))
             return
         self.queued.add(filename)
-        try:
-            encoded = filename.encode("utf-8")
-        except UnicodeDecodeError:
-            print("could not decode", filename)
-            encoded = filename
-        if self.gaia_db.contains(encoded):
+
+        if self.gaia_db.contains(filename):
             return
-        signame = self.get_signame(encoded)
-        if not (os.path.exists(signame) or self.essentia_analyze(encoded, signame)):
+        signame = self.get_signame(filename)
+        if not (os.path.exists(signame) or self.essentia_analyze(filename, signame)):
             return
         try:
             point = self.load_point(signame)
-            point.setName(encoded)
+            point.setName(filename)
             self.gaia_db.addPoint(point)
-            os.remove(signame)
+            self.analyzed += 1
         except Exception as exc:
             print(exc)
         print("{} songs left to analyze.".format(self.queue.qsize()))
 
-    def _remove_point(self, filename):
+    def _remove_point(self, filename: str) -> None:
         """Remove a point from the gaia database."""
-        encoded = filename.encode("utf-8")
-        print("removing %s" % encoded)
         try:
-            self.gaia_db.removePoint(encoded)
-            signame = self.get_signame(encoded)
-            os.remove(signame)
+            self.gaia_db.removePoint(filename)
         except Exception as exc:
             print(exc)
 
     @staticmethod
-    def load_point(signame):
+    def load_point(signame: str) -> Point:
         """Load point data from JSON file."""
         point = Point()
         with open(signame, "r") as sig:
@@ -204,21 +185,21 @@ class GaiaAnalysis(Thread):
         return point
 
     @staticmethod
-    def get_signame(full_path):
+    def get_signame(full_path: str) -> str:
         """Get the path for the analysis data file for this filename."""
         filename = os.path.split(full_path)[-1]
         return os.path.join("/tmp", filename + ".sig")
 
     @staticmethod
-    def essentia_analyze(filename, signame):
+    def essentia_analyze(filename, signame: str) -> bool:
         """Perform essentia analysis of an audio file."""
         env = os.environ.copy()
-        env["LD_LIBRARY_PATH"] = "/usr/local/lib"
+        # env["LD_LIBRARY_PATH"] = "/usr/local/lib"
         try:
             subprocess.check_call([ESSENTIA_EXTRACTOR_PATH, filename, signame], env=env)
             return True
 
-        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError:
             # It always returns with a non-zero exit value now :(
             return True
 
@@ -226,7 +207,7 @@ class GaiaAnalysis(Thread):
             print(e)
             return False
 
-    def transform_and_save(self, dataset, path):
+    def transform_and_save(self, dataset: DataSet, path: str) -> DataSet:
         """Transform dataset and save to disk."""
         if not self.transformed:
             dataset = self.transform(dataset)
@@ -235,9 +216,8 @@ class GaiaAnalysis(Thread):
         dataset.save(path)
         return dataset
 
-    def run(self):
+    def run(self) -> None:
         """Run main loop for gaia analysis thread."""
-        self.initialize()
         print("STARTING GAIA ANALYSIS THREAD")
         while True:
             cmd, filename = self.queue.get()
@@ -250,57 +230,64 @@ class GaiaAnalysis(Thread):
                         self.gaia_db, self.gaia_db_path
                     )
                     break
+                if self.analyzed >= 100:
+                    self.analyzed = 0
+                    self.gaia_db = self.transform_and_save(
+                        self.gaia_db, self.gaia_db_path
+                    )
             print("songs in db after processing queue: %d" % self.gaia_db.size())
+            for sig_file in Path("/tmp").glob("*.sig"):
+                try:
+                    sig_file.unlink()
+                except OSError as e:
+                    print(f"Error: {sig_file}: {e}")
 
-    def get_miximized_tracks(self, filenames):
+    def get_miximized_tracks(self, filenames: Sequence[str]) -> List[int]:
         """Get list of tracks in ideal order."""
         self.analyze_and_wait(filenames)
-        encoded = [f.encode("utf-8") for f in filenames]
         dataset = DataSet()
         number_of_tracks = len(filenames)
-        for filename in encoded:
+        for filename in filenames:
             if not self.gaia_db.contains(filename):
                 continue
             point = self.gaia_db.point(filename)
             dataset.addPoint(point)
         dataset = self.transform(dataset)
         matrix = {}
-        for filename in encoded:
+        for filename in filenames:
             matrix[filename] = {
                 name: score
                 for score, name in self.get_neighbours(
                     dataset, filename, number_of_tracks
                 )
             }
-        clusterer = Clusterer(encoded, lambda f1, f2: matrix[f1][f2])
+        clusterer = Clusterer(filenames, lambda f1, f2: matrix[f1][f2])
         clusterer.cluster()
         result = []
         for cluster in clusterer.clusters:
-            result.extend([encoded.index(filename) for filename in cluster])
+            result.extend([filenames.index(filename) for filename in cluster])
         return result
 
-    def analyze_and_wait(self, filenames):
+    def analyze_and_wait(self, filenames: Sequence[str]) -> None:
         self.queue_filenames(filenames)
         size = self.queue.qsize()
         while self.queue.qsize() > max(0, size - len(filenames)):
             print("waiting for analysis")
             sleep(10)
 
-    def queue_filenames(self, filenames):
+    def queue_filenames(self, filenames: Sequence[str]) -> None:
         for name in filenames:
             self.queue.put((ADD, name))
 
-    def get_best_match(self, filename, filenames):
+    def get_best_match(self, filename: str, filenames: List[str]) -> Optional[str]:
         self.queue_filenames([filename] + filenames)
-        encoded_filename = filename.encode("utf-8")
-        encoded = [f.encode("utf-8") for f in filenames]
-        if not self.gaia_db.contains(encoded_filename):
-            return
+        if not self.gaia_db.contains(filename):
+            return None
 
-        point = self.gaia_db.point(encoded_filename)
+        point = self.gaia_db.point(filename)
 
         best, best_name = None, None
-        for name in encoded:
+        for name in filenames:
             if not self.contains_or_add(name):
                 continue
             distance = self.metric(point, self.gaia_db.point(name))
@@ -310,31 +297,37 @@ class GaiaAnalysis(Thread):
 
         return best_name
 
-    def get_tracks(self, filename, number, request=None):
+    def get_tracks(
+        self, filename: str, number: int, request: Optional[str] = None
+    ) -> List[Tuple[float, str]]:
         """Get most similar tracks from the gaia database."""
         while self.gaia_db is None:
             sleep(0.1)
-        encoded = filename.encode("utf-8")
-        if not self.contains_or_add(encoded):
+        if not self.contains_or_add(filename):
             return []
-        encoded_request = None
         if request:
-            encoded_request = request.encode("utf-8")
-            if not self.contains_or_add(encoded_request):
-                encoded_request = None
+            if not self.contains_or_add(request):
+                request = None
         neighbours = self.get_neighbours(
-            self.gaia_db, encoded, number, encoded_request=encoded_request
+            self.gaia_db, filename, number, request=request
         )
-        print("total found %d" % len(neighbours))
-        print(neighbours[0][0], neighbours[-1][0])
+        if neighbours:
+            print("total found %d" % len(neighbours))
+            print(neighbours[0][0], neighbours[-1][0])
         return neighbours
 
-    def get_neighbours(self, dataset, encoded_filename, number, encoded_request=None):
+    def get_neighbours(
+        self,
+        dataset: DataSet,
+        filename: str,
+        number: int,
+        request: Optional[str] = None,
+    ) -> List[Tuple[float, str]]:
         """Get a number of nearest neighbours."""
         view = View(dataset)
-        request_point = self.gaia_db.point(encoded_request) if encoded_request else None
+        request_point = self.gaia_db.point(request) if request else None
         try:
-            total = view.nnSearch(encoded_filename, self.metric).get(number + 1)[1:]
+            total = view.nnSearch(filename, self.metric).get(number + 1)[1:]
         except Exception as e:
             print(e)
             return []
@@ -350,19 +343,19 @@ class GaiaAnalysis(Thread):
         )
         return result
 
-    def compute_score(self, score, name, request_point=None):
+    def compute_score(
+        self, score: float, name: str, request_point: Optional[Point] = None
+    ) -> float:
         """If there is a request, score by distance to that instead."""
         if request_point is None:
             return score
         return self.metric(request_point, self.gaia_db.point(name))
 
-    def contains_or_add(self, encoded_filename):
-        """Check if the filename exists in the database, queue it up if not.
-
-        """
-        if not self.gaia_db.contains(encoded_filename):
-            print("%s not found in gaia db" % encoded_filename)
-            self.queue.put((ADD, encoded_filename))
+    def contains_or_add(self, filename: str) -> bool:
+        """Check if the filename exists in the database, queue it up if not."""
+        if not self.gaia_db.contains(filename):
+            print("%r not found in gaia db" % filename)
+            self.queue.put((ADD, filename))
             return False
 
         return True
@@ -372,15 +365,15 @@ class DatabaseWrapper(Thread):
 
     """Process to handle all database access."""
 
-    def set_path(self, path):
+    def set_path(self, path: str) -> None:
         """Set the database path."""
         self.path = path
 
-    def set_queue(self, queue):
+    def set_queue(self, queue: Queue) -> None:
         """Set the queue to use."""
         self.queue = queue
 
-    def run(self):
+    def run(self) -> None:
         print("STARTING DATABASE WRAPPER THREAD")
         connection = sqlite3.connect(self.path, isolation_level="immediate")
         cursor = connection.cursor()
@@ -407,29 +400,29 @@ class DatabaseWrapper(Thread):
             cmd.result_queue.put(result)
 
 
-class Pair(object):
+class Pair:
 
     """A pair of songs."""
 
-    def __init__(self, song1, song2, song_distance):
+    def __init__(self, song1: str, song2: str, song_distance: float):
         self.song1 = song1
         self.song2 = song2
         self.distance = song_distance
 
-    def other(self, song):
+    def other(self, song: str) -> str:
         """Return the song paired with @song."""
         if self.song1 == song:
             return self.song2
         return self.song1
 
-    def songs(self):
+    def songs(self) -> List[str]:
         """Return both songs."""
         return [self.song1, self.song2]
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         return self.song1 == other.song1 and self.song2 == other.song2
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<Pair {song1}, {song2}: {distance}>".format(
             song1=self.song1, song2=self.song2, distance=self.distance
         )
@@ -439,13 +432,17 @@ class Clusterer(object):
 
     """Build a list of songs in optimized order."""
 
-    def __init__(self, songs, comparison_function):
-        self.clusters = []
-        self.ends = []
-        self.similarities = []
+    def __init__(
+        self, songs: Sequence[str], comparison_function: Callable[[str, str], float]
+    ):
+        self.clusters: List[List[str]] = []
+        self.ends: List[str] = []
+        self.similarities: List[Pair] = []
         self.build_similarity_matrix(songs, comparison_function)
 
-    def build_similarity_matrix(self, songs, comparison_function):
+    def build_similarity_matrix(
+        self, songs: Sequence[str], comparison_function: Callable[[str, str], float]
+    ) -> None:
         """Build the similarity matrix."""
         for song1 in songs:
             for song2 in songs[songs.index(song1) + 1 :]:
@@ -455,7 +452,7 @@ class Clusterer(object):
         # sort in reverse, since we'll be popping off the end
         self.similarities.sort(reverse=True, key=lambda x: x.distance)
 
-    def join(self, cluster1, cluster2):
+    def join(self, cluster1: List[str], cluster2: List[str]) -> List[str]:
         """Join two clusters together."""
         if cluster1[0] == cluster2[0]:
             cluster2.reverse()
@@ -471,7 +468,7 @@ class Clusterer(object):
         self.clean(cluster1[-1])
         return cluster1[:-1] + cluster2
 
-    def pop_cluster_ending_in(self, song):
+    def pop_cluster_ending_in(self, song: str) -> List[str]:
         """Pop a cluster with @song at either end."""
         for cluster in self.clusters[:]:
             if cluster[0] == song:
@@ -479,11 +476,14 @@ class Clusterer(object):
                 self.ends.remove(cluster[0])
                 self.ends.remove(cluster[-1])
                 return cluster
+
             if cluster[-1] == song:
                 self.clusters.remove(cluster)
                 self.ends.remove(cluster[0])
                 self.ends.remove(cluster[-1])
                 return cluster
+
+        return []
 
     def cluster(self):
         """Build clusters out of similarity matrix."""
@@ -515,7 +515,7 @@ class Clusterer(object):
                 self.clusters.append(songs)
                 self.ends.extend(songs)
 
-    def clean(self, found):
+    def clean(self, found: str) -> None:
         """Remove similarity scores for processed cluster."""
         new = []
         for sim in self.similarities:
@@ -533,7 +533,7 @@ class Similarity(object):
         data_dir = player_get_data_dir()
         self.db_path = os.path.join(data_dir, "similarity.db")
         self.gaia_db_path = os.path.join(data_dir, "gaia.db")
-        self.db_queue = PriorityQueue()
+        self.db_queue: PriorityQueue = PriorityQueue()
         self._db_wrapper = DatabaseWrapper()
         self._db_wrapper.daemon = True
         self._db_wrapper.set_path(self.db_path)
@@ -543,7 +543,7 @@ class Similarity(object):
         self.network = LastFMNetwork(api_key=API_KEY)
         self.cache_time = 90
         if GAIA:
-            self.gaia_queue = LifoQueue()
+            self.gaia_queue: LifoQueue = LifoQueue()
             self.gaia_analyser = GaiaAnalysis(self.gaia_db_path, self.gaia_queue)
             self.gaia_analyser.daemon = True
             self.gaia_analyser.start()
@@ -592,7 +592,7 @@ class Similarity(object):
         for row in command.result_queue.get():
             return row
 
-    def get_track_from_artist_and_title(self, artist_name, title):
+    def get_track_from_artist_and_title(self, artist_name: str, title: str):
         """Get track information from the database."""
         artist_id = self.get_artist(artist_name)[0]
         sql = (
@@ -843,14 +843,16 @@ class Similarity(object):
             for filename in filenames:
                 self.gaia_queue.put((ADD, filename))
 
-    def get_similar_tracks_from_lastfm(self, artist_name, title, track_id, cutoff=0):
+    def get_similar_tracks_from_lastfm(
+        self, artist_name: str, title: str, track_id: int, cutoff: int = 0
+    ):
         """Get similar tracks."""
         try:
             lastfm_track = self.network.get_track(artist_name, title)
         except Exception as e:
             print(e)
             return []
-        tracks_to_update = {}
+        tracks_to_update: Dict[int, List[Dict[str, Union[str, int]]]] = {}
         results = []
         try:
             for similar in lastfm_track.get_similar():
@@ -895,7 +897,7 @@ class Similarity(object):
         self.update_similar_artists(artists_to_update)
         return results
 
-    def get_ordered_similar_tracks(self, artist_name, title):
+    def get_ordered_similar_tracks(self, artist_name: str, title: str):
         """Get similar tracks from last.fm/the database.
 
         Sorted by descending match score.
