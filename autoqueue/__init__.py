@@ -814,7 +814,11 @@ class AutoQueueBase(object):
             current_requests = self.requests.get_requests()
             filename = song.get_filename()
             is_new = filename in self.get_newest()
-            if filename not in current_requests and not is_new:
+            if (
+                filename not in current_requests
+                and not is_new
+                and not self.is_playing_or_in_queue(filename)
+            ):
                 rating = song.get_rating()
                 if rating is NotImplemented:
                     rating = THRESHOLD
