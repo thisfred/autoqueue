@@ -282,7 +282,10 @@ class GaiaAnalysis(Thread):
     def get_best_match(self, filename: str, filenames: List[str]) -> Optional[str]:
         self.queue_filenames([filename] + filenames)
         if not self.gaia_db.contains(filename):
-            return None
+            if filenames:
+                return filenames[0]
+
+            return ""
 
         point = self.gaia_db.point(filename)
 

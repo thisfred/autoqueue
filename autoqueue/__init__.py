@@ -26,6 +26,7 @@ import random
 import re
 from collections import Counter
 from datetime import datetime, timedelta
+from typing import List
 
 import dbus
 import requests
@@ -231,6 +232,26 @@ class Cache(object):
         self.previous_terms = PreviousTerms()
         self.miss_factor = 1
         self.last_closest = -1
+        self.new_time = 0
+        self.old_time = 0
+
+    @property
+    def prefer_newly_added(self):
+        return self.new_time < self.old_time
+
+    def adjust_time(self, song, is_new):
+        duration = song.get_length()
+        if is_new:
+            self.new_time += duration
+        else:
+            self.old_time += duration
+        minimum = min(self.new_time, self.old_time)
+        self.new_time -= minimum
+        self.old_time -= minimum
+
+    def enqueue_song(self, song, is_new):
+        self.adjust_time(song, is_new)
+        self.previous_terms.add(song)
 
     def get_weather(self, configuration):
         if not WEATHER:
@@ -288,8 +309,6 @@ class AutoQueueBase(object):
         self.cache.set_nearby_artist(self.configuration)
         self.requests = Requests()
         self.current_request = None
-        self.podcast_time = 0
-        self.non_podcast_time = 0
 
     @property
     def use_gaia(self):
@@ -406,22 +425,33 @@ class AutoQueueBase(object):
             empty_handler=self.gaia_reply_handler,
         )
 
-    def get_best_request(self, filename):
+    def get_best_track(self, filename):
         all_requests = [
             f
-            for f in self.requests.get_requests(
-                prefer_podcasts=self.podcast_time < self.non_podcast_time
-            )
+            for f in self.requests.get_requests()
             if not self.is_playing_or_in_queue(f)
         ]
         if not all_requests:
-            self.similarity.get_ordered_gaia_tracks(
-                filename,
-                self.configuration.number,
-                reply_handler=self.gaia_reply_handler,
-                error_handler=self.gaia_error_handler,
-                timeout=TIMEOUT,
-            )
+            if self.cache.prefer_newly_added:
+                print("Looking for recently added songs:")
+                newly_added = [
+                    f for f in self.get_newest() if not self.is_playing_or_in_queue(f)
+                ]
+                self.similarity.get_best_match(
+                    filename,
+                    newly_added,
+                    reply_handler=self.best_request_handler,
+                    error_handler=self.best_request_error_handler,
+                    timeout=TIMEOUT,
+                )
+            else:
+                self.similarity.get_ordered_gaia_tracks(
+                    filename,
+                    self.configuration.number,
+                    reply_handler=self.gaia_reply_handler,
+                    error_handler=self.gaia_error_handler,
+                    timeout=TIMEOUT,
+                )
         elif len(all_requests) == 1:
             self.best_request_handler(all_requests[0])
         else:
@@ -438,9 +468,7 @@ class AutoQueueBase(object):
         self.error_handler(*args, **kwargs)
         all_requests = [
             filename
-            for filename in self.requests.get_requests(
-                prefer_podcasts=self.podcast_time < self.non_podcast_time
-            )
+            for filename in self.requests.get_requests()
             if not self.is_playing_or_in_queue(filename)
         ]
         self.gaia_reply_handler([(0, all_requests[0])])
@@ -456,7 +484,7 @@ class AutoQueueBase(object):
 
         if request:
             print("*****" + request)
-            if request in self.requests.get_podcast_requests():
+            if request in self.requests.get_requests():
                 self.gaia_reply_handler([(0, request)])
                 return
 
@@ -487,7 +515,7 @@ class AutoQueueBase(object):
             return
         if self.use_gaia:
             print("Get similar tracks for: %s" % filename)
-            self.get_best_request(filename)
+            self.get_best_track(filename)
         else:
             self.gaia_reply_handler([])
 
@@ -783,10 +811,10 @@ class AutoQueueBase(object):
                 continue
             self.log_lookup(number, result)
 
-            current_requests = self.requests.get_requests(
-                prefer_podcasts=self.podcast_time < self.non_podcast_time
-            )
-            if song.get_filename() not in current_requests:
+            current_requests = self.requests.get_requests()
+            filename = song.get_filename()
+            is_new = filename in self.get_newest()
+            if filename not in current_requests and not is_new:
                 rating = song.get_rating()
                 if rating is NotImplemented:
                     rating = THRESHOLD
@@ -812,15 +840,21 @@ class AutoQueueBase(object):
                 if not self.allowed(song):
                     continue
 
-            is_podcast = song.get_filename() in self.requests.get_podcast_requests()
-
-            if self.maybe_enqueue_album(song, is_podcast=is_podcast):
+            if self.maybe_enqueue_album(song, is_new=is_new):
                 self.cache.found = True
                 return
 
-            self.enqueue_song(song, is_podcast=is_podcast)
+            self.enqueue_song(song, is_new=is_new)
             self.cache.found = True
             return
+
+    def get_newest(self) -> List[str]:
+        search = self.player.construct_recently_added_search(days=7)
+        return [
+            song.get_filename()
+            for song in self.player.search(search)
+            if song and song.get_filename()
+        ]
 
     def process_filename_results(self, results):
         if not results:
@@ -849,11 +883,9 @@ class AutoQueueBase(object):
             look_for = str(result)
         print("%03d: %06d %s" % (number + 1, result.get("score", 0), look_for))
 
-    def maybe_enqueue_album(self, song, is_podcast):
+    def maybe_enqueue_album(self, song, is_new):
         """Determine if a whole album should be queued, and do so."""
-        current_requests = self.requests.get_requests(
-            prefer_podcasts=self.podcast_time < self.non_podcast_time
-        )
+        current_requests = self.requests.get_requests()
         if (
             self.configuration.whole_albums
             and song.get_tracknumber() == 1
@@ -869,26 +901,15 @@ class AutoQueueBase(object):
             album_artist = song.get_album_artist()
             album_id = song.get_musicbrainz_albumid()
             if album and album.lower() not in BANNED_ALBUMS:
-                return self.enqueue_album(album, album_artist, album_id, is_podcast)
+                return self.enqueue_album(album, album_artist, album_id, is_new)
 
         return False
 
-    def adjust_podcast_time(self, song, is_podcast):
-        duration = song.get_length()
-        if is_podcast:
-            self.podcast_time += duration
-        else:
-            self.non_podcast_time += duration
-        minimum = min(self.podcast_time, self.non_podcast_time)
-        self.podcast_time -= minimum
-        self.non_podcast_time -= minimum
-
-    def enqueue_song(self, song, is_podcast):
-        self.adjust_podcast_time(song, is_podcast)
-        self.cache.previous_terms.add(song)
+    def enqueue_song(self, song, is_new):
+        self.cache.enqueue_song(song, is_new)
         self.player.enqueue(song)
 
-    def enqueue_album(self, album, album_artist, album_id, is_podcast):
+    def enqueue_album(self, album, album_artist, album_id, is_new):
         """Try to enqueue whole album."""
         search = self.player.construct_album_search(
             album=album, album_artist=album_artist, album_id=album_id
@@ -902,7 +923,7 @@ class AutoQueueBase(object):
         )
         if songs:
             for _, _, _, song in songs:
-                self.enqueue_song(song, is_podcast)
+                self.enqueue_song(song, is_new)
             return True
         return False
 

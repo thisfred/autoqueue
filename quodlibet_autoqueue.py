@@ -368,6 +368,10 @@ class Player(PlayerBase):
         search = '|(artist = "%s",performer="%s")' % (escape(artist), escape(artist))
         return search
 
+    def construct_recently_added_search(self, days: int) -> str:
+        search = f"&(#(added < {days} days),#(playcount=0))"
+        return search
+
     def get_queue_length(self):
         """Get the current length of the queue."""
         if app.window is None:

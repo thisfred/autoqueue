@@ -32,20 +32,8 @@ class Requests:
 
         return False
 
-    def get_requests(self, prefer_podcasts=True):
-        if prefer_podcasts:
-            print("looking for new requests")
-            podcasts = self.get_podcast_requests()
-            if podcasts:
-                return podcasts
-
+    def get_requests(self):
         self.cursor.execute("SELECT filename FROM requests;")
-        return [row[0] for row in self.cursor.fetchall()]
-
-    def get_podcast_requests(self):
-        self.cursor.execute(
-            "SELECT filename FROM requests WHERE added > datetime('now', '-1 days');"
-        )
         return [row[0] for row in self.cursor.fetchall()]
 
     def pop(self, filename):
