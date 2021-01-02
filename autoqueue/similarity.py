@@ -283,7 +283,7 @@ class GaiaAnalysis(Thread):
         self.queue_filenames([filename] + filenames)
         if not self.gaia_db.contains(filename):
             if filenames:
-                return filenames[0]
+                return filenames[0] or ""
 
             return ""
 
@@ -298,7 +298,7 @@ class GaiaAnalysis(Thread):
             if best is None or distance < best:
                 best, best_name = distance, name
 
-        return best_name
+        return best_name or ""
 
     def get_tracks(
         self, filename: str, number: int, request: Optional[str] = None
