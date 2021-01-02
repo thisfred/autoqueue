@@ -328,9 +328,6 @@ class AutoQueueBase(object):
     def allowed(self, song):
         """Check whether a song is allowed to be queued."""
         filename = song.get_filename()
-        if self.is_playing_or_in_queue(filename):
-            print("playing or in queue")
-            return False
 
         if self.requests.has(filename):
             return True
@@ -811,14 +808,13 @@ class AutoQueueBase(object):
                 continue
             self.log_lookup(number, result)
 
-            current_requests = self.requests.get_requests()
             filename = song.get_filename()
+            if self.is_playing_or_in_queue(filename):
+                continue
+
+            current_requests = self.requests.get_requests()
             is_new = filename in self.get_newest()
-            if (
-                filename not in current_requests
-                and not is_new
-                and not self.is_playing_or_in_queue(filename)
-            ):
+            if filename not in current_requests and not is_new:
                 rating = song.get_rating()
                 if rating is NotImplemented:
                     rating = THRESHOLD
