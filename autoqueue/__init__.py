@@ -234,23 +234,30 @@ class Cache(object):
         self.last_closest = -1
         self.new_time = 0
         self.old_time = 0
+        self.podcast_time = 0
+        self.non_podcast_time = 0
 
     @property
     def prefer_newly_added(self):
         return self.new_time < self.old_time
 
-    def adjust_time(self, song, is_new):
+    @property
+    def skip_podcasts(self):
+        return self.non_podcast_time < self.podcast_time
+
+    def adjust_time(self, song, *, is_new, is_podcast):
         duration = song.get_length()
         if is_new:
             self.new_time += duration
         else:
             self.old_time += duration
-        minimum = min(self.new_time, self.old_time)
-        self.new_time -= minimum
-        self.old_time -= minimum
+        if is_podcast:
+            self.podcast_time += duration
+        else:
+            self.non_podcast_time += duration
 
-    def enqueue_song(self, song, is_new):
-        self.adjust_time(song, is_new)
+    def enqueue_song(self, song, *, is_new, is_podcast):
+        self.adjust_time(song, is_new=is_new, is_podcast=is_podcast)
         self.previous_terms.add(song)
 
     def get_weather(self, configuration):
@@ -331,6 +338,12 @@ class AutoQueueBase(object):
 
         if self.requests.has(filename):
             return True
+
+        if self.cache.skip_podcasts and (
+            "podcast" in filename or "newsbeuter" in filename
+        ):
+            print("Too many podcasts.")
+            return False
 
         date_search = re.compile(
             "([0-9]{4}-)?%02d-%02d" % (self.eoq.month, self.eoq.day)
@@ -814,6 +827,7 @@ class AutoQueueBase(object):
 
             current_requests = self.requests.get_requests()
             is_new = filename in self.get_newest()
+            is_podcast = "podcast" in filename or "newsbeuter" in filename
             if filename not in current_requests and not is_new:
                 rating = song.get_rating()
                 if rating is NotImplemented:
@@ -840,16 +854,16 @@ class AutoQueueBase(object):
                 if not self.allowed(song):
                     continue
 
-            if self.maybe_enqueue_album(song, is_new=is_new):
+            if self.maybe_enqueue_album(song, is_new=is_new, is_podcast=is_podcast):
                 self.cache.found = True
                 return
 
-            self.enqueue_song(song, is_new=is_new)
+            self.enqueue_song(song, is_new=is_new, is_podcast=is_podcast)
             self.cache.found = True
             return
 
     def get_newest(self) -> List[str]:
-        search = self.player.construct_recently_added_search(days=7)
+        search = self.player.construct_recently_added_search(days=2)
         return [
             song.get_filename()
             for song in self.player.search(search)
@@ -883,7 +897,7 @@ class AutoQueueBase(object):
             look_for = str(result)
         print("%03d: %06d %s" % (number + 1, result.get("score", 0), look_for))
 
-    def maybe_enqueue_album(self, song, is_new):
+    def maybe_enqueue_album(self, song, *, is_new, is_podcast):
         """Determine if a whole album should be queued, and do so."""
         current_requests = self.requests.get_requests()
         if (
@@ -901,15 +915,17 @@ class AutoQueueBase(object):
             album_artist = song.get_album_artist()
             album_id = song.get_musicbrainz_albumid()
             if album and album.lower() not in BANNED_ALBUMS:
-                return self.enqueue_album(album, album_artist, album_id, is_new)
+                return self.enqueue_album(
+                    album, album_artist, album_id, is_new=is_new, is_podcast=is_podcast
+                )
 
         return False
 
-    def enqueue_song(self, song, is_new):
-        self.cache.enqueue_song(song, is_new)
+    def enqueue_song(self, song, *, is_new, is_podcast):
+        self.cache.enqueue_song(song, is_new=is_new, is_podcast=is_podcast)
         self.player.enqueue(song)
 
-    def enqueue_album(self, album, album_artist, album_id, is_new):
+    def enqueue_album(self, album, album_artist, album_id, *, is_new, is_podcast):
         """Try to enqueue whole album."""
         search = self.player.construct_album_search(
             album=album, album_artist=album_artist, album_id=album_id
@@ -923,7 +939,7 @@ class AutoQueueBase(object):
         )
         if songs:
             for _, _, _, song in songs:
-                self.enqueue_song(song, is_new)
+                self.enqueue_song(song, is_new=is_new, is_podcast=is_podcast)
             return True
         return False
 
