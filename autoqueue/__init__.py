@@ -239,6 +239,7 @@ class Cache(object):
 
     @property
     def prefer_newly_added(self):
+        print(f"new time: {self.new_time} old time {self.old_time}")
         return self.new_time < self.old_time
 
     @property
@@ -442,11 +443,12 @@ class AutoQueueBase(object):
             if not self.is_playing_or_in_queue(f)
         ]
         if not all_requests:
-            if self.cache.prefer_newly_added:
+            newly_added = [
+                f for f in self.get_newest() if not self.is_playing_or_in_queue(f)
+            ]
+            print(f"{len(newly_added)} newly added songs found.")
+            if self.cache.prefer_newly_added and newly_added:
                 print("Looking for recently added songs:")
-                newly_added = [
-                    f for f in self.get_newest() if not self.is_playing_or_in_queue(f)
-                ]
                 self.similarity.get_best_match(
                     filename,
                     newly_added,
@@ -455,6 +457,8 @@ class AutoQueueBase(object):
                     timeout=TIMEOUT,
                 )
             else:
+                self.current_request = None
+                self.cache.reset_closest()
                 self.similarity.get_ordered_gaia_tracks(
                     filename,
                     self.configuration.number,
@@ -803,9 +807,8 @@ class AutoQueueBase(object):
         for _ in self.search_database(results):
             yield
 
-        if not self.current_request:
-            for _ in self.adjust_scores(results, invert_scores):
-                yield
+        for _ in self.adjust_scores(results, invert_scores):
+            yield
 
         if not results:
             return
@@ -847,7 +850,13 @@ class AutoQueueBase(object):
                         )
                         continue
                     print("score: %03.2f" % (rating,))
-                    if not current_requests and random.random() > rating:
+                    if (
+                        not current_requests
+                        and random.random() > rating
+                        and not (
+                            self.configuration.favor_new and song.get_playcount() == 0
+                        )
+                    ):
                         print("randomly skipped")
                         continue
 
@@ -905,10 +914,7 @@ class AutoQueueBase(object):
             and song.get_tracknumber() == 1
             and (
                 song.get_filename() in current_requests
-                or (
-                    not current_requests
-                    and (song.get_playcount() == 0 or random.random() > 0.5)
-                )
+                or (song.get_playcount() == 0 or random.random() > 0.5)
             )
         ):
             album = song.get_album()

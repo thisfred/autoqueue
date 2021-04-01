@@ -980,19 +980,19 @@ class SimilarityService(dbus.service.Object):
         """Perform analysis of multiple tracks."""
         self.similarity.analyze_tracks([filename for filename in filenames])
 
-    @method(dbus_interface=IFACE, in_signature="si", out_signature="a(is)")
+    @method(dbus_interface=IFACE, in_signature="sx", out_signature="a(xs)")
     def get_ordered_gaia_tracks(self, filename, number):
         """Get similar tracks by gaia acoustic analysis."""
         return self.similarity.get_ordered_gaia_tracks(filename, number)
 
-    @method(dbus_interface=IFACE, in_signature="sis", out_signature="a(is)")
+    @method(dbus_interface=IFACE, in_signature="sxs", out_signature="a(xs)")
     def get_ordered_gaia_tracks_by_request(self, filename, number, request):
         """Get similar tracks by gaia acoustic analysis."""
         return self.similarity.get_ordered_gaia_tracks_by_request(
             filename, number, request
         )
 
-    @method(dbus_interface=IFACE, in_signature="ss", out_signature="a(iss)")
+    @method(dbus_interface=IFACE, in_signature="ss", out_signature="a(xss)")
     def get_ordered_similar_tracks(self, artist_name, title):
         """Get similar tracks from last.fm/the database.
 
@@ -1001,7 +1001,7 @@ class SimilarityService(dbus.service.Object):
         """
         return self.similarity.get_ordered_similar_tracks(artist_name, title)
 
-    @method(dbus_interface=IFACE, in_signature="as", out_signature="a(is)")
+    @method(dbus_interface=IFACE, in_signature="as", out_signature="a(xs)")
     def get_ordered_similar_artists(self, artists):
         """Get similar artists from the database.
 
@@ -1010,7 +1010,7 @@ class SimilarityService(dbus.service.Object):
         """
         return self.similarity.get_ordered_similar_artists(artists)
 
-    @method(dbus_interface=IFACE, in_signature="as", out_signature="ai")
+    @method(dbus_interface=IFACE, in_signature="as", out_signature="ax")
     def miximize(self, filenames):
         """Return ideally ordered list of filenames."""
         return self.similarity.miximize(filenames)

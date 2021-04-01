@@ -369,7 +369,10 @@ class Player(PlayerBase):
         return search
 
     def construct_recently_added_search(self, days: int) -> str:
-        search = f"&(#(added < {days} days),#(playcount=0))"
+        search = (
+            r"&(#(playcount=0),|(&(|(~filename=.ogg,~dirname=|(/\/google_music\//,/\/amazon\//)),#(tracknumber=1)),"
+            f"#(added < {days} days)))"
+        )
         return search
 
     def get_queue_length(self):
