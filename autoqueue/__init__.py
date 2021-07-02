@@ -813,7 +813,7 @@ class AutoQueueBase(object):
                 continue
 
             current_requests = self.requests.get_requests()
-            is_new = filename in self.get_newest() or song.get_playcount() == 0
+            is_new = filename in self.get_newest()
             if filename not in current_requests and not is_new:
                 rating = song.get_rating()
                 if rating is NotImplemented:
