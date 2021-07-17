@@ -429,7 +429,7 @@ class AutoQueueBase(object):
         if not all_requests:
             newly_added = [
                 f for f in self.get_newest() if not self.is_playing_or_in_queue(f)
-            ]
+            ][:1]
             print(f"{len(newly_added)} newly added songs found.")
             if self.cache.prefer_newly_added and newly_added:
                 print("Looking for recently added songs:")
@@ -541,10 +541,7 @@ class AutoQueueBase(object):
                 self.cache.reset_closest()
 
             for _ in self.process_filename_results(
-                [
-                    {"score": match, "filename": filename}
-                    for match, filename in results[: self.configuration.number]
-                ]
+                [{"score": match, "filename": filename} for match, filename in results]
             ):
                 yield
 
@@ -714,15 +711,19 @@ class AutoQueueBase(object):
 
     def search_database(self, results):
         """Search for songs in results."""
-        for result in results:
-            search = self.construct_search(
+        searches = [
+            self.construct_search(
                 artist=result.get("artist"),
                 title=result.get("title"),
                 filename=result.get("filename"),
                 tags=result.get("tags"),
             )
-            self.perform_search(search, [result])
-            yield
+            for resutl in results
+        ]
+
+        combined_searches = "|(" ",".join(searches) + ")"
+
+        self.perform_search(combined_searches, results)
 
     def get_current_request(self):
         filename = self.current_request
@@ -801,19 +802,18 @@ class AutoQueueBase(object):
 
     def pick_result(self, results):
         number_of_results = len(results)
+        current_requests = self.requests.get_requests()
+        newest = set(self.get_newest())
         for number, result in enumerate(sorted(results, key=lambda x: x["score"])):
             song = result.get("song")
             if not song:
                 print("'song' not found in %s" % result)
                 continue
             self.log_lookup(number, result)
-
             filename = song.get_filename()
             if self.is_playing_or_in_queue(filename):
                 continue
-
-            current_requests = self.requests.get_requests()
-            is_new = filename in self.get_newest()
+            is_new = filename in newest
             if filename not in current_requests and not is_new:
                 rating = song.get_rating()
                 if rating is NotImplemented:
@@ -822,7 +822,7 @@ class AutoQueueBase(object):
                     print("  %s" % (reason,))
 
                 if number_of_results > 1:
-                    wait_seconds = (song.get_length() / 60) * ONE_DAY - (
+                    wait_seconds = (1 + (song.get_length() / 60)) * ONE_DAY - (
                         self.eoq - datetime.fromtimestamp(song.get_last_started())
                     ).total_seconds()
                     if wait_seconds > 0:
@@ -856,11 +856,12 @@ class AutoQueueBase(object):
 
     def get_newest(self) -> List[str]:
         search = self.player.construct_recently_added_search(days=2)
-        return [
+        results = [
             song.get_filename()
-            for song in self.player.search(search)
+            for song in sorted(self.player.search(search), key=lambda s: s.get_added())
             if song and song.get_filename()
         ]
+        return results
 
     def process_filename_results(self, results):
         if not results:
