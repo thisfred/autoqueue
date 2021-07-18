@@ -52,7 +52,7 @@ class Blocking(object):
         blocked = []
         for song in songs:
             blocked.extend(song.get_artists())
-        return list(self._blocked_artists) + blocked
+        return set(list(self._blocked_artists) + blocked)
 
     def _load_blocked_artists(self):
         """Read the list of blocked artists from disk."""

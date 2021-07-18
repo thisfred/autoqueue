@@ -323,12 +323,17 @@ class AutoQueueBase(object):
                 return True
         return False
 
-    def allowed(self, song):
+    def allowed(self, song, blocked_artists):
         """Check whether a song is allowed to be queued."""
         filename = song.get_filename()
 
         if self.requests.has(filename):
             return True
+
+        for artist in song.get_artists():
+            if artist in blocked_artists:
+                print("artist blocked")
+                return False
 
         date_search = re.compile(
             "([0-9]{4}-)?%02d-%02d" % (self.eoq.month, self.eoq.day)
@@ -336,11 +341,6 @@ class AutoQueueBase(object):
         for tag in song.get_stripped_tags():
             if date_search.match(tag):
                 return True
-
-        for artist in song.get_artists():
-            if artist in self.blocking.get_blocked_artists(self.get_last_songs()):
-                print("artist blocked")
-                return False
 
         return True
 
@@ -718,7 +718,7 @@ class AutoQueueBase(object):
                 filename=result.get("filename"),
                 tags=result.get("tags"),
             )
-            for resutl in results
+            for result in results
         ]
 
         combined_searches = "|(" ",".join(searches) + ")"
@@ -748,11 +748,6 @@ class AutoQueueBase(object):
                     result["song"] = song
                     found.add(song)
                     break
-            else:
-                if not self.configuration.restrictions:
-                    filename = result.get("filename")
-                    if filename:
-                        self.remove_missing_track(filename)
 
     def remove_missing_track(self, filename):
         print("Remove similarity for %s" % filename)
@@ -789,8 +784,7 @@ class AutoQueueBase(object):
         if not results:
             return
 
-        for _ in self.search_database(results):
-            yield
+        self.search_database(results)
 
         for _ in self.adjust_scores(results, invert_scores):
             yield
@@ -804,6 +798,7 @@ class AutoQueueBase(object):
         number_of_results = len(results)
         current_requests = self.requests.get_requests()
         newest = set(self.get_newest())
+        blocked_artists = self.blocking.get_blocked_artists(self.get_last_songs())
         for number, result in enumerate(sorted(results, key=lambda x: x["score"])):
             song = result.get("song")
             if not song:
@@ -842,8 +837,7 @@ class AutoQueueBase(object):
                     ):
                         print("randomly skipped")
                         continue
-
-                if not self.allowed(song):
+                if not self.allowed(song, blocked_artists):
                     continue
 
             if self.maybe_enqueue_album(song, is_new=is_new):
@@ -943,12 +937,13 @@ class AutoQueueBase(object):
             return []
         search = self.construct_search(tags=list(tag_set))
         songs = sorted(
-            [(tag_score(song, tag_set), song) for song in self.player.search(search)],
+            [
+                (tag_score(song, tag_set), song.get_filename())
+                for song in self.player.search(search)
+            ],
             reverse=True,
         )
-        return [
-            {"score": score, "filename": song.get_filename()} for score, song in songs
-        ]
+        return [{"score": score, "filename": filename} for score, filename in songs]
 
 
 def levenshtein(string1, string2):
