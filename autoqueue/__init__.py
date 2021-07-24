@@ -280,7 +280,7 @@ class Cache(object):
             self.miss_factor = 1
             self.last_closest = match
         else:
-            self.miss_factor += 1
+            self.miss_factor *= 2
         print("* last closest * %s" % self.last_closest)
         print("* miss factor * %s" % self.miss_factor)
 
@@ -441,8 +441,6 @@ class AutoQueueBase(object):
                     timeout=TIMEOUT,
                 )
             else:
-                self.current_request = None
-                self.cache.reset_closest()
                 self.similarity.get_ordered_gaia_tracks(
                     filename,
                     self.configuration.number,
@@ -537,11 +535,12 @@ class AutoQueueBase(object):
         if results:
             if self.current_request:
                 self.cache.process_closest(results[0][0])
-            else:
-                self.cache.reset_closest()
 
             for _ in self.process_filename_results(
-                [{"score": match, "filename": filename} for match, filename in results]
+                [
+                    {"score": match, "filename": filename}
+                    for match, filename in results[: self.configuration.number]
+                ]
             ):
                 yield
 
