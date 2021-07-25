@@ -20,6 +20,29 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA.
+
+
+This place is a message... and part of a system of messages... pay attention to it!
+
+Sending this message was important to us. We considered ourselves to be a powerful
+culture.
+
+This place is not a place of honor... no highly esteemed deed is commemorated here...
+nothing valued is here.
+
+What is here was dangerous and repulsive to us. This message is a warning about danger.
+
+The danger is in a particular location... it increases towards a center... the center of
+danger is here... of a particular size and shape, and below us.
+
+The danger is still present, in your time, as it was in ours.
+
+The danger is to the body, and it can kill.
+
+The form of the danger is an emanation of energy.
+
+The danger is unleashed only if you substantially disturb this place physically. This
+place is best shunned and left uninhabited.
 """
 
 import random
@@ -234,6 +257,7 @@ class Cache(object):
         self.last_closest = -1
         self.new_time = 0
         self.old_time = 0
+        self.current_request = None
 
     @property
     def prefer_newly_added(self):
@@ -272,6 +296,7 @@ class Cache(object):
     def reset_closest(self):
         self.last_closest = -1
         self.miss_factor = 1
+        self.current_request = None
 
     def process_closest(self, match):
         if match == 0:
@@ -306,7 +331,6 @@ class AutoQueueBase(object):
         self.player = player
         self.cache.set_nearby_artist(self.configuration)
         self.requests = Requests()
-        self.current_request = None
 
     @property
     def use_gaia(self):
@@ -376,8 +400,8 @@ class AutoQueueBase(object):
         filename = song.get_filename()
         if self.requests.has(filename):
             self.requests.pop(filename)
-            if self.current_request == filename:
-                self.current_request = None
+            if self.cache.current_request == filename:
+                self.cache.current_request = None
 
     def on_removed(self, songs):
         if not self.use_gaia:
@@ -484,11 +508,11 @@ class AutoQueueBase(object):
                 self.gaia_reply_handler([(0, request)])
                 return
 
-            self.current_request = request
+            self.cache.current_request = request
             self.similarity.get_ordered_gaia_tracks_by_request(
                 filename,
                 self.configuration.number * self.cache.miss_factor,
-                self.current_request,
+                self.cache.current_request,
                 reply_handler=self.gaia_reply_handler,
                 error_handler=self.gaia_error_handler,
                 timeout=TIMEOUT,
@@ -533,7 +557,7 @@ class AutoQueueBase(object):
         """Exexute processing asynchronous."""
         self.cache.found = False
         if results:
-            if self.current_request:
+            if self.cache.current_request:
                 self.cache.process_closest(results[0][0])
 
             for _ in self.process_filename_results(
@@ -548,12 +572,12 @@ class AutoQueueBase(object):
             self.continue_queueing()
             return
 
-        if self.current_request:
+        if self.cache.current_request:
             song = self.cache.last_song
             filename = song.get_filename()
             if not filename:
                 return
-            self.current_request = None
+            self.cache.current_request = None
             self.similarity.get_ordered_gaia_tracks(
                 filename,
                 self.configuration.number,
@@ -725,7 +749,7 @@ class AutoQueueBase(object):
         self.perform_search(combined_searches, results)
 
     def get_current_request(self):
-        filename = self.current_request
+        filename = self.cache.current_request
         if not filename:
             return
 
@@ -860,7 +884,7 @@ class AutoQueueBase(object):
         if not results:
             return
         self.search_filenames(results)
-        if not self.current_request:
+        if not self.cache.current_request:
             for _ in self.adjust_scores(results, invert_scores=False):
                 yield
         if not results:
