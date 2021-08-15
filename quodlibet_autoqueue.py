@@ -371,7 +371,7 @@ class Player(PlayerBase):
     def construct_recently_added_search(self, days: int) -> str:
         search = (
             r"&(#(playcount=0),|(&(|(~filename=.ogg,"
-            "~dirname=|(/\/google_music\//,/\/amazon\//,/\/ogg\//)),#(tracknumber=1)),"
+            r"~dirname=|(/\/google_music\//,/\/amazon\//)),#(tracknumber=1)),"
             f"#(added < {days} days)))"
         )
         return search

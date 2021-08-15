@@ -142,7 +142,7 @@ EXCLUSIONS = {
     "wednesday": {"day.n.04"},
 }
 
-GLOBAL_EXCLUSIONS = {"be.v.01", "be.v.03"}
+GLOBAL_EXCLUSIONS = {"be.v.01", "be.v.03", "change.v.02"}
 
 static_predicates = []
 

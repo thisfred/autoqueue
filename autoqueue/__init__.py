@@ -262,13 +262,15 @@ class Cache(object):
     @property
     def prefer_newly_added(self):
         print(f"new time: {self.new_time} old time {self.old_time}")
-        return self.new_time < self.old_time
+        return (2 * self.new_time) < self.old_time
 
     def adjust_time(self, song, *, is_new):
         duration = song.get_length()
         if is_new:
+            print("enqueued new song")
             self.new_time += duration
         else:
+            print("enqueued old song")
             self.old_time += duration
 
     def enqueue_song(self, song, *, is_new):
@@ -453,7 +455,7 @@ class AutoQueueBase(object):
         if not all_requests:
             newly_added = [
                 f for f in self.get_newest() if not self.is_playing_or_in_queue(f)
-            ][:1]
+            ][:5]
             print(f"{len(newly_added)} newly added songs found.")
             if self.cache.prefer_newly_added and newly_added:
                 print("Looking for recently added songs:")
