@@ -228,18 +228,25 @@ class Configuration(object):
 
 class PreviousTerms(object):
     def __init__(self):
-        self.songs = []
+        self._terms = Counter()
 
     def add(self, song):
-        self.songs.append(song)
-        self.songs = self.songs[-10:]
+        terms = get_terms_from_song(song)
+        for term in terms:
+            if term in self._terms:
+                self._terms[term] += 1
+            else:
+                self._terms[term] += 5
+        for key in list(self._terms.keys()):
+            if key in terms:
+                continue
+            self._terms[key] -= 1
+            if self._terms[key] < 1:
+                del self._terms[key]
 
     @property
     def terms(self):
-        counter = Counter()
-        for song in self.songs:
-            counter.update(get_terms_from_song(song))
-        return {k for k, v in counter.items() if v > 1}
+        return {k for k, v in self._terms.items() if v > 1}
 
 
 class Cache(object):
@@ -257,12 +264,13 @@ class Cache(object):
         self.last_closest = -1
         self.new_time = 0
         self.old_time = 0
+        self.number_of_newest = 5
         self.current_request = None
 
     @property
     def prefer_newly_added(self):
         print(f"new time: {self.new_time} old time {self.old_time}")
-        return (2 * self.new_time) < self.old_time
+        return (10 * self.new_time) < self.old_time
 
     def adjust_time(self, song, *, is_new):
         duration = song.get_length()
@@ -455,7 +463,7 @@ class AutoQueueBase(object):
         if not all_requests:
             newly_added = [
                 f for f in self.get_newest() if not self.is_playing_or_in_queue(f)
-            ][:5]
+            ][: self.cache.number_of_newest]
             print(f"{len(newly_added)} newly added songs found.")
             if self.cache.prefer_newly_added and newly_added:
                 print("Looking for recently added songs:")
@@ -822,7 +830,7 @@ class AutoQueueBase(object):
     def pick_result(self, results):
         number_of_results = len(results)
         current_requests = self.requests.get_requests()
-        newest = set(self.get_newest())
+        newest = self.get_newest()
         blocked_artists = self.blocking.get_blocked_artists(self.get_last_songs())
         for number, result in enumerate(sorted(results, key=lambda x: x["score"])):
             song = result.get("song")
@@ -833,7 +841,12 @@ class AutoQueueBase(object):
             filename = song.get_filename()
             if self.is_playing_or_in_queue(filename):
                 continue
+            # XXX: O(n) but so is creating a set
             is_new = filename in newest
+            if is_new:
+                oldest_newest = filename == newest[0]
+            else:
+                oldest_newest = False
             if filename not in current_requests and not is_new:
                 rating = song.get_rating()
                 if rating is NotImplemented:
@@ -864,6 +877,14 @@ class AutoQueueBase(object):
                         continue
                 if not self.allowed(song, blocked_artists):
                     continue
+
+            if is_new:
+                if oldest_newest:
+                    self.cache.number_of_newest *= 2
+                elif self.cache.number_of_newest == 1:
+                    self.cache.number_of_newest *= 2
+                else:
+                    self.cache.number_of_newest = (self.cache.number_of_newest - 1) or 1
 
             if self.maybe_enqueue_album(song, is_new=is_new):
                 self.cache.found = True
@@ -924,7 +945,12 @@ class AutoQueueBase(object):
             album_artist = song.get_album_artist()
             album_id = song.get_musicbrainz_albumid()
             if album and album.lower() not in BANNED_ALBUMS:
-                return self.enqueue_album(album, album_artist, album_id, is_new=is_new)
+                return self.enqueue_album(
+                    album,
+                    album_artist,
+                    album_id,
+                    is_new=is_new,
+                )
 
         return False
 
