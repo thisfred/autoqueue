@@ -221,6 +221,7 @@ class GaiaAnalysis(Thread):
         print("STARTING GAIA ANALYSIS THREAD")
         while True:
             cmd, filename = self.queue.get()
+            print(cmd, filename)
             while filename:
                 self.commands[cmd](filename)
                 try:

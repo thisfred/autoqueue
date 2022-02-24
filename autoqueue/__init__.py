@@ -49,7 +49,7 @@ import random
 import re
 from collections import Counter
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 import dbus
 import requests
@@ -264,13 +264,12 @@ class Cache(object):
         self.last_closest = -1
         self.new_time = 0
         self.old_time = 0
-        self.number_of_newest = 5
         self.current_request = None
 
     @property
     def prefer_newly_added(self):
         print(f"new time: {self.new_time} old time {self.old_time}")
-        return (10 * self.new_time) < self.old_time
+        return self.new_time < self.old_time
 
     def adjust_time(self, song, *, is_new):
         duration = song.get_length()
@@ -462,8 +461,10 @@ class AutoQueueBase(object):
         ]
         if not all_requests:
             newly_added = [
-                f for f in self.get_newest() if not self.is_playing_or_in_queue(f)
-            ][: self.cache.number_of_newest]
+                f
+                for f in self.get_newest(max_results=5)
+                if not self.is_playing_or_in_queue(f)
+            ]
             print(f"{len(newly_added)} newly added songs found.")
             if self.cache.prefer_newly_added and newly_added:
                 print("Looking for recently added songs:")
@@ -514,7 +515,7 @@ class AutoQueueBase(object):
 
         if request:
             print("*****" + request)
-            if request in self.requests.get_requests():
+            if request in self.requests.get_requests() or request in self.get_newest():
                 self.gaia_reply_handler([(0, request)])
                 return
 
@@ -878,14 +879,6 @@ class AutoQueueBase(object):
                 if not self.allowed(song, blocked_artists):
                     continue
 
-            if is_new:
-                if oldest_newest:
-                    self.cache.number_of_newest *= 2
-                elif self.cache.number_of_newest == 1:
-                    self.cache.number_of_newest *= 2
-                else:
-                    self.cache.number_of_newest = (self.cache.number_of_newest - 1) or 1
-
             if self.maybe_enqueue_album(song, is_new=is_new):
                 self.cache.found = True
                 return
@@ -894,13 +887,23 @@ class AutoQueueBase(object):
             self.cache.found = True
             return
 
-    def get_newest(self) -> List[str]:
-        search = self.player.construct_recently_added_search(days=2)
-        results = [
-            song.get_filename()
-            for song in sorted(self.player.search(search), key=lambda s: s.get_added())
-            if song and song.get_filename()
-        ]
+    def get_newest(self, max_results: Optional[int] = None) -> List[str]:
+        results = []
+        days = 1
+        while not results:
+            search = self.player.construct_recently_added_search(days=days)
+            results = [
+                song.get_filename()
+                for song in sorted(
+                    self.player.search(search),
+                    key=lambda s: s.get_added(),
+                )
+                if song and song.get_filename()
+            ]
+            days += 1
+        if max_results:
+            return results[:max_results]
+
         return results
 
     def process_filename_results(self, results):

@@ -213,11 +213,19 @@ def get_artist_terms_from_song(song):
     return tag_terms
 
 
+def _normalize_title(title):
+    return " ".join(
+        w
+        for w in title.replace("_", " ").replace("-", " ").split()
+        if w.lower() != "[unknown]"
+    )
+
+
 @LRUCache
 def get_terms_from_song(song):
     title_terms = set()
     words = []
-    for word in word_tokenize(song.get_title(with_version=False)):
+    for word in word_tokenize(_normalize_title(song.get_title(with_version=False))):
         terms = {t for t in expand(word)}
         if terms:
             words.append(word)
