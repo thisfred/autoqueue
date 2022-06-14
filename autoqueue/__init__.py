@@ -460,11 +460,8 @@ class AutoQueueBase(object):
             if not self.is_playing_or_in_queue(f)
         ]
         if not all_requests:
-            newly_added = [
-                f
-                for f in self.get_newest(max_results=5)
-                if not self.is_playing_or_in_queue(f)
-            ]
+            newly_added = [f for f in self.get_newest(days=1)]
+
             print(f"{len(newly_added)} newly added songs found.")
             if self.cache.prefer_newly_added and newly_added:
                 print("Looking for recently added songs:")
@@ -887,22 +884,25 @@ class AutoQueueBase(object):
             self.cache.found = True
             return
 
-    def get_newest(self, max_results: Optional[int] = None) -> List[str]:
+    def get_newest(self, days: Optional[int] = None) -> List[str]:
         results = []
-        days = 1
+        days = days or 7
         while not results:
+            print(f"{days=}")
             search = self.player.construct_recently_added_search(days=days)
             results = [
                 song.get_filename()
                 for song in sorted(
                     self.player.search(search),
                     key=lambda s: s.get_added(),
+                    reverse=True,
                 )
-                if song and song.get_filename()
+                if song
+                and song.get_filename()
+                and not self.is_playing_or_in_queue(song.get_filename())
             ]
-            days += 1
-        if max_results:
-            return results[:max_results]
+            days *= 2
+        print(f"{len(results)=}")
 
         return results
 
