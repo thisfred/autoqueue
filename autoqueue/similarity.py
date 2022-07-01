@@ -97,6 +97,7 @@ class GaiaAnalysis(Thread):
         self.gaia_db = self.initialize_gaia_db()
         self.commands = {ADD: self._analyze, REMOVE: self._remove_point}
         self.queue = queue
+        self.seen = set()
         try:
             self.metric = DistanceFunctionFactory.create(
                 "euclidean", self.gaia_db.layout()
@@ -108,7 +109,6 @@ class GaiaAnalysis(Thread):
                 "euclidean", self.gaia_db.layout()
             )
             self.transformed = True
-        self.queued = set()
         self.analyzed = 0
 
     def initialize_gaia_db(self) -> DataSet:
@@ -145,17 +145,13 @@ class GaiaAnalysis(Thread):
 
     def _analyze(self, filename: str) -> None:
         """Analyze an audio file."""
-        if filename in self.queued:
-            print("already seen")
-            print("{} songs left to analyze.".format(self.queue.qsize()))
-            return
-        self.queued.add(filename)
-
         if self.gaia_db.contains(filename):
             return
+
         signame = self.get_signame(filename)
         if not (os.path.exists(signame) or self.essentia_analyze(filename, signame)):
             return
+
         try:
             point = self.load_point(signame)
             point.setName(filename)
@@ -163,6 +159,7 @@ class GaiaAnalysis(Thread):
             self.analyzed += 1
         except Exception as exc:
             print(exc)
+
         print("{} songs left to analyze.".format(self.queue.qsize()))
 
     def _remove_point(self, filename: str) -> None:
@@ -278,6 +275,10 @@ class GaiaAnalysis(Thread):
 
     def queue_filenames(self, filenames: Sequence[str]) -> None:
         for name in filenames:
+            if name in self.seen:
+                print("already seen")
+                continue
+            self.seen.add(name)
             self.queue.put((ADD, name))
 
     def get_best_match(self, filename: str, filenames: List[str]) -> Optional[str]:
