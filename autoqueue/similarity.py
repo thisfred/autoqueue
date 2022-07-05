@@ -360,6 +360,11 @@ class GaiaAnalysis(Thread):
         """Check if the filename exists in the database, queue it up if not."""
         if not self.gaia_db.contains(filename):
             print("%r not found in gaia db" % filename)
+            if filename in self.seen:
+                print("already seen")
+                return False
+
+            self.seen.add(filename)
             self.queue.put((ADD, filename))
             return False
 
