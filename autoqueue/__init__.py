@@ -282,6 +282,9 @@ class Cache(object):
         else:
             print("enqueued old song")
             self.old_time += duration
+        smallest = min(self.new_time, self.old_time)
+        self.new_time -= smallest
+        self.old_time -= smallest
 
     def enqueue_song(self, song, *, is_new):
         self.adjust_time(song, is_new=is_new)
