@@ -10,6 +10,7 @@ published by the Free Software Foundation
 """
 from collections import deque
 from datetime import datetime
+from functools import lru_cache
 
 from gi.repository import GLib, Gtk
 from quodlibet import _, app, config
@@ -317,7 +318,8 @@ class Player(PlayerBase):
 
     def construct_files_search(self, filenames):
         """Construct a search for songs with any of these filenames."""
-        return "~filename=|(%s)" % (",".join(['"%s"' % escape(f) for f in filenames]),)
+        return ""
+        # return "~filename=|(%s)" % (",".join(['"%s"' % escape(f) for f in filenames]),)
 
     def construct_file_search(self, filename):
         """Construct a search that looks for songs with this filename."""
@@ -386,6 +388,7 @@ class Player(PlayerBase):
         """Put the song at the end of the queue."""
         app.window.playlist.enqueue([song.song])
 
+    @lru_cache
     def search(self, search, restrictions=None):
         """Perform a player search."""
         if restrictions:

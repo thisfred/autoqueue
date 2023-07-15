@@ -58,6 +58,7 @@ from dbus.mainloop.glib import DBusGMainLoop
 from autoqueue.blocking import Blocking
 from autoqueue.context import Context, get_terms_from_song
 from autoqueue.request import Requests
+from time import time
 
 try:
     import pyowm
@@ -84,6 +85,8 @@ TIMEOUT = 3000
 FIVE_MINUTES = timedelta(minutes=5)
 DEFAULT_NUMBER = 20
 DEFAULT_LENGTH = 15 * 60
+SCDL = "scdl"
+PODCAST = "podcast"
 BANNED_ALBUMS = [
     "[non-album tracks]",
     "album",
@@ -96,7 +99,7 @@ BANNED_ALBUMS = [
     "ep",
     "greatest hits",
     "live",
-    "podcast",
+    PODCAST,
     "s/t",
     "self titled",
     "single",
@@ -268,6 +271,8 @@ class Cache(object):
         self.new_time = 0
         self.old_time = 0
         self.current_request = None
+        self.played_number = 0
+        self.played_duration = 0
 
     @property
     def prefer_newly_added(self):
@@ -285,6 +290,8 @@ class Cache(object):
         smallest = min(self.new_time, self.old_time)
         self.new_time -= smallest
         self.old_time -= smallest
+        self.played_duration += duration
+        self.played_number += 1
 
     def enqueue_song(self, song, *, is_new):
         self.adjust_time(song, is_new=is_new)
@@ -383,6 +390,25 @@ class AutoQueueBase(object):
 
         return True
 
+    def wrong_duration(self, song):
+        duration = song.get_length()
+        target = 300
+
+        if not self.cache.played_number:
+            return False
+
+        average = (self.cache.played_duration / self.cache.played_number)
+        print(f'>>> {duration=}, {average=}')
+        if  average > target  and duration > average:
+            print(f'Song too long')
+            return True
+
+        if  average < target and duration < average:
+            print(f'Song too short')
+            return True
+
+        return False
+
     def on_song_ended(self, song, skipped):
         """Should be called by the plugin when a song ends or is skipped."""
         if song is None:
@@ -466,16 +492,15 @@ class AutoQueueBase(object):
             if not self.is_playing_or_in_queue(f)
         ]
         if not all_requests:
-            newly_added = [f for f in self.get_newest(days=1)]
-
-            print(f"{len(newly_added)} newly added songs found.")
-            if self.cache.prefer_newly_added and newly_added:
+            newly_added = list(self.get_newest(days=1)) if self.cache.prefer_newly_added else []
+            if newly_added:
+                print(f"{len(newly_added)} newly added songs found.")
                 print("Looking for recently added songs:")
-                self.similarity.get_best_match(
+                self.similarity.get_ordered_gaia_tracks_from_list(
                     filename,
                     newly_added,
-                    reply_handler=self.best_request_handler,
-                    error_handler=self.best_request_error_handler,
+                    reply_handler=self.gaia_reply_handler,
+                    error_handler=self.gaia_error_handler,
                     timeout=TIMEOUT,
                 )
             else:
@@ -600,102 +625,12 @@ class AutoQueueBase(object):
                 timeout=TIMEOUT,
             )
             return
-        self.get_similar_tracks()
-
-    def get_similar_tracks(self):
-        if not self.configuration.use_lastfm:
-            self.similar_artists_handler([])
-            return
-
-        last_song = self.cache.last_song
-        artist_name = last_song.get_artist()
-        title = last_song.get_title()
-        if artist_name and title:
-            print("Get similar tracks for: %s - %s" % (artist_name, title))
-            self.similarity.get_ordered_similar_tracks(
-                artist_name,
-                title,
-                reply_handler=self.similar_tracks_handler,
-                error_handler=self.error_handler,
-                timeout=TIMEOUT,
-            )
-        else:
-            self.similar_tracks_handler([])
 
     def done(self):
         """Analyze the last song and stop."""
         song = self.get_last_songs()[-1]
         self.analyze_and_callback(song.get_filename())
         self.cache.running = False
-
-    def similar_tracks_handler(self, results):
-        """Handler for similar tracks returned from dbus."""
-        self.player.execute_async(self._similar_tracks_handler, results=results)
-
-    def _similar_tracks_handler(self, results=None):
-        """Exexute processing asynchronous."""
-        self.cache.found = False
-        for _ in self.process_results(
-            [
-                {"score": match, "artist": artist, "title": title}
-                for match, artist, title in results
-            ],
-            invert_scores=True,
-        ):
-            yield
-        if self.cache.found:
-            self.continue_queueing()
-            return
-        self.get_similar_artists()
-
-    def get_similar_artists(self):
-        artists = [a.encode("utf-8") for a in self.cache.last_song.get_artists()]
-        print("Get similar artists for %s" % artists)
-        self.similarity.get_ordered_similar_artists(
-            artists,
-            reply_handler=self.similar_artists_handler,
-            error_handler=self.error_handler,
-            timeout=TIMEOUT,
-        )
-
-    def similar_artists_handler(self, results):
-        """Handler for similar artists returned from dbus."""
-        self.player.execute_async(self._similar_artists_handler, results=results)
-
-    def _similar_artists_handler(self, results=None):
-        """Exexute processing asynchronous."""
-        self.cache.found = False
-        if results:
-            for _ in self.process_results(
-                [{"score": match, "artist": artist} for match, artist in results],
-                invert_scores=True,
-            ):
-                yield
-
-        if self.cache.found:
-            self.continue_queueing()
-            return
-
-        if self.configuration.use_groupings:
-            for _ in self.process_results(
-                self.get_ordered_similar_by_tag(self.cache.last_song),
-                invert_scores=True,
-            ):
-                yield
-
-            if self.cache.found:
-                self.continue_queueing()
-                return
-
-        if not self.cache.last_songs:
-            self.cache.running = False
-            return
-        song = self.cache.last_song = self.cache.last_songs.pop()
-        self.analyze_and_callback(
-            song.get_filename(),
-            reply_handler=self.analyzed,
-            empty_handler=self.gaia_reply_handler,
-        )
 
     def analyze_and_callback(self, filename, reply_handler=no_op, empty_handler=no_op):
         if not filename:
@@ -775,16 +710,30 @@ class AutoQueueBase(object):
         return songs[0]
 
     def perform_search(self, search, results):
-        songs = set(
+        start_time = time()
+        songs = {
+            song.get_filename(): song for song in
             self.player.search(search, restrictions=self.configuration.restrictions)
-        )
+        }
+        song_values = set(songs.values())
         found = set()
         for result in results:
-            for song in songs - found:
-                if self.satisfies(song, result):
-                    result["song"] = song
+            filename = str(result.get('filename'))
+            song = None
+            if filename:
+                song = songs.get(filename)
+                if song:
+                    result['song'] = song
                     found.add(song)
-                    break
+                    continue
+                print(f'>>>>> song with {filename=} not found <<<<')
+            if not song:
+                for song in song_values - found:
+                    if self.satisfies(song, result):
+                        result["song"] = song
+                        found.add(song)
+                        break
+        print("quodlibet search took %f s" % (time() - start_time,))
 
     def remove_missing_track(self, filename):
         print("Remove similarity for %s" % filename)
@@ -816,26 +765,16 @@ class AutoQueueBase(object):
                 self.context.adjust_score(result)
                 yield
 
-    def process_results(self, results, invert_scores=False):
-        """Process results and queue best one(s)."""
-        if not results:
-            return
-
-        self.search_database(results)
-
-        for _ in self.adjust_scores(results, invert_scores):
-            yield
-
-        if not results:
-            return
-
-        self.pick_result(results)
-
     def pick_result(self, results):
-        number_of_results = len(results)
         current_requests = self.requests.get_requests()
         newest = self.get_newest()
         blocked_artists = self.blocking.get_blocked_artists(self.get_last_songs())
+        self.pick(results, newest, current_requests, blocked_artists)
+        if not self.cache.found:
+            self.pick(results, newest, current_requests, blocked_artists, relax=True)
+
+    def pick(self, results, newest, current_requests, blocked_artists, relax=False):
+        number_of_results = len(results)
         for number, result in enumerate(sorted(results, key=lambda x: x["score"])):
             song = result.get("song")
             if not song:
@@ -845,13 +784,8 @@ class AutoQueueBase(object):
             filename = song.get_filename()
             if self.is_playing_or_in_queue(filename):
                 continue
-            # XXX: O(n) but so is creating a set
             is_new = filename in newest
-            if is_new:
-                oldest_newest = filename == newest[0]
-            else:
-                oldest_newest = False
-            if filename not in current_requests and not is_new:
+            if filename not in current_requests:
                 rating = song.get_rating()
                 if rating is NotImplemented:
                     rating = THRESHOLD
@@ -870,8 +804,12 @@ class AutoQueueBase(object):
                         )
                         continue
                     print("score: %03.2f" % (rating,))
+                    if not relax and self.wrong_duration(song):
+                        continue
                     if (
-                        not current_requests
+                        not is_new
+                        and not relax
+                        and not current_requests
                         and random.random() > rating
                         and not (
                             self.configuration.favor_new and song.get_playcount() == 0
@@ -879,7 +817,7 @@ class AutoQueueBase(object):
                     ):
                         print("randomly skipped")
                         continue
-                if not self.allowed(song, blocked_artists):
+                if not relax and not self.allowed(song, blocked_artists):
                     continue
 
             if self.maybe_enqueue_album(song, is_new=is_new):
@@ -891,12 +829,12 @@ class AutoQueueBase(object):
             return
 
     def get_newest(self, days: Optional[int] = None) -> List[str]:
-        results = []
+        results = set()
         days = days or 7
         while not results:
             print(f"{days=}")
             search = self.player.construct_recently_added_search(days=days)
-            results = [
+            results = {
                 song.get_filename()
                 for song in sorted(
                     self.player.search(search),
@@ -906,7 +844,7 @@ class AutoQueueBase(object):
                 if song
                 and song.get_filename()
                 and not self.is_playing_or_in_queue(song.get_filename())
-            ]
+            }
             days *= 2
         print(f"{len(results)=}")
 
@@ -953,7 +891,12 @@ class AutoQueueBase(object):
             album = song.get_album()
             album_artist = song.get_album_artist()
             album_id = song.get_musicbrainz_albumid()
-            if album and album.lower() not in BANNED_ALBUMS:
+            if (
+                album
+                and album.lower() not in BANNED_ALBUMS
+                and PODCAST not in song.get_filename()
+                and SCDL not in song.get_filename()
+            ):
                 return self.enqueue_album(
                     album,
                     album_artist,

@@ -61,7 +61,7 @@ DBUS_PATH = "/org/autoqueue/Similarity"
 API_KEY = "09d0975a99a4cab235b731d31abf0057"
 
 # XXX: make this configurable
-ESSENTIA_EXTRACTOR_PATH = "essentia_streaming_extractor_music"
+ESSENTIA_EXTRACTOR_PATH = "streaming_extractor_music"
 
 ADD = "add"
 REMOVE = "remove"
@@ -126,9 +126,7 @@ class GaiaAnalysis(Thread):
         """Transform dataset for distance computations."""
         dataset = transform(dataset, "fixlength")
         dataset = transform(dataset, "cleaner")
-        # dataset = transform(dataset, 'remove', {'descriptorNames': '*mfcc*'})
-        for field in ("*beats_position*",):
-            dataset = transform(dataset, "remove", {"descriptorNames": field})
+        dataset = transform(dataset, 'remove', {'descriptorNames': '*beats_position*'})
         dataset = transform(dataset, "normalize")
         dataset = transform(
             dataset,
@@ -302,6 +300,26 @@ class GaiaAnalysis(Thread):
 
         return best_name or ""
 
+    def get_ordered_matches(self, filename: str, filenames: List[str]) -> List[Tuple[float, str]]:
+        self.queue_filenames([filename] + filenames)
+        if not self.gaia_db.contains(filename):
+            if filenames:
+                return [(1, filenames[0])]
+
+            return []
+
+        point = self.gaia_db.point(filename)
+
+        result = sorted(
+            (self.metric(point, self.gaia_db.point(name)) * 1000, name)
+            for name in filenames
+            if self.contains_or_add(name))
+
+        if not result:
+            return [(0, filename) for filename in filenames]
+
+        return result
+
     def get_tracks(
         self, filename: str, number: int, request: Optional[str] = None
     ) -> List[Tuple[float, str]]:
@@ -317,7 +335,7 @@ class GaiaAnalysis(Thread):
             self.gaia_db, filename, number, request=request
         )
         if neighbours:
-            print("total found %d" % len(neighbours))
+            print("total  %d" % len(neighbours))
             print(neighbours[0][0], neighbours[-1][0])
         return neighbours
 
@@ -575,6 +593,12 @@ class Similarity(object):
             return
         if GAIA:
             self.gaia_queue.put((REMOVE, filename))
+
+    def get_ordered_gaia_tracks_from_list(self, filename, filenames):
+        start_time = time()
+        tracks = self.gaia_analyser.get_ordered_matches(filename, filenames)
+        print("finding gaia matches took %f s" % (time() - start_time,))
+        return tracks
 
     def get_ordered_gaia_tracks_by_request(self, filename, number, request):
         start_time = time()
@@ -907,48 +931,6 @@ class Similarity(object):
         self.update_similar_artists(artists_to_update)
         return results
 
-    def get_ordered_similar_tracks(self, artist_name: str, title: str):
-        """Get similar tracks from last.fm/the database.
-
-        Sorted by descending match score.
-
-        """
-        now = datetime.now()
-        track = self.get_track_from_artist_and_title(artist_name, title)
-        track_id, updated = track[0], track[3]
-        if updated:
-            updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
-            if updated + timedelta(self.cache_time) > now:
-                print(
-                    "Getting similar tracks from db for: %s - %s" % (artist_name, title)
-                )
-                return self.get_similar_tracks(track_id)
-        return self.get_similar_tracks_from_lastfm(artist_name, title, track_id)
-
-    def get_ordered_similar_artists(self, artists):
-        """Get similar artists from the database.
-
-        Sorted by descending match score.
-
-        """
-        results = []
-        now = datetime.now()
-        for name in artists:
-            artist_name = name
-            result = None
-            artist = self.get_artist(artist_name)
-            artist_id, updated = artist[0], artist[2]
-            if updated:
-                updated = datetime(*strptime(updated, "%Y-%m-%d %H:%M:%S")[0:6])
-                if updated + timedelta(self.cache_time) > now:
-                    print("Getting similar artists from db for: %s " % artist_name)
-                    result = self.get_similar_artists(artist_id)
-            if not result:
-                result = self.get_similar_artists_from_lastfm(artist_name, artist_id)
-            results.extend(result)
-        results.sort(reverse=True)
-        return results
-
     def miximize(self, filenames):
         """Return ideally ordered list of filenames."""
         if not GAIA:
@@ -992,30 +974,16 @@ class SimilarityService(dbus.service.Object):
         """Get similar tracks by gaia acoustic analysis."""
         return self.similarity.get_ordered_gaia_tracks(filename, number)
 
+    @method(dbus_interface=IFACE, in_signature="sas", out_signature="a(xs)")
+    def get_ordered_gaia_tracks_from_list(self, filename, filenames):
+        return self.similarity.get_ordered_gaia_tracks_from_list(filename, [filename for filename in filenames])
+
     @method(dbus_interface=IFACE, in_signature="sxs", out_signature="a(xs)")
     def get_ordered_gaia_tracks_by_request(self, filename, number, request):
         """Get similar tracks by gaia acoustic analysis."""
         return self.similarity.get_ordered_gaia_tracks_by_request(
             filename, number, request
         )
-
-    @method(dbus_interface=IFACE, in_signature="ss", out_signature="a(xss)")
-    def get_ordered_similar_tracks(self, artist_name, title):
-        """Get similar tracks from last.fm/the database.
-
-        Sorted by descending match score.
-
-        """
-        return self.similarity.get_ordered_similar_tracks(artist_name, title)
-
-    @method(dbus_interface=IFACE, in_signature="as", out_signature="a(xs)")
-    def get_ordered_similar_artists(self, artists):
-        """Get similar artists from the database.
-
-        Sorted by descending match score.
-
-        """
-        return self.similarity.get_ordered_similar_artists(artists)
 
     @method(dbus_interface=IFACE, in_signature="as", out_signature="ax")
     def miximize(self, filenames):
