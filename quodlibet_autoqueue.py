@@ -10,7 +10,6 @@ published by the Free Software Foundation
 """
 from collections import deque
 from datetime import datetime
-from functools import lru_cache
 
 from gi.repository import GLib, Gtk
 from quodlibet import _, app, config
@@ -388,7 +387,6 @@ class Player(PlayerBase):
         """Put the song at the end of the queue."""
         app.window.playlist.enqueue([song.song])
 
-    @lru_cache
     def search(self, search, restrictions=None):
         """Perform a player search."""
         if restrictions:
