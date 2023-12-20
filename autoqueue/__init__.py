@@ -665,7 +665,7 @@ class AutoQueueBase(object):
                 if song_artist.lower() == artist_lower:
                     return True
             return False
-        tags = criteria.get("tags")
+        tags = criteria.get("tags", [])
         song_tags = song.get_tags()
         for tag in tags:
             if (
@@ -793,7 +793,7 @@ class AutoQueueBase(object):
                     print("  %s" % (reason,))
 
                 if number_of_results > 1:
-                    wait_seconds = (1 + (song.get_length() / 60)) * ONE_DAY - (
+                    wait_seconds = (1 + (song.get_length() / 6)) * ONE_DAY - (
                         self.eoq - datetime.fromtimestamp(song.get_last_started())
                     ).total_seconds()
                     if wait_seconds > 0:
