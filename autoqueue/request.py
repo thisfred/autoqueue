@@ -38,7 +38,7 @@ class Requests:
 
     def pop(self, filename):
         self.cursor.execute(
-            "DELETE FROM requests WHERE filename = ? OR added < datetime('now', '-7 days');",
+            "DELETE FROM requests WHERE filename = ?;",
             (filename,),
         )
         self.connection.commit()

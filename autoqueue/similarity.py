@@ -22,12 +22,11 @@ import json
 import os
 import sqlite3
 import subprocess
-from datetime import datetime, timedelta
 from functools import total_ordering
 from pathlib import Path
 from queue import Empty, LifoQueue, PriorityQueue, Queue
 from threading import Thread
-from time import sleep, strptime, time
+from time import sleep, time
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import dbus
@@ -126,12 +125,17 @@ class GaiaAnalysis(Thread):
         """Transform dataset for distance computations."""
         dataset = transform(dataset, "fixlength")
         dataset = transform(dataset, "cleaner")
-        dataset = transform(dataset, 'remove', {'descriptorNames': '*beats_position*'})
+        dataset = transform(dataset, "remove", {"descriptorNames": "*beats_position*"})
+        dataset = transform(dataset, "remove", {"descriptorNames": "*mfcc*"})
         dataset = transform(dataset, "normalize")
         dataset = transform(
             dataset,
             "pca",
-            {"dimension": 30, "descriptorNames": ["*"], "resultName": "pca30"},
+            {
+                "dimension": 30,
+                "descriptorNames": ["*.mean", "*.var"],
+                "resultName": "pca30",
+            },
         )
         return dataset
 
@@ -182,7 +186,7 @@ class GaiaAnalysis(Thread):
     @staticmethod
     def get_signame(full_path: str) -> str:
         """Get the path for the analysis data file for this filename."""
-        filename = os.path.split(full_path)[-1]
+        filename = full_path.replace("/", "")[-200:]
         return os.path.join("/tmp", filename + ".sig")
 
     @staticmethod
@@ -300,7 +304,9 @@ class GaiaAnalysis(Thread):
 
         return best_name or ""
 
-    def get_ordered_matches(self, filename: str, filenames: List[str]) -> List[Tuple[float, str]]:
+    def get_ordered_matches(
+        self, filename: str, filenames: List[str]
+    ) -> List[Tuple[float, str]]:
         self.queue_filenames([filename] + filenames)
         if not self.gaia_db.contains(filename):
             if filenames:
@@ -313,7 +319,8 @@ class GaiaAnalysis(Thread):
         result = sorted(
             (self.metric(point, self.gaia_db.point(name)) * 1000, name)
             for name in filenames
-            if self.contains_or_add(name))
+            if self.contains_or_add(name)
+        )
 
         if not result:
             return [(0, filename) for filename in filenames]
@@ -976,7 +983,9 @@ class SimilarityService(dbus.service.Object):
 
     @method(dbus_interface=IFACE, in_signature="sas", out_signature="a(xs)")
     def get_ordered_gaia_tracks_from_list(self, filename, filenames):
-        return self.similarity.get_ordered_gaia_tracks_from_list(filename, [filename for filename in filenames])
+        return self.similarity.get_ordered_gaia_tracks_from_list(
+            filename, [filename for filename in filenames]
+        )
 
     @method(dbus_interface=IFACE, in_signature="sxs", out_signature="a(xs)")
     def get_ordered_gaia_tracks_by_request(self, filename, number, request):
