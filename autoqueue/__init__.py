@@ -47,18 +47,16 @@ place is best shunned and left uninhabited.
 
 import random
 import re
-from collections import Counter
 from datetime import datetime, timedelta
-from typing import List, Optional
+from time import time
+from typing import Optional, Set
 
 import dbus
-import requests
 from dbus.mainloop.glib import DBusGMainLoop
 
 from autoqueue.blocking import Blocking
-from autoqueue.context import Context, get_terms_from_song
+from autoqueue.context import Context, String
 from autoqueue.request import Requests
-from time import time
 
 try:
     import pyowm
@@ -118,16 +116,6 @@ def no_op(*args, **kwargs):
     pass
 
 
-def tag_score(song, tags):
-    """Calculate similarity score by tags."""
-    if not tags:
-        return 0
-    song_tags = set(song.get_non_geo_tags())
-    if not song_tags:
-        return 0
-    return len(song_tags & tags) / min(len(song_tags), len(tags))
-
-
 class Configuration(object):
     def __init__(self):
         self.contextualize = True
@@ -151,69 +139,6 @@ class Configuration(object):
 
         return {}
 
-    def get_performing_artists(self):
-        """Get a list of found playing nearby venues in the near future."""
-        nearby_artists = []
-        for page in self._get_pages():
-            nearby_artists.extend(self._get_artists(page))
-        return nearby_artists
-
-    def _get_pages(self):
-        parameters = self._build_parameters()
-        while True:
-            page = self._get_page(parameters)
-            if "events" not in page:
-                print(page)
-                return
-            total_pages = int(page["events"]["@attr"]["totalPages"])
-            page_number = int(page["events"]["@attr"]["page"])
-            yield page
-            if page_number == total_pages:
-                return
-            parameters["page"] = page_number + 1
-            page = self._get_page(parameters)
-
-    @staticmethod
-    def _get_artists(page):
-        artists = []
-        for event in page["events"]["event"]:
-            if not isinstance(event, dict):
-                continue
-            found = event["artists"]["artist"]
-            if not isinstance(found, list):
-                found = [found]
-            artists.extend(found)
-        return artists
-
-    @staticmethod
-    def _get_page(parameters):
-        response = None
-        try:
-            response = requests.get(
-                "http://ws.audioscrobbler.com/2.0/", params=parameters
-            )
-            page = response.json()
-        except Exception as ex:
-            print(ex)
-            print(response)
-            return {}
-        return page
-
-    def _build_parameters(self):
-        parameters = {
-            "method": "geo.getevents",
-            "limit": 25,
-            "api_key": API_KEY,
-            "format": "json",
-        }
-        if self.geohash and GEOHASH:
-            lat, lon = pygeohash.decode(self.geohash)[:2]
-            parameters["long"] = lon
-            parameters["lat"] = lat
-        if self.location:
-            parameters["location"] = self.location
-        return parameters
-
     def _get_weather(self):
         try:
             # If you use this code for anything else, please register for your
@@ -232,40 +157,15 @@ class Configuration(object):
         return {}
 
 
-class PreviousTerms(object):
-    def __init__(self):
-        self._terms = Counter()
-
-    def add(self, song):
-        terms = get_terms_from_song(song)
-        for term in terms:
-            if term in self._terms:
-                self._terms[term] += 1
-            else:
-                self._terms[term] += 5
-        for key in list(self._terms.keys()):
-            if key in terms:
-                continue
-            self._terms[key] -= 1
-            if self._terms[key] < 1:
-                del self._terms[key]
-
-    @property
-    def terms(self):
-        return {k for k, v in self._terms.items() if v > 1}
-
-
 class Cache(object):
     def __init__(self):
         self.song = None
         self.running = False
         self.last_songs = []
         self.last_song = None
-        self.nearby_artists = []
         self.weather = None
         self.weather_at = None
         self.found = False
-        self.previous_terms = PreviousTerms()
         self.miss_factor = 1
         self.last_closest = -1
         self.new_time = 0
@@ -273,6 +173,7 @@ class Cache(object):
         self.current_request = None
         self.played_number = 0
         self.played_duration = 0
+        self.previous_terms = []
 
     @property
     def prefer_newly_added(self):
@@ -295,7 +196,8 @@ class Cache(object):
 
     def enqueue_song(self, song, *, is_new):
         self.adjust_time(song, is_new=is_new)
-        self.previous_terms.add(song)
+        self.previous_terms.append(String(song.get_title(with_version=False)))
+        self.previous_terms = self.previous_terms[-5:]
 
     def get_weather(self, configuration):
         if not WEATHER:
@@ -310,10 +212,6 @@ class Cache(object):
         self.weather = configuration.get_weather()
         self.weather_at = datetime.now()
         return self.weather
-
-    def set_nearby_artist(self, configuration):
-        if configuration.location or configuration.geohash:
-            self.nearby_artists = configuration.get_performing_artists()
 
     def reset_closest(self):
         self.last_closest = -1
@@ -351,7 +249,6 @@ class AutoQueueBase(object):
         )
         self.has_gaia = self.similarity.has_gaia()
         self.player = player
-        self.cache.set_nearby_artist(self.configuration)
         self.requests = Requests()
 
     @property
@@ -397,14 +294,10 @@ class AutoQueueBase(object):
         if not self.cache.played_number:
             return False
 
-        average = (self.cache.played_duration / self.cache.played_number)
-        print(f'>>> {duration=}, {average=}')
-        if  average > target  and duration > average:
-            print(f'Song too long')
-            return True
-
-        if  average < target and duration < average:
-            print(f'Song too short')
+        average = self.cache.played_duration / self.cache.played_number
+        print(f">>> {duration=}, {average=}")
+        if average > target and duration > average:
+            print("Song too long")
             return True
 
         return False
@@ -492,7 +385,9 @@ class AutoQueueBase(object):
             if not self.is_playing_or_in_queue(f)
         ]
         if not all_requests:
-            newly_added = list(self.get_newest(days=1)) if self.cache.prefer_newly_added else []
+            newly_added = (
+                list(self.get_newest(days=1)) if self.cache.prefer_newly_added else []
+            )
             if newly_added:
                 print(f"{len(newly_added)} newly added songs found.")
                 print("Looking for recently added songs:")
@@ -569,6 +464,8 @@ class AutoQueueBase(object):
 
     def analyzed(self):
         song = self.cache.last_song
+        if not song:
+            return
         filename = song.get_filename()
         if not filename:
             return
@@ -611,7 +508,7 @@ class AutoQueueBase(object):
             self.continue_queueing()
             return
 
-        if self.cache.current_request:
+        if self.cache.current_request and self.cache.last_song:
             song = self.cache.last_song
             filename = song.get_filename()
             if not filename:
@@ -712,21 +609,25 @@ class AutoQueueBase(object):
     def perform_search(self, search, results):
         start_time = time()
         songs = {
-            song.get_filename(): song for song in
-            self.player.search(search, restrictions=self.configuration.restrictions)
+            song.get_filename(): song
+            for song in self.player.search(
+                search, restrictions=self.configuration.restrictions
+            )
         }
         song_values = set(songs.values())
         found = set()
         for result in results:
-            filename = str(result.get('filename'))
+            filename = str(result.get("filename"))
             song = None
             if filename:
                 song = songs.get(filename)
                 if song:
-                    result['song'] = song
+                    result["song"] = song
                     found.add(song)
                     continue
-                print(f'>>>>> song with {filename=} not found <<<<')
+
+                print(f">>>>> song with {filename=} not found <<<<")
+                self.remove_missing_track(filename)
             if not song:
                 for song in song_values - found:
                     if self.satisfies(song, result):
@@ -746,22 +647,19 @@ class AutoQueueBase(object):
             timeout=TIMEOUT,
         )
 
-    def adjust_scores(self, results, invert_scores):
+    def adjust_scores(self, results):
         """Adjust scores based on similarity with previous song and context."""
         if self.configuration.contextualize:
             self.context = Context(
                 context_date=self.eoq,
                 configuration=self.configuration,
                 cache=self.cache,
-                request=self.get_current_request(),
             )
-            maximum_score = max(result["score"] for result in results) + 1
             for result in results[:]:
                 if "song" not in result:
                     results.remove(result)
                     continue
-                if invert_scores:
-                    result["score"] = maximum_score - result["score"]
+
                 self.context.adjust_score(result)
                 yield
 
@@ -803,7 +701,7 @@ class AutoQueueBase(object):
                             % (wait_seconds / ONE_DAY,)
                         )
                         continue
-                    print("score: %03.2f" % (rating,))
+                    print(f"score: {rating}")
                     if not relax and self.wrong_duration(song):
                         continue
                     if (
@@ -828,8 +726,8 @@ class AutoQueueBase(object):
             self.cache.found = True
             return
 
-    def get_newest(self, days: Optional[int] = None) -> List[str]:
-        results = set()
+    def get_newest(self, days: Optional[int] = None) -> Set[str]:
+        results: Set[str] = set()
         days = days or 7
         while not results:
             print(f"{days=}")
@@ -855,7 +753,7 @@ class AutoQueueBase(object):
             return
         self.search_filenames(results)
         if not self.cache.current_request:
-            for _ in self.adjust_scores(results, invert_scores=False):
+            for _ in self.adjust_scores(results):
                 yield
         if not results:
             return
@@ -932,18 +830,3 @@ class AutoQueueBase(object):
         """Return the currently playing song plus the songs in the queue."""
         queue = self.player.get_songs_in_queue() or []
         return [self.cache.song] + queue
-
-    def get_ordered_similar_by_tag(self, last_song):
-        """Get similar tracks by tag."""
-        tag_set = set(last_song.get_non_geo_tags())
-        if not tag_set:
-            return []
-        search = self.construct_search(tags=list(tag_set))
-        songs = sorted(
-            [
-                (tag_score(song, tag_set), song.get_filename())
-                for song in self.player.search(search)
-            ],
-            reverse=True,
-        )
-        return [{"score": score, "filename": filename} for score, filename in songs]
