@@ -8,11 +8,13 @@ This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation
 """
+import json
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 
 from gi.repository import GLib, Gtk
-from quodlibet import _, app, config
+from quodlibet import _, app, config, formats
 from quodlibet.plugins import PluginConfig, PluginConfigMixin
 from quodlibet.plugins.events import EventPlugin
 from quodlibet.qltk.entry import UndoEntry
@@ -21,6 +23,7 @@ from quodlibet.util import copool
 from autoqueue import AutoQueueBase
 from autoqueue.player import PlayerBase, SongBase
 
+BPM = "bpm"
 INT_SETTINGS = {
     "desired_queue_length": {"value": 4440, "label": "queue (seconds)"},
     "number": {"value": 40, "label": "number of tracks to look up"},
@@ -227,6 +230,7 @@ class AutoQueue(AutoQueueBase, EventPlugin, PluginConfigMixin):
         self.configuration.geohash = self.config_get("geohash", default="")
         self.configuration.birthdays = self.config_get("birthdays", default="")
         self.configuration.use_gaia = self.config_get_bool("use_gaia", default=True)
+        self.seen_files = set()
 
     def enabled(self):
         """Handle user enabling the plugin."""
@@ -251,10 +255,51 @@ class AutoQueue(AutoQueueBase, EventPlugin, PluginConfigMixin):
             return
         ssong = Song(song)
         GLib.idle_add(self.on_song_started, ssong)
+        GLib.idle_add(self.add_bpms)
 
     def plugin_on_removed(self, songs):
         """Triggered when songs are removed from the library."""
         GLib.idle_add(self.on_removed, [Song(s) for s in songs])
+
+    def add_bpms(self):
+        for sig_file in Path("/tmp/").rglob("*.sig"):
+            audio_filename = str(sig_file)[4:-4]
+            if audio_filename in self.seen_files:
+                continue
+            self.seen_files.add(audio_filename)
+
+            with sig_file.open() as sig:
+                try:
+                    jsonsig = json.load(sig)
+                except Exception:
+                    print(f"Could not load '{sig}'")
+                    continue
+            try:
+                bpm = jsonsig.get("rhythm", {}).get(BPM)
+            except (ValueError, TypeError):
+                continue
+            try:
+                audiofile = Path(audio_filename)
+                if not audiofile.exists():
+                    print(f"{audio_filename} NO LONGER EXISTS")
+                    continue
+                song = formats.MusicFile(audio_filename)
+            except Exception as e:
+                print(e)
+            if not song:
+                return
+            if song.get(BPM):
+                try:
+                    float(song.get(BPM))
+                except (ValueError, TypeError):
+                    pass
+                else:
+                    continue
+            try:
+                song[BPM] = bpm
+                song.write()
+            except Exception as e:
+                print(repr(e))
 
     def PluginPreferences(self, parent):
         """Set and unset preferences from gui or config file."""
@@ -262,15 +307,14 @@ class AutoQueue(AutoQueueBase, EventPlugin, PluginConfigMixin):
         table = Gtk.Table(n_columns=2)
         table.set_col_spacings(3)
         table.props.expand = False
-        for (j, (setting, configuration)) in enumerate(BOOL_SETTINGS.items()):
-
+        for j, (setting, configuration) in enumerate(BOOL_SETTINGS.items()):
             button = plugin_config.ConfigCheckButton(
                 configuration["label"], setting, populate=True
             )
             i = j % 2
             table.attach(button, i, i + 1, j, j + 1)
             last = j
-        for (j, (setting, configuration)) in enumerate(
+        for j, (setting, configuration) in enumerate(
             list(INT_SETTINGS.items()) + list(STR_SETTINGS.items())
         ):
             index = last + j + 1
@@ -302,7 +346,7 @@ class Player(PlayerBase):
         copool.add(method, *args, **kwargs)
 
     def construct_album_search(self, album, album_artist=None, album_id=None):
-        """"Construct a search that looks for songs from this album."""
+        """ "Construct a search that looks for songs from this album."""
         if not album:
             return
         search = 'album="%s"' % escape(album)
@@ -402,4 +446,8 @@ class Player(PlayerBase):
         """Return (wrapped) song objects for the songs in the queue."""
         if app.window is None:
             return []
+        return [Song(song) for song in app.window.playlist.q.get()]
+        return [Song(song) for song in app.window.playlist.q.get()]
+        return [Song(song) for song in app.window.playlist.q.get()]
+        return [Song(song) for song in app.window.playlist.q.get()]
         return [Song(song) for song in app.window.playlist.q.get()]

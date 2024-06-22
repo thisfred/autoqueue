@@ -47,15 +47,15 @@ place is best shunned and left uninhabited.
 
 import random
 import re
+from collections import deque
 from datetime import datetime, timedelta
-from time import time
 from typing import Optional, Set
 
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
 
 from autoqueue.blocking import Blocking
-from autoqueue.context import Context, String
+from autoqueue.context import Context
 from autoqueue.request import Requests
 
 try:
@@ -173,7 +173,7 @@ class Cache(object):
         self.current_request = None
         self.played_number = 0
         self.played_duration = 0
-        self.previous_terms = []
+        self.previous_songs = deque([])
 
     @property
     def prefer_newly_added(self):
@@ -183,10 +183,8 @@ class Cache(object):
     def adjust_time(self, song, *, is_new):
         duration = song.get_length()
         if is_new:
-            print("enqueued new song")
             self.new_time += duration
         else:
-            print("enqueued old song")
             self.old_time += duration
         smallest = min(self.new_time, self.old_time)
         self.new_time -= smallest
@@ -196,8 +194,11 @@ class Cache(object):
 
     def enqueue_song(self, song, *, is_new):
         self.adjust_time(song, is_new=is_new)
-        self.previous_terms.append(String(song.get_title(with_version=False)))
-        self.previous_terms = self.previous_terms[-5:]
+        self.previous_songs.append(song)
+        while len(self.previous_songs) > 1 and sum(
+            s.get_length() for s in list(self.previous_songs)[1:]
+        ) > (2 * DEFAULT_LENGTH):
+            self.previous_songs.popleft()
 
     def get_weather(self, configuration):
         if not WEATHER:
@@ -250,6 +251,15 @@ class AutoQueueBase(object):
         self.has_gaia = self.similarity.has_gaia()
         self.player = player
         self.requests = Requests()
+        newest = {
+            song.get_filename()
+            for song in self.player.search(
+                self.player.construct_recently_added_search(days=7)
+            )
+        }
+        for song in self.get_last_songs():
+            if song is not None:
+                self.cache.enqueue_song(song, is_new=song.get_filename() in newest)
 
     @property
     def use_gaia(self):
@@ -262,7 +272,7 @@ class AutoQueueBase(object):
 
     def is_playing_or_in_queue(self, filename):
         for qsong in self.get_last_songs():
-            if qsong.get_filename() == filename:
+            if qsong is not None and qsong.get_filename() == filename:
                 return True
         return False
 
@@ -297,7 +307,6 @@ class AutoQueueBase(object):
         average = self.cache.played_duration / self.cache.played_number
         print(f">>> {duration=}, {average=}")
         if average > target and duration > average:
-            print("Song too long")
             return True
 
         return False
@@ -390,7 +399,6 @@ class AutoQueueBase(object):
             )
             if newly_added:
                 print(f"{len(newly_added)} newly added songs found.")
-                print("Looking for recently added songs:")
                 self.similarity.get_ordered_gaia_tracks_from_list(
                     filename,
                     newly_added,
@@ -533,7 +541,6 @@ class AutoQueueBase(object):
         if not filename:
             return
         if self.use_gaia:
-            print("Analyzing: %s" % filename)
             self.similarity.analyze_track(
                 filename,
                 reply_handler=reply_handler,
@@ -607,7 +614,6 @@ class AutoQueueBase(object):
         return songs[0]
 
     def perform_search(self, search, results):
-        start_time = time()
         songs = {
             song.get_filename(): song
             for song in self.player.search(
@@ -627,17 +633,14 @@ class AutoQueueBase(object):
                     continue
 
                 print(f">>>>> song with {filename=} not found <<<<")
-                self.remove_missing_track(filename)
             if not song:
                 for song in song_values - found:
                     if self.satisfies(song, result):
                         result["song"] = song
                         found.add(song)
                         break
-        print("quodlibet search took %f s" % (time() - start_time,))
 
     def remove_missing_track(self, filename):
-        print("Remove similarity for %s" % filename)
         if not isinstance(filename, str):
             filename = str(filename, "utf-8")
         self.similarity.remove_track_by_filename(
@@ -676,7 +679,6 @@ class AutoQueueBase(object):
         for number, result in enumerate(sorted(results, key=lambda x: x["score"])):
             song = result.get("song")
             if not song:
-                print("'song' not found in %s" % result)
                 continue
             self.log_lookup(number, result)
             filename = song.get_filename()
@@ -688,7 +690,7 @@ class AutoQueueBase(object):
                 if rating is NotImplemented:
                     rating = THRESHOLD
                 for reason in result.get("reasons", []):
-                    print("  %s" % (reason,))
+                    print("   %s" % (reason,))
 
                 if number_of_results > 1:
                     wait_seconds = (1 + (song.get_length() / 6)) * ONE_DAY - (
@@ -701,7 +703,6 @@ class AutoQueueBase(object):
                             % (wait_seconds / ONE_DAY,)
                         )
                         continue
-                    print(f"score: {rating}")
                     if not relax and self.wrong_duration(song):
                         continue
                     if (
@@ -713,7 +714,6 @@ class AutoQueueBase(object):
                             self.configuration.favor_new and song.get_playcount() == 0
                         )
                     ):
-                        print("randomly skipped")
                         continue
                 if not relax and not self.allowed(song, blocked_artists):
                     continue
@@ -730,21 +730,15 @@ class AutoQueueBase(object):
         results: Set[str] = set()
         days = days or 7
         while not results:
-            print(f"{days=}")
             search = self.player.construct_recently_added_search(days=days)
             results = {
                 song.get_filename()
-                for song in sorted(
-                    self.player.search(search),
-                    key=lambda s: s.get_added(),
-                    reverse=True,
-                )
+                for song in self.player.search(search)
                 if song
                 and song.get_filename()
                 and not self.is_playing_or_in_queue(song.get_filename())
             }
             days *= 2
-        print(f"{len(results)=}")
 
         return results
 

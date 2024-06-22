@@ -86,7 +86,7 @@ class Context(object):
                 if predicate.sentence:
                     sentences.append(predicate.sentence)
                     continue
-                predicate.positive_score(result, applies)
+                predicate.score(result, applies)
 
         if sentences:
             title = result["song"].get_title(with_version=False)
@@ -110,7 +110,21 @@ class Context(object):
         self.add_last_song_predicates()
 
     def _add_common_terms(self):
-        self.predicates.extend(self.cache.previous_terms)
+        previous_terms: List[Predicate] = []
+        bpm = None
+        for song in self.cache.previous_songs:
+            bpm = song.song.get("bpm")
+            previous_terms.append(String(song.get_title(with_version=False)))
+            previous_terms.append(Tags(song.get_non_geo_tags()))
+            if (year := song.get_year()) and year != self.date.year:
+                previous_terms.append(SongYear(year))
+        if bpm:
+            try:
+                self.predicates.append(BPM(float(bpm)))
+            except (ValueError, TypeError):
+                pass
+
+        self.predicates.extend(previous_terms)
 
     def _add_geohash(self):
         self.predicates.append(Geohash(self.cache.last_song.get_geohashes()))
@@ -127,7 +141,7 @@ class Context(object):
                 word.strip().lower()
                 for word in self.configuration.extra_context.split(",")
             )
-            self.predicates.extend([String(word) for word in words])
+            self.predicates.append(Tags(t.split(":")[-1] for t in words))
 
     def add_birthday_predicates(self):
         for name_date in self.configuration.birthdays.split(","):
@@ -185,7 +199,6 @@ class Context(object):
 
     @staticmethod
     def get_other_conditions(weather):
-        predicates = []
         for condition in weather.detailed_status.lower().split("/"):
             condition = condition.strip()
             with open("weather_conditions.txt", "a") as weather_file:
@@ -193,7 +206,7 @@ class Context(object):
             if condition:
                 results = []
                 unmodified = condition.split()[-1]
-                if unmodified in (
+                if unmodified in {
                     "rain",
                     "rainy",
                     "drizzle",
@@ -204,18 +217,10 @@ class Context(object):
                     "mist",
                     "misty",
                     "fair",
-                ):
+                }:
                     continue
-                if unmodified not in results:
-                    results.append(unmodified)
-                if unmodified[-1] == "y":
-                    if unmodified[-2] == unmodified[-3]:
-                        results.append(unmodified[:-2])
-                    else:
-                        results.append(unmodified[:-1])
-                if results:
-                    predicates.extend([String(c) for c in results])
-        return predicates
+                results.append(condition)
+        return [String(c) for c in results]
 
     def add_location_predicates(self):
         if self.configuration.geohash:
@@ -262,13 +267,47 @@ class Predicate(object):
     def get_factor(self, song):
         return 1.0
 
-    def positive_score(self, result, applies):
+    def score(self, result, applies):
         factor = self.get_factor(result["song"])
         result["score"] /= 1 + factor
-        result.setdefault("reasons", []).append((self, applies))
+        result.setdefault("reasons", []).append((self, applies, factor))
 
     def __repr__(self):
         return "<%s>" % self.__class__.__name__
+
+
+class Tags(Predicate):
+    def __init__(self, tags):
+        self.tags = set(tags)
+
+    def applies_to_song(self, song):
+        return self.tags & set(song.get_non_geo_tags())
+
+    def get_factor(self, song):
+        song_tags = set(song.get_non_geo_tags())
+        return len(self.tags & song_tags) / len(self.tags | song_tags)
+
+
+class BPM(Predicate):
+    def __init__(self, bpm: float):
+        self.bpm = bpm
+
+    def applies_to_song(self, song):
+        try:
+            return float(song.song.get("bpm"))
+        except (ValueError, TypeError):
+            return False
+
+    def score(self, result, applies):
+        factor = self.get_factor(result["song"])
+        result["score"] * factor
+        result.setdefault("reasons", []).append((self, applies, factor))
+
+    def get_factor(self, song):
+        try:
+            return abs(float(song.song.get("bpm")) - self.bpm) / 5
+        except (ValueError, TypeError):
+            return 1
 
 
 class Terms(Predicate):
@@ -401,12 +440,21 @@ class SongYear(Predicate):
         return self.was_released(song) or self.artist_died(song)
 
     def was_released(self, song):
-        return self.year == song.get_year()
+        if not song.get_year():
+            return False
+
+        return abs(self.year - song.get_year()) <= 5
 
     def artist_died(self, song):
         year = str(self.year)
         artist_tags = get_artist_tags(song)
         return "dead" in artist_tags and any(t.startswith(year) for t in artist_tags)
+
+    def get_factor(self, song):
+        if self.was_released(song):
+            return 1.0 / (1.0 + abs(self.year - song.get_year()))
+        else:
+            return 1.0
 
 
 class String(Terms):
@@ -898,7 +946,7 @@ class Night(Period):
 class DayTime(Period):
     period = ONE_DAY
     decay = SIX_HOURS
-    sentence = "It is day"
+    sentence = "It is daytime"
 
     def __init__(self, now):
         super(DayTime, self).__init__(

@@ -151,7 +151,7 @@ class GaiaAnalysis(Thread):
             return
 
         signame = self.get_signame(filename)
-        if not (os.path.exists(signame) or self.essentia_analyze(filename, signame)):
+        if not (signame.exists() or self.essentia_analyze(filename, signame)):
             return
 
         try:
@@ -171,11 +171,10 @@ class GaiaAnalysis(Thread):
         except Exception as exc:
             print(exc)
 
-    @staticmethod
-    def load_point(signame: str) -> Point:
+    def load_point(self, signame: Path) -> Point:
         """Load point data from JSON file."""
         point = Point()
-        with open(signame, "r") as sig:
+        with signame.open() as sig:
             jsonsig = json.load(sig)
             if jsonsig.get("metadata", {}).get("tags"):
                 del jsonsig["metadata"]["tags"]
@@ -184,18 +183,26 @@ class GaiaAnalysis(Thread):
         return point
 
     @staticmethod
-    def get_signame(full_path: str) -> str:
+    def get_signame(full_path: str) -> Path:
         """Get the path for the analysis data file for this filename."""
-        filename = full_path.replace("/", "")[-200:]
-        return os.path.join("/tmp", filename + ".sig")
+        while full_path.startswith("/"):
+            full_path = full_path[1:]
+        audio_file_path = Path(full_path)
+        path = Path("/tmp") / audio_file_path.with_suffix(
+            audio_file_path.suffix + ".sig"
+        )
+        path.parent.mkdir(exist_ok=True, parents=True)
+        return path
 
     @staticmethod
-    def essentia_analyze(filename, signame: str) -> bool:
+    def essentia_analyze(filename, signame: Path) -> bool:
         """Perform essentia analysis of an audio file."""
         env = os.environ.copy()
         # env["LD_LIBRARY_PATH"] = "/usr/local/lib"
         try:
-            subprocess.check_call([ESSENTIA_EXTRACTOR_PATH, filename, signame], env=env)
+            subprocess.check_call(
+                [ESSENTIA_EXTRACTOR_PATH, filename, str(signame)], env=env
+            )
             return True
 
         except subprocess.CalledProcessError:

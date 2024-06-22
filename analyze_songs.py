@@ -34,30 +34,31 @@ class AnalyzeSongsPlugin(SongsMenuPlugin):
     def __init__(self, *args):
         SongsMenuPlugin.__init__(self, *args)
         bus = dbus.SessionBus()
-        sim = bus.get_object(
-            'org.autoqueue', '/org/autoqueue/Similarity')
+        sim = bus.get_object("org.autoqueue", "/org/autoqueue/Similarity")
         self.similarity = dbus.Interface(
-            sim, dbus_interface='org.autoqueue.SimilarityInterface')
+            sim, dbus_interface="org.autoqueue.SimilarityInterface"
+        )
 
     def plugin_songs(self, songs):
         """Add the work to the coroutine pool."""
-        print('added {} songs'.format(len(songs)))
+        print("added {} songs".format(len(songs)))
         GLib.idle_add(self.doit, songs)
 
     def doit(self, songs):
         filenames = []
         for song in songs:
-            filename = song('~filename')
+            filename = song("~filename")
             try:
-                filename.encode('utf-8')
+                filename.encode("utf-8")
             except UnicodeEncodeError:
                 try:
-                    filename = filename.decode('utf-8')
+                    filename = filename.decode("utf-8")
                 except (UnicodeDecodeError, AttributeError):
                     print(
-                        "Could not figure out filename encoding: %r" %
-                        song('~filename'))
+                        "Could not figure out filename encoding: %r" % song("~filename")
+                    )
                     continue
             filenames.append(filename)
         self.similarity.analyze_tracks(
-            filenames, reply_handler=no_op, error_handler=no_op)
+            filenames, reply_handler=no_op, error_handler=no_op
+        )
