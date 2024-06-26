@@ -48,10 +48,6 @@ STR_SETTINGS = {
         "value": "",
         "label": "birthdays, comma separated list of name:mm/dd values",
     },
-    "location": {
-        "value": "",
-        "label": "location ([City], [State] or [City], [Country])",
-    },
     "geohash": {"value": "", "label": "geohash (see geohash.org)"},
     "extra_context": {"value": "", "label": "extra context"},
 }
@@ -226,7 +222,6 @@ class AutoQueue(AutoQueueBase, EventPlugin, PluginConfigMixin):
         self.configuration.use_groupings = self.config_get_bool(
             "use_groupings", default=True
         )
-        self.configuration.location = self.config_get("location", default="")
         self.configuration.geohash = self.config_get("geohash", default="")
         self.configuration.birthdays = self.config_get("birthdays", default="")
         self.configuration.use_gaia = self.config_get_bool("use_gaia", default=True)

@@ -128,7 +128,6 @@ class Configuration(object):
         self.favor_new = True
         self.use_lastfm = True
         self.use_groupings = True
-        self.location = ""
         self.geohash = ""
         self.birthdays = ""
         self.use_gaia = True

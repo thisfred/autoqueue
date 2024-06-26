@@ -2,6 +2,7 @@
 
 import re
 from datetime import date, datetime, time, timedelta
+from os.path import commonprefix
 from typing import List, Optional, Pattern, Tuple
 
 from dateutil.easter import easter  # type: ignore[import-untyped]
@@ -84,19 +85,22 @@ class Context(object):
             applies = predicate.applies_to_song(song)
             if applies and in_context:
                 if predicate.sentence:
-                    sentences.append(predicate.sentence)
+                    sentences.append((predicate.sentence, predicate.scale))
                     continue
                 predicate.score(result, applies)
 
         if sentences:
             title = result["song"].get_title(with_version=False)
-            scores = self.model.predict([[sentence, title] for sentence in sentences])
-            for score, sentence in zip(scores, sentences):
-                result["score"] = result["score"] / (1 + score)
+            scores = self.model.predict(
+                [[sentence, title] for sentence, _ in sentences]
+            )
+            for score, (sentence, scale) in zip(scores, sentences):
+                scaled = 1 / (1 + score * scale)
+                result["score"] = result["score"] * scaled
 
                 if score > 0.3:
                     result.setdefault("reasons", []).append(
-                        f"{title} :: {sentence} :: {score}"
+                        f"{title} :: {sentence} :: {scaled}"
                     )
 
     def build_predicates(self):
@@ -107,17 +111,23 @@ class Context(object):
         self.add_weather_predicates()
         self.add_birthday_predicates()
         self.add_extra_predicates()
-        self.add_last_song_predicates()
+        self.add_previous_songs_predicates()
 
-    def _add_common_terms(self):
+    def add_previous_songs_predicates(self):
         previous_terms: List[Predicate] = []
         bpm = None
-        for song in self.cache.previous_songs:
+        number_of_songs = len(self.cache.previous_songs)
+        for i, song in enumerate(self.cache.previous_songs):
             bpm = song.song.get("bpm")
-            previous_terms.append(String(song.get_title(with_version=False)))
-            previous_terms.append(Tags(song.get_non_geo_tags()))
+            scale = (i + 1) / number_of_songs
+            previous_terms.append(
+                String(song.get_title(with_version=False), scale=scale)
+            )
+            previous_terms.append(Tags(song.get_non_geo_tags(), scale=scale))
             if (year := song.get_year()) and year != self.date.year:
-                previous_terms.append(SongYear(year))
+                previous_terms.append(SongYear(year, scale=scale))
+            previous_terms.append(Geohash(song.get_geohashes(), scale=scale))
+
         if bpm:
             try:
                 self.predicates.append(BPM(float(bpm)))
@@ -125,15 +135,6 @@ class Context(object):
                 pass
 
         self.predicates.extend(previous_terms)
-
-    def _add_geohash(self):
-        self.predicates.append(Geohash(self.cache.last_song.get_geohashes()))
-
-    def add_last_song_predicates(self):
-        if not self.cache.last_song:
-            return
-        self._add_common_terms()
-        self._add_geohash()
 
     def add_extra_predicates(self):
         if self.configuration.extra_context:
@@ -257,6 +258,7 @@ class Context(object):
 
 class Predicate(object):
     sentence: Optional[str] = None
+    scale = 1.0
 
     def applies_to_song(self, song):
         raise NotImplementedError
@@ -267,9 +269,16 @@ class Predicate(object):
     def get_factor(self, song):
         return 1.0
 
+    def scaled(self, factor):
+        if factor > 1:
+            factor *= self.scale
+        elif factor < 1:
+            factor = 1 - ((1 - factor) * self.scale)
+        return factor
+
     def score(self, result, applies):
-        factor = self.get_factor(result["song"])
-        result["score"] /= 1 + factor
+        factor = 1 / (1 + self.get_factor(result["song"]) * self.scale)
+        result["score"] *= factor
         result.setdefault("reasons", []).append((self, applies, factor))
 
     def __repr__(self):
@@ -277,8 +286,9 @@ class Predicate(object):
 
 
 class Tags(Predicate):
-    def __init__(self, tags):
+    def __init__(self, tags, scale=1.0):
         self.tags = set(tags)
+        self.scale = scale
 
     def applies_to_song(self, song):
         return self.tags & set(song.get_non_geo_tags())
@@ -299,8 +309,8 @@ class BPM(Predicate):
             return False
 
     def score(self, result, applies):
-        factor = self.get_factor(result["song"])
-        result["score"] * factor
+        factor = self.scaled(self.get_factor(result["song"]))
+        result["score"] *= factor
         result.setdefault("reasons", []).append((self, applies, factor))
 
     def get_factor(self, song):
@@ -386,42 +396,42 @@ class Period(Terms):
 
 
 class Geohash(Predicate):
-    def __init__(self, geohashes):
+    def __init__(self, geohashes, scale=1.0):
         self.geohashes = geohashes
+        self.scale = scale
 
     def applies_to_song(self, song):
         for self_hash in self.geohashes:
             for other_hash in song.get_geohashes():
-                if other_hash.startswith(self_hash[:2]):
-                    return True
+                prefix = commonprefix((self_hash, other_hash))
+                if prefix:
+                    return prefix
 
         return False
 
     def __repr__(self):
         return "<Geohash %r>" % self.geohashes
 
+    def score(self, result, applies):
+        factor = self.scaled(self.get_factor(result["song"]))
+        result["score"] *= factor
+        result.setdefault("reasons", []).append((self, applies, factor))
+
     def get_factor(self, song):
-        best_score = 0.0
+        best_score = 1.0
         for self_hash in self.geohashes:
             if not self_hash:
                 continue
             for other_hash in song.get_geohashes():
                 if not other_hash:
                     continue
-                if self_hash[0] != other_hash[0]:
-                    continue
 
-                shortest = min(len(self_hash), len(other_hash))
-                for i, character in enumerate(self_hash):
-                    if i >= len(other_hash):
-                        break
+                prefix = commonprefix((self_hash, other_hash))
 
-                    if character != other_hash[i]:
-                        break
+                score = 1 / (len(prefix) + 1)
 
-                    score = i / shortest
-                    if score > best_score:
-                        best_score = score
+                if score < best_score:
+                    best_score = score
 
         return best_score
 
@@ -433,8 +443,9 @@ class Year(Terms):
 
 
 class SongYear(Predicate):
-    def __init__(self, year):
+    def __init__(self, year, scale=1.0):
         self.year = year
+        self.scale = scale
 
     def applies_to_song(self, song):
         return self.was_released(song) or self.artist_died(song)
@@ -458,10 +469,11 @@ class SongYear(Predicate):
 
 
 class String(Terms):
-    def __init__(self, term):
+    def __init__(self, term, scale=1.0):
         super(String, self).__init__()
         self.terms = (term,)
         self.sentence = term
+        self.scale = scale
 
     def __repr__(self):
         return "<String %r>" % self.terms
