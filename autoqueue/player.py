@@ -1,6 +1,7 @@
 """Abstract Base Classes for interaction with music player."""
 
 from abc import ABCMeta, abstractmethod
+from collections.abc import Sequence
 from datetime import datetime
 
 
@@ -88,9 +89,9 @@ class SongBase(metaclass=ABCMeta):
         days = float(max((now - datetime.fromtimestamp(last_started)).days, 1))
         return 1 / days
 
-    def get_stripped_tags(self, prefix='', exclude_prefix=''):
+    def get_stripped_tags(self, prefix="", exclude_prefix=""):
         """Return a set of stripped tags."""
-        tags = self.get_tags()
+        tags = split_commas(self.get_tags())
         if not tags:
             return []
         tagset = set([])
@@ -106,25 +107,34 @@ class SongBase(metaclass=ABCMeta):
             tagset.add(stripped)
         return tagset
 
-    def get_non_geo_tags(self, prefix='', exclude_prefix=''):
+    def get_non_geo_tags(self, prefix="", exclude_prefix=""):
         """Get all the song tags unrelated to geotagging."""
-        song_tags = self.get_stripped_tags(
-            prefix=prefix, exclude_prefix=exclude_prefix)
+        song_tags = [
+            *self.get_stripped_tags(prefix=prefix, exclude_prefix=exclude_prefix),
+            *self.get_artists(),
+            self.get_title(with_version=False),
+        ]
         return [
-            t for t in song_tags if
-            not t.startswith('geohash:') and
-            not t == 'geotagged']
+            t
+            for t in song_tags
+            if not t.startswith("geohash:") and not t == "geotagged"
+        ]
 
     def get_geohashes(self):
         """Get all the geohashes from this song."""
         song_tags = self.get_stripped_tags()
-        geohashes = [
-            t.split(':')[1] for t in song_tags if t.startswith('geohash:')]
+        geohashes = [t.split(":")[1] for t in song_tags if t.startswith("geohash:")]
         return geohashes
 
 
-class PlayerBase(metaclass=ABCMeta):
+def split_commas(tags: Sequence[str]) -> Sequence[str]:
+    result = []
+    for tag in tags:
+        result.extend(tag.split(","))
+    return result
 
+
+class PlayerBase(metaclass=ABCMeta):
     @abstractmethod
     def construct_album_search(self, album, album_artist=None, album_id=None):
         """Construct a search for songs from this album."""
@@ -168,7 +178,7 @@ class PlayerBase(metaclass=ABCMeta):
     @staticmethod
     def execute_async(method, *args, **kwargs):
         """Override this if the player can execute methods asynchronously."""
-        if 'funcid' in kwargs:
-            del kwargs['funcid']
+        if "funcid" in kwargs:
+            del kwargs["funcid"]
         for _ in method(*args, **kwargs):
             pass

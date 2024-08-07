@@ -49,7 +49,7 @@ import random
 import re
 from collections import deque
 from datetime import datetime, timedelta
-from typing import Optional, Set
+from typing import Set
 
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
@@ -173,6 +173,8 @@ class Cache(object):
         self.played_number = 0
         self.played_duration = 0
         self.previous_songs = deque([])
+        self.newly_added = set()
+        self.newest_days = 1
 
     @property
     def prefer_newly_added(self):
@@ -191,7 +193,7 @@ class Cache(object):
         self.played_duration += duration
         self.played_number += 1
 
-    def enqueue_song(self, song, *, is_new):
+    def enqueue_song(self, song, *, is_new=False):
         self.adjust_time(song, is_new=is_new)
         self.previous_songs.append(song)
         while len(self.previous_songs) > 1 and sum(
@@ -250,15 +252,9 @@ class AutoQueueBase(object):
         self.has_gaia = self.similarity.has_gaia()
         self.player = player
         self.requests = Requests()
-        newest = {
-            song.get_filename()
-            for song in self.player.search(
-                self.player.construct_recently_added_search(days=7)
-            )
-        }
         for song in self.get_last_songs():
             if song is not None:
-                self.cache.enqueue_song(song, is_new=song.get_filename() in newest)
+                self.cache.enqueue_song(song)
 
     @property
     def use_gaia(self):
@@ -282,17 +278,17 @@ class AutoQueueBase(object):
         if self.requests.has(filename):
             return True
 
-        for artist in song.get_artists():
-            if artist in blocked_artists:
-                print("artist blocked")
-                return False
-
         date_search = re.compile(
             "([0-9]{4}-)?%02d-%02d" % (self.eoq.month, self.eoq.day)
         )
         for tag in song.get_stripped_tags():
             if date_search.match(tag):
                 return True
+
+        for artist in song.get_artists():
+            if artist in blocked_artists:
+                print("artist blocked")
+                return False
 
         return True
 
@@ -393,14 +389,17 @@ class AutoQueueBase(object):
             if not self.is_playing_or_in_queue(f)
         ]
         if not all_requests:
-            newly_added = (
-                list(self.get_newest(days=1)) if self.cache.prefer_newly_added else []
+            newest = (
+                list(self.get_newest(cache_ok=False))
+                if self.cache.prefer_newly_added
+                else []
             )
-            if newly_added:
-                print(f"{len(newly_added)} newly added songs found.")
+
+            if newest:
+                print(f"{len(newest)} newly added songs found.")
                 self.similarity.get_ordered_gaia_tracks_from_list(
                     filename,
-                    newly_added,
+                    newest,
                     reply_handler=self.gaia_reply_handler,
                     error_handler=self.gaia_error_handler,
                     timeout=TIMEOUT,
@@ -689,7 +688,7 @@ class AutoQueueBase(object):
                 if rating is NotImplemented:
                     rating = THRESHOLD
                 for reason in result.get("reasons", []):
-                    print("   %s" % (reason,))
+                    print(f"   {reason}")
 
                 if number_of_results > 1:
                     wait_seconds = (1 + (song.get_length() / 6)) * ONE_DAY - (
@@ -725,11 +724,15 @@ class AutoQueueBase(object):
             self.cache.found = True
             return
 
-    def get_newest(self, days: Optional[int] = None) -> Set[str]:
-        results: Set[str] = set()
-        days = days or 7
-        while not results:
-            search = self.player.construct_recently_added_search(days=days)
+    def get_newest(self, cache_ok: bool = True) -> Set[str]:
+        results: Set[str] = self.cache.newly_added if cache_ok else set()
+        if cache_ok and results:
+            return results
+
+        while True:
+            search = self.player.construct_recently_added_search(
+                days=self.cache.newest_days
+            )
             results = {
                 song.get_filename()
                 for song in self.player.search(search)
@@ -737,8 +740,12 @@ class AutoQueueBase(object):
                 and song.get_filename()
                 and not self.is_playing_or_in_queue(song.get_filename())
             }
-            days *= 2
+            if len(results) >= self.configuration.number:
+                break
 
+            self.cache.newest_days += 1
+
+        self.cache.newly_added = results
         return results
 
     def process_filename_results(self, results):
@@ -813,6 +820,12 @@ class AutoQueueBase(object):
                 if song.get_tracknumber()
             ]
         )
+        previous = 0
+        for _, n, _, _ in songs:
+            if n - previous > 1:
+                return False
+            previous = n
+
         if songs:
             for _, _, _, song in songs:
                 self.enqueue_song(song, is_new=is_new)

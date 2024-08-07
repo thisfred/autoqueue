@@ -257,12 +257,17 @@ class AutoQueue(AutoQueueBase, EventPlugin, PluginConfigMixin):
         GLib.idle_add(self.on_removed, [Song(s) for s in songs])
 
     def add_bpms(self):
+        to_remove = []
+        to_do = 500
         for sig_file in Path("/tmp/").rglob("*.sig"):
+            song = None
             audio_filename = str(sig_file)[4:-4]
             if audio_filename in self.seen_files:
                 continue
             self.seen_files.add(audio_filename)
-
+            to_do -= 1
+            if to_do < 0:
+                break
             with sig_file.open() as sig:
                 try:
                     jsonsig = json.load(sig)
@@ -277,6 +282,7 @@ class AutoQueue(AutoQueueBase, EventPlugin, PluginConfigMixin):
                 audiofile = Path(audio_filename)
                 if not audiofile.exists():
                     print(f"{audio_filename} NO LONGER EXISTS")
+                    to_remove.append(sig_file)
                     continue
                 song = formats.MusicFile(audio_filename)
             except Exception as e:
@@ -295,6 +301,8 @@ class AutoQueue(AutoQueueBase, EventPlugin, PluginConfigMixin):
                 song.write()
             except Exception as e:
                 print(repr(e))
+        for sig_file in to_remove:
+            sig_file.unlink()
 
     def PluginPreferences(self, parent):
         """Set and unset preferences from gui or config file."""
@@ -410,7 +418,7 @@ class Player(PlayerBase):
 
     def construct_recently_added_search(self, days: int) -> str:
         search = (
-            r"&(#(playcount=0),#(skipcount=0),|(&(~dirname=/\/ogg\/misc\//,"
+            r"&(#(laststarted > 1 year),#(playcount=0),#(skipcount=0),|(&(~dirname=/\/ogg\/misc\//,"
             f"#(tracknumber=1)),#(added < {days} days)))"
         )
         return search

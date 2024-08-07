@@ -91,16 +91,17 @@ class Context(object):
 
         if sentences:
             title = result["song"].get_title(with_version=False)
-            scores = self.model.predict(
+            similarities = self.model.predict(
                 [[sentence, title] for sentence, _ in sentences]
             )
-            for score, (sentence, scale) in zip(scores, sentences):
-                scaled = 1 / (1 + score * scale)
-                result["score"] = result["score"] * scaled
+            for similarity, (sentence, scale) in zip(similarities, sentences):
+                if similarity > 0.3:
+                    score = 1 - similarity
+                    scaled = 1 - (similarity * scale)
+                    result["score"] = result["score"] * scaled
 
-                if score > 0.3:
                     result.setdefault("reasons", []).append(
-                        f"{title} :: {sentence} :: {scaled}"
+                        f"{result['score']:12.5f} :: {scaled:.5f} :: {score:.5f} :: {title} :: {sentence}"
                     )
 
     def build_predicates(self):
@@ -233,7 +234,6 @@ class Context(object):
     def add_standard_predicates(self):
         self.predicates.extend(static_predicates)
         for predicate in (
-            Year,
             Date.from_date,
             Now,
             Midnight,
@@ -267,7 +267,7 @@ class Predicate(object):
         return True
 
     def get_factor(self, song):
-        return 1.0
+        return 0.5
 
     def scaled(self, factor):
         if factor > 1:
@@ -277,9 +277,12 @@ class Predicate(object):
         return factor
 
     def score(self, result, applies):
-        factor = 1 / (1 + self.get_factor(result["song"]) * self.scale)
+        original_factor = self.get_factor(result["song"])
+        factor = self.scaled(original_factor)
         result["score"] *= factor
-        result.setdefault("reasons", []).append((self, applies, factor))
+        result.setdefault("reasons", []).append(
+            f"{result['score']:12.5f} :: {factor:.5f} :: {original_factor:.5f} :: {self} :: {applies}"
+        )
 
     def __repr__(self):
         return "<%s>" % self.__class__.__name__
@@ -295,7 +298,7 @@ class Tags(Predicate):
 
     def get_factor(self, song):
         song_tags = set(song.get_non_geo_tags())
-        return len(self.tags & song_tags) / len(self.tags | song_tags)
+        return 1 / (1 + (len(self.tags & song_tags) / len(self.tags | song_tags)))
 
 
 class BPM(Predicate):
@@ -309,20 +312,26 @@ class BPM(Predicate):
             return False
 
     def score(self, result, applies):
-        factor = self.scaled(self.get_factor(result["song"]))
+        original_factor = self.get_factor(result["song"])
+        factor = self.scaled(original_factor)
         result["score"] *= factor
-        result.setdefault("reasons", []).append((self, applies, factor))
+        result.setdefault("reasons", []).append(
+            f"{result['score']:12.5f} :: {factor:.5f} :: {original_factor:.5f} :: {self} :: {applies}"
+        )
 
     def get_factor(self, song):
+        difference = min(
+            abs(float(song.song.get("bpm")) - bpm)
+            for bpm in (self.bpm, self.bpm * 2, self.bpm / 2)
+        )
         try:
-            return abs(float(song.song.get("bpm")) - self.bpm) / 5
+            return difference / 5
         except (ValueError, TypeError):
             return 1
 
 
 class Terms(Predicate):
     regex_terms: Tuple[Pattern, ...] = tuple()
-    song = None
 
     def applies_to_song(self, song):
         return bool(self.sentence) or self.regex_terms_match(song)
@@ -338,15 +347,7 @@ class Terms(Predicate):
         return False
 
     def __repr__(self):
-        song = self.song
-        if not song:
-            return super(Terms, self).__repr__()
-
-        return "<%s: %s - %s>" % (
-            self.__class__.__name__,
-            song.get_artist(),
-            song.get_title(),
-        )
+        return super(Terms, self).__repr__()
 
 
 class Period(Terms):
@@ -413,9 +414,12 @@ class Geohash(Predicate):
         return "<Geohash %r>" % self.geohashes
 
     def score(self, result, applies):
-        factor = self.scaled(self.get_factor(result["song"]))
+        original_factor = self.get_factor(result["song"])
+        factor = self.scaled(original_factor)
         result["score"] *= factor
-        result.setdefault("reasons", []).append((self, applies, factor))
+        result.setdefault("reasons", []).append(
+            f"{result['score']:12.5f} :: {factor:.5f} :: {original_factor:.5f} :: {self} :: {applies}"
+        )
 
     def get_factor(self, song):
         best_score = 1.0
@@ -428,18 +432,12 @@ class Geohash(Predicate):
 
                 prefix = commonprefix((self_hash, other_hash))
 
-                score = 1 / (len(prefix) + 1)
+                score = 0.75 ** len(prefix)
 
                 if score < best_score:
                     best_score = score
 
         return best_score
-
-
-class Year(Terms):
-    def __init__(self, timestamp):
-        self.terms = (str(timestamp.year),)
-        super(Year, self).__init__()
 
 
 class SongYear(Predicate):
@@ -463,20 +461,19 @@ class SongYear(Predicate):
 
     def get_factor(self, song):
         if self.was_released(song):
-            return 1.0 / (1.0 + abs(self.year - song.get_year()))
+            return 1 - (1.0 / (2.0 + abs(self.year - song.get_year())))
         else:
-            return 1.0
+            return 0.5
 
 
 class String(Terms):
     def __init__(self, term, scale=1.0):
         super(String, self).__init__()
-        self.terms = (term,)
         self.sentence = term
         self.scale = scale
 
     def __repr__(self):
-        return "<String %r>" % self.terms
+        return "<String %r>" % self.sentence
 
 
 class Weather(Terms):
@@ -498,7 +495,7 @@ class Weather(Terms):
 
 
 class Freezing(Weather):
-    sentence = "It is below freezing"
+    sentence = "it is below freezing"
 
     def applies_in_context(self, context):
         temperature = self.get_temperature(context)
@@ -512,7 +509,7 @@ class Freezing(Weather):
 
 
 class Cold(Weather):
-    sentence = "It is cold"
+    sentence = "it is cold"
 
     def applies_in_context(self, context):
         temperature = self.get_temperature(context)
@@ -526,7 +523,7 @@ class Cold(Weather):
 
 
 class Hot(Weather):
-    sentence = "It is hot"
+    sentence = "it is hot"
 
     def applies_in_context(self, context):
         temperature = self.get_temperature(context)
@@ -540,14 +537,14 @@ class Hot(Weather):
 
 
 class Calm(Weather):
-    sentence = "There is no wind"
+    sentence = "it is calm"
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) < 1
 
 
 class Breeze(Weather):
-    sentence = "There is a breeze"
+    sentence = "there is a breeze"
 
     def applies_in_context(self, context):
         speed = self.get_wind_speed(context)
@@ -555,35 +552,35 @@ class Breeze(Weather):
 
 
 class Wind(Weather):
-    sentence = "It is windy"
+    sentence = "it is windy"
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 30
 
 
 class Gale(Weather):
-    sentence = "There is a gale"
+    sentence = "there is a gale"
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 38
 
 
 class Storm(Weather):
-    sentence = "There is a storm"
+    sentence = "there is a storm"
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 54
 
 
 class Hurricane(Weather):
-    sentence = "There is a hurricane"
+    sentence = "there is a hurricane"
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) > 72
 
 
 class Humid(Weather):
-    sentence = "It is humid"
+    sentence = "it is humid"
 
     def applies_in_context(self, context):
         return self.get_humidity(context) > 65
@@ -628,7 +625,7 @@ class TimeRange(Terms):
 
 
 class Daylight(TimeRange):
-    sentence = "There is daylight"
+    sentence = "there is daylight"
 
 
 class NegativeTimeRange(TimeRange):
@@ -637,7 +634,7 @@ class NegativeTimeRange(TimeRange):
 
 
 class NotDaylight(NegativeTimeRange):
-    sentence = "It is dark"
+    sentence = "it is dark"
 
 
 class Sun(TimeRange, Weather):
@@ -671,7 +668,7 @@ class Fog(Weather):
 
 
 class Cloudy(Weather):
-    sentence = "It is cloudy"
+    sentence = "it is cloudy"
 
     def applies_in_context(self, context):
         conditions = self.get_weather_conditions(context)
@@ -785,7 +782,7 @@ class Season(Period):
 
 
 class Winter(Season):
-    sentence = "It is winter"
+    sentence = "it is winter"
 
     def __init__(self, now):
         super(Winter, self).__init__(
@@ -794,21 +791,21 @@ class Winter(Season):
 
 
 class Spring(Season):
-    sentence = "It is spring"
+    sentence = "it is spring"
 
     def __init__(self, now):
         super(Spring, self).__init__(peak=datetime(now.year, 3, 21) + FORTY_FIVE_DAYS)
 
 
 class Summer(Season):
-    sentence = "It is summer"
+    sentence = "it is summer"
 
     def __init__(self, now):
         super(Summer, self).__init__(peak=datetime(now.year, 6, 21) + FORTY_FIVE_DAYS)
 
 
 class Fall(Season):
-    sentence = "It is autumn"
+    sentence = "it is autumn"
 
     def __init__(self, now):
         super(Fall, self).__init__(peak=datetime(now.year, 9, 21) + FORTY_FIVE_DAYS)
@@ -823,73 +820,73 @@ class Month(Terms):
 
 @static_predicate
 class January(Month):
-    sentence = "It is January"
+    sentence = "it is january"
     month = 1
 
 
 @static_predicate
 class February(Month):
-    sentence = "It is February"
+    sentence = "it is february"
     month = 2
 
 
 @static_predicate
 class March(Month):
-    sentence = "It is March"
+    sentence = "it is march"
     month = 3
 
 
 @static_predicate
 class April(Month):
-    sentence = "It is April"
+    sentence = "it is april"
     month = 4
 
 
 @static_predicate
 class May(Month):
-    sentence = "It is May"
+    sentence = "it is may"
     month = 5
 
 
 @static_predicate
 class June(Month):
-    sentence = "It is June"
+    sentence = "it is june"
     month = 6
 
 
 @static_predicate
 class July(Month):
-    sentence = "It is July"
+    sentence = "it is july"
     month = 7
 
 
 @static_predicate
 class August(Month):
-    sentence = "It is August"
+    sentence = "it is august"
     month = 8
 
 
 @static_predicate
 class September(Month):
-    sentence = "It is September"
+    sentence = "it is september"
     month = 9
 
 
 @static_predicate
 class October(Month):
-    sentence = "It is October"
+    sentence = "it is october"
     month = 10
 
 
 @static_predicate
 class November(Month):
-    sentence = "It is November"
+    sentence = "it is november"
     month = 11
 
 
 @static_predicate
 class December(Month):
-    sentence = "It is December"
+    sentence = "it is december"
     month = 12
 
 
@@ -904,50 +901,50 @@ class Day(Terms):
 
 @static_predicate
 class Monday(Day):
-    sentence = "It is Monday"
+    sentence = "it is monday"
     day_index = 1
 
 
 @static_predicate
 class Tuesday(Day):
-    sentence = "It is Tuesday"
+    sentence = "it is tuesday"
     day_index = 2
 
 
 @static_predicate
 class Wednesday(Day):
-    sentence = "It is Wednesday"
+    sentence = "it is wednesday"
     day_index = 3
 
 
 @static_predicate
 class Thursday(Day):
-    sentence = "It is Thursday"
+    sentence = "it is thursday"
     day_index = 4
 
 
 @static_predicate
 class Friday(Day):
-    sentence = "It is Friday"
+    sentence = "it is friday"
     day_index = 5
 
 
 @static_predicate
 class Saturday(Day):
-    sentence = "It is Saturday"
+    sentence = "it is saturday"
     day_index = 6
 
 
 @static_predicate
 class Sunday(Day):
-    sentence = "It is Sunday"
+    sentence = "it is sunday"
     day_index = 7
 
 
 class Night(Period):
     period = ONE_DAY
     decay = SIX_HOURS
-    sentence = "It is night"
+    sentence = "it is night"
 
     def __init__(self, now):
         super(Night, self).__init__(
@@ -958,7 +955,7 @@ class Night(Period):
 class DayTime(Period):
     period = ONE_DAY
     decay = SIX_HOURS
-    sentence = "It is daytime"
+    sentence = "it is daytime"
 
     def __init__(self, now):
         super(DayTime, self).__init__(
@@ -969,7 +966,7 @@ class DayTime(Period):
 class Evening(Period):
     period = ONE_DAY
     decay = THREE_HOURS
-    sentence = "It is evening"
+    sentence = "it is evening"
 
     def __init__(self, now):
         super(Evening, self).__init__(peak=now.replace(hour=20))
@@ -978,7 +975,7 @@ class Evening(Period):
 class Morning(Period):
     period = ONE_DAY
     decay = THREE_HOURS
-    sentence = "It is morning"
+    sentence = "it is morning"
 
     def __init__(self, now):
         super(Morning, self).__init__(peak=now.replace(hour=9))
@@ -987,7 +984,7 @@ class Morning(Period):
 class Afternoon(Period):
     period = ONE_DAY
     decay = THREE_HOURS
-    sentence = "It is afternoon"
+    sentence = "it is afternoon"
 
     def __init__(self, now):
         super(Afternoon, self).__init__(peak=now.replace(hour=15))
@@ -995,7 +992,7 @@ class Afternoon(Period):
 
 @static_predicate
 class Weekend(Terms):
-    sentence = "It is weekend"
+    sentence = "it is weekend"
 
     def applies_in_context(self, context):
         context_date = context.date
@@ -1005,7 +1002,7 @@ class Weekend(Terms):
 
 class Thanksgiving(Period):
     decay = THREE_DAYS
-    sentence = "It is Thanksgiving"
+    sentence = "it is thanksgiving"
 
     def __init__(self, now):
         super(Thanksgiving, self).__init__(
@@ -1017,7 +1014,7 @@ class Thanksgiving(Period):
 
 class Christmas(Period):
     decay = THREE_DAYS
-    sentence = "It is Christmas"
+    sentence = "it is christmas"
 
     def __init__(self, now):
         super(Christmas, self).__init__(peak=now.replace(day=25, month=12))
@@ -1025,7 +1022,7 @@ class Christmas(Period):
 
 @static_predicate
 class Kwanzaa(Terms):
-    sentence = "It is Kwanzaa"
+    sentence = "it is kwanzaa"
 
     def applies_in_context(self, context):
         context_date = context.date
@@ -1036,7 +1033,7 @@ class Kwanzaa(Terms):
 
 class NewYear(Period):
     decay = THREE_DAYS
-    sentence = "It is New Year's Eve"
+    sentence = "it is new year's eve"
 
     def __init__(self, now):
         super(NewYear, self).__init__(peak=now.replace(day=31, month=12))
@@ -1044,7 +1041,7 @@ class NewYear(Period):
 
 class Halloween(Period):
     decay = THREE_DAYS
-    sentence = "It is Halloween"
+    sentence = "it is halloween"
 
     def __init__(self, now):
         super(Halloween, self).__init__(peak=now.replace(day=31, month=10))
@@ -1066,7 +1063,7 @@ class EasterBased(Terms):
 
 class Easter(Period):
     decay = THREE_DAYS
-    sentence = "It is Easter"
+    sentence = "it is easter"
 
     def __init__(self, now):
         super(Easter, self).__init__(peak=easter(now.year))
@@ -1075,104 +1072,104 @@ class Easter(Period):
 @static_predicate
 class MardiGras(EasterBased):
     days_after_easter = -47
-    sentence = "It is Mardi Gras"
+    sentence = "it is mardi gras"
 
 
 @static_predicate
 class AshWednesday(EasterBased):
     days_after_easter = -46
-    sentence = "It is Ash Wednesday"
+    sentence = "it is ash wednesday"
 
 
 @static_predicate
 class PalmSunday(EasterBased):
     days_after_easter = -7
-    sentence = "It is Palm Sunday"
+    sentence = "it is palm sunday"
 
 
 @static_predicate
 class MaundyThursday(EasterBased):
     days_after_easter = -3
-    sentence = "It is Maundy Thursday"
+    sentence = "it is maundy thursday"
 
 
 @static_predicate
 class GoodFriday(EasterBased):
     days_after_easter = -2
-    sentence = "It is Good Friday"
+    sentence = "it is good friday"
 
 
 @static_predicate
 class Ascension(EasterBased):
     days_after_easter = 39
-    sentence = "It is Ascension Day"
+    sentence = "it is ascension day"
 
 
 @static_predicate
 class Pentecost(EasterBased):
     days_after_easter = 49
-    sentence = "It is Pentecost"
+    sentence = "it is pentecost"
 
 
 @static_predicate
 class WhitMonday(EasterBased):
     days_after_easter = 50
-    sentence = "It is Whit Monday"
+    sentence = "it is whit monday"
 
 
 @static_predicate
 class AllSaints(EasterBased):
     days_after_easter = 56
-    sentence = "It is All Saints"
+    sentence = "it is all saints"
 
 
 @static_predicate
 class VeteransDay(Date):
     month = 11
     day = 11
-    sentence = "It is Veterans Day"
+    sentence = "it is veterans day"
 
 
 @static_predicate
 class Assumption(Date):
     month = 8
     day = 15
-    sentence = "It is Assumption Day"
+    sentence = "it is assumption day"
 
 
 @static_predicate
 class IndependenceDay(Date):
     month = 7
     day = 4
-    sentence = "It is US Independence Day"
+    sentence = "it is independence day"
 
 
 @static_predicate
 class GroundhogDay(Date):
     month = 2
     day = 2
-    sentence = "It is Groundhog Day"
+    sentence = "it is groundhog day"
 
 
 @static_predicate
 class ValentinesDay(Date):
     month = 2
     day = 14
-    sentence = "It is Valentines Day"
+    sentence = "it is valentines day"
 
 
 @static_predicate
 class AprilFools(Date):
     month = 4
     day = 1
-    sentence = "It is April Fools"
+    sentence = "it is april fools"
 
 
 @static_predicate
 class CincoDeMayo(Date):
     month = 5
     day = 5
-    sentence = "It is Cinco de Mayo"
+    sentence = "it is cinco de mayo"
 
 
 @static_predicate
@@ -1183,12 +1180,12 @@ class Solstice(Terms):
             context_date.month == 6 or context_date.month == 12
         )
 
-    sentence = "It is Solstice"
+    sentence = "it is solstice"
 
 
 @static_predicate
 class Friday13(Terms):
-    sentence = "It is Friday the Thirteenth"
+    sentence = "it is friday the thirteenth"
 
     def applies_in_context(self, context):
         context_date = context.date
@@ -1201,7 +1198,7 @@ class Birthday(Date):
         self.month = birth_date.month
         self.day = birth_date.day
         super(Birthday, self).__init__()
-        self.sentence = "It is {name}'s birthday."
+        self.sentence = "it is {name.lower()}'s birthday."
 
     def applies_to_song(self, song):
         if self.year == song.get_year():
