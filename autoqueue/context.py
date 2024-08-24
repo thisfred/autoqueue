@@ -222,14 +222,17 @@ class Context(object):
                 }:
                     continue
                 results.append(condition)
-        return [String(c) for c in results]
+        return [String(f"there is {c}") for c in results]
 
     def add_location_predicates(self):
         if self.configuration.geohash:
             self.predicates.append(Geohash([self.configuration.geohash]))
 
     def add_song_year_predicate(self):
-        self.predicates.append(SongYear(self.date.year))
+        if self.date.month == 12:
+            self.predicates.append(SongYear(self.date.year))
+        elif self.date.month == 1:
+            self.predicates.append(SongYear(self.date.year - 1))
 
     def add_standard_predicates(self):
         self.predicates.extend(static_predicates)
@@ -441,9 +444,10 @@ class Geohash(Predicate):
 
 
 class SongYear(Predicate):
-    def __init__(self, year, scale=1.0):
+    def __init__(self, year, exact=False, scale=1.0):
         self.year = year
         self.scale = scale
+        self.exact = exact
 
     def applies_to_song(self, song):
         return self.was_released(song) or self.artist_died(song)
@@ -452,12 +456,16 @@ class SongYear(Predicate):
         if not song.get_year():
             return False
 
+        if self.exact:
+            return self.year == song.get_year()
+
         return abs(self.year - song.get_year()) <= 5
 
     def artist_died(self, song):
-        year = str(self.year)
-        artist_tags = get_artist_tags(song)
-        return "dead" in artist_tags and any(t.startswith(year) for t in artist_tags)
+        return self.exact and (
+            "dead" in (artist_tags := get_artist_tags(song))
+            and any(t.startswith(str(self.year)) for t in artist_tags)
+        )
 
     def get_factor(self, song):
         if self.was_released(song):
@@ -596,9 +604,16 @@ class Now(Period):
             match = TIME.match(tag)
             if match:
                 hour, minute = match.groups()
-                song_datetime = datetime.now().replace(
-                    hour=int(hour), minute=int(minute)
-                )
+                try:
+                    song_datetime = datetime.now().replace(
+                        hour=int(hour), minute=int(minute)
+                    )
+                except ValueError:
+                    print(
+                        f"bad now {hour}:{minute} {song.get_artist()}-{song.get_title()}"
+                    )
+                    return False
+
                 if self.get_diff_between_dates(song_datetime, self.peak) < self.decay:
                     return True
 

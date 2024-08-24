@@ -22,12 +22,14 @@ import json
 import os
 import sqlite3
 import subprocess
+from dataclasses import dataclass
 from functools import total_ordering
 from pathlib import Path
 from queue import Empty, LifoQueue, PriorityQueue, Queue
 from threading import Thread
 from time import sleep, time
-from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Callable, List, Optional, Sequence, Tuple
+from uuid import uuid4
 
 import dbus
 import dbus.service
@@ -40,7 +42,14 @@ from autoqueue.utilities import player_get_data_dir
 
 try:
     import yaml
-    from gaia2 import DataSet, DistanceFunctionFactory, Point, View, transform
+    from gaia2 import (
+        DataSet,
+        DistanceFunction,
+        DistanceFunctionFactory,
+        Point,
+        View,
+        transform,
+    )
 
     GAIA = True
 except ImportError:
@@ -65,6 +74,91 @@ ESSENTIA_EXTRACTOR_PATH = "streaming_extractor_music"
 ADD = "add"
 REMOVE = "remove"
 
+FRAGMENT_SECONDS = 30
+
+
+@dataclass
+class GaiaDB:
+    path: Path
+    transformed: bool = False
+    _dataset: DataSet | None = None
+    _metric: DistanceFunction | None = None
+
+    @property
+    def dataset(self):
+        if self._dataset is None:
+            self._dataset = DataSet()
+            if self.path.exists():
+                self._dataset.load(str(self.path))
+                self.transformed = True
+        return self._dataset
+
+    @property
+    def metric(self):
+        if self._metric is None:
+            try:
+                self._metric = DistanceFunctionFactory.create(
+                    "euclidean", self.dataset.layout()
+                )
+            except Exception as e:
+                print(repr(e))
+                self.transform()
+                self._metric = DistanceFunctionFactory.create(
+                    "euclidean", self.dataset.layout()
+                )
+
+        return self._metric
+
+    def transform(self):
+        """Transform dataset for distance computations."""
+        dataset = transform(self.dataset, "fixlength")
+        dataset = transform(dataset, "cleaner")
+        dataset = transform(dataset, "remove", {"descriptorNames": "*beats_position*"})
+        dataset = transform(dataset, "remove", {"descriptorNames": "*mfcc*"})
+        dataset = transform(dataset, "normalize")
+        dataset = transform(
+            dataset,
+            "pca",
+            {
+                "dimension": 30,
+                "descriptorNames": ["*.mean", "*.var"],
+                "resultName": "pca30",
+            },
+        )
+        self._dataset = dataset
+        self.transformed = True
+
+    def transform_and_save(self) -> DataSet:
+        """Transform dataset and save to disk."""
+
+        if not self.transformed:
+            self.transform()
+            self._metric = DistanceFunctionFactory.create(
+                "euclidean", self.dataset.layout()
+            )
+            self.transformed = True
+        self.dataset.save(str(self.path))
+        return self
+
+    def __contains__(self, filename):
+        return self.dataset.contains(filename)
+
+    def __getitem__(self, filename) -> Point:
+        if not self.dataset.contains(filename):
+            raise KeyError(filename)
+
+        return self.dataset.point(filename)
+
+    def __setitem__(self, filename: str, point: Point) -> None:
+        point.setName(filename)
+        self.dataset.addPoint(point)
+
+    def get(self, filename: str) -> Point | None:
+        try:
+            return self[filename]
+        except KeyError:
+            return None
+
 
 @total_ordering
 class SQLCommand(object):
@@ -85,95 +179,105 @@ class SQLCommand(object):
         return self.sql < other.sql
 
 
+FFMPEG_ARGS = (
+    ("-ss", "0", "-t", str(FRAGMENT_SECONDS)),
+    ("-sseof", str(-FRAGMENT_SECONDS)),
+)
+
+
 class GaiaAnalysis(Thread):
 
     """Gaia acoustic analysis and comparison."""
 
-    def __init__(self, db_path, queue):
+    def __init__(self, queue):
         super(GaiaAnalysis, self).__init__()
+        data_dir = player_get_data_dir()
         self.transformed = False
-        self.gaia_db_path = db_path
-        self.gaia_db = self.initialize_gaia_db()
+        self.gaia_db_new = GaiaDB(
+            Path(data_dir) / "new_gaia.db",
+        )
+        print("songs in db: %d" % self.gaia_db_new.dataset.size())
+
         self.commands = {ADD: self._analyze, REMOVE: self._remove_point}
         self.queue = queue
         self.seen = set()
-        try:
-            self.metric = DistanceFunctionFactory.create(
-                "euclidean", self.gaia_db.layout()
-            )
-        except Exception as ex:
-            print(repr(ex))
-            self.gaia_db = self.transform(self.gaia_db)
-            self.metric = DistanceFunctionFactory.create(
-                "euclidean", self.gaia_db.layout()
-            )
-            self.transformed = True
         self.analyzed = 0
-
-    def initialize_gaia_db(self) -> DataSet:
-        """Load or initialize the gaia database."""
-        if not os.path.isfile(self.gaia_db_path):
-            dataset = DataSet()
-        else:
-            dataset = self.load_gaia_db()
-            self.transformed = True
-        print("songs in db: %d" % dataset.size())
-        return dataset
-
-    @staticmethod
-    def transform(dataset):
-        """Transform dataset for distance computations."""
-        dataset = transform(dataset, "fixlength")
-        dataset = transform(dataset, "cleaner")
-        dataset = transform(dataset, "remove", {"descriptorNames": "*beats_position*"})
-        dataset = transform(dataset, "remove", {"descriptorNames": "*mfcc*"})
-        dataset = transform(dataset, "normalize")
-        dataset = transform(
-            dataset,
-            "pca",
-            {
-                "dimension": 30,
-                "descriptorNames": ["*.mean", "*.var"],
-                "resultName": "pca30",
-            },
-        )
-        return dataset
-
-    def load_gaia_db(self):
-        """Load the gaia database from disk."""
-        dataset = DataSet()
-        dataset.load(self.gaia_db_path)
-        return dataset
+        self.factor = 2
 
     def _analyze(self, filename: str) -> None:
         """Analyze an audio file."""
-        if self.gaia_db.contains(filename):
-            return
 
-        signame = self.get_signame(filename)
-        if not (signame.exists() or self.essentia_analyze(filename, signame)):
-            return
+        for i, ffmpeg_args in enumerate(FFMPEG_ARGS):
+            suffix = str(i)
+            if filename + suffix in self.gaia_db_new:
+                continue
 
-        try:
-            point = self.load_point(signame)
-            point.setName(filename)
-            self.gaia_db.addPoint(point)
-            self.analyzed += 1
-        except Exception as exc:
-            print(exc)
+            new_path = (Path("/tmp") / Path(str(uuid4()))).with_suffix(
+                Path(filename).suffix
+            )
+
+            env = os.environ.copy()
+            try:
+                subprocess.check_call(
+                    [
+                        "ffmpeg",
+                        *ffmpeg_args,
+                        "-i",
+                        filename,
+                        "-c:a",
+                        "copy",
+                        new_path,
+                        "-loglevel",
+                        "error",
+                        "-hide_banner",
+                    ],
+                    env=env,
+                )
+            except subprocess.CalledProcessError:
+                pass
+
+            if not new_path.exists():
+                print("ffmpeg failed to extract")
+
+            signame = self.get_signame(filename, suffix=suffix)
+            if not (
+                signame.exists()
+                or self.essentia_analyze(self.gaia_db_new.dataset, new_path, signame)
+            ):
+                try:
+                    new_path.unlink()
+                except FileNotFoundError:
+                    pass
+                return
+
+            try:
+                new_path.unlink()
+            except FileNotFoundError:
+                pass
+            try:
+                point = self.load_point(signame)
+                self.gaia_db_new[filename + suffix] = point
+                self.analyzed += 1
+            except Exception as e:
+                print(e)
 
         print("{} songs left to analyze.".format(self.queue.qsize()))
 
     def _remove_point(self, filename: str) -> None:
         """Remove a point from the gaia database."""
         try:
-            self.gaia_db.removePoint(filename)
+            self.gaia_db_new.dataset.removePoint(filename + "0")
+        except Exception as exc:
+            print(exc)
+        try:
+            self.gaia_db_new.dataset.removePoint(filename + "1")
         except Exception as exc:
             print(exc)
 
     def load_point(self, signame: Path) -> Point:
         """Load point data from JSON file."""
         point = Point()
+
         with signame.open() as sig:
             jsonsig = json.load(sig)
             if jsonsig.get("metadata", {}).get("tags"):
@@ -183,22 +287,24 @@ class GaiaAnalysis(Thread):
         return point
 
     @staticmethod
-    def get_signame(full_path: str) -> Path:
+    def get_signame(full_path: str, suffix: str) -> Path:
         """Get the path for the analysis data file for this filename."""
         while full_path.startswith("/"):
             full_path = full_path[1:]
         audio_file_path = Path(full_path)
         path = Path("/tmp") / audio_file_path.with_suffix(
-            audio_file_path.suffix + ".sig"
+            audio_file_path.suffix + f".sig{suffix}"
         )
         path.parent.mkdir(exist_ok=True, parents=True)
         return path
 
     @staticmethod
-    def essentia_analyze(filename, signame: Path) -> bool:
+    def essentia_analyze(gaia_db, filename, signame: Path) -> bool:
         """Perform essentia analysis of an audio file."""
+        if filename in gaia_db:
+            return False
+
         env = os.environ.copy()
-        # env["LD_LIBRARY_PATH"] = "/usr/local/lib"
         try:
             subprocess.check_call(
                 [ESSENTIA_EXTRACTOR_PATH, filename, str(signame)], env=env
@@ -213,15 +319,6 @@ class GaiaAnalysis(Thread):
             print(e)
             return False
 
-    def transform_and_save(self, dataset: DataSet, path: str) -> DataSet:
-        """Transform dataset and save to disk."""
-        if not self.transformed:
-            dataset = self.transform(dataset)
-            self.metric = DistanceFunctionFactory.create("euclidean", dataset.layout())
-            self.transformed = True
-        dataset.save(path)
-        return dataset
-
     def run(self) -> None:
         """Run main loop for gaia analysis thread."""
         print("STARTING GAIA ANALYSIS THREAD")
@@ -233,47 +330,20 @@ class GaiaAnalysis(Thread):
                 try:
                     cmd, filename = self.queue.get(block=False)
                 except Empty:
-                    self.gaia_db = self.transform_and_save(
-                        self.gaia_db, self.gaia_db_path
-                    )
+                    self.gaia_db_new = self.gaia_db_new.transform_and_save()
                     break
-                if self.analyzed >= 100:
+                if self.analyzed >= 500:
                     self.analyzed = 0
-                    self.gaia_db = self.transform_and_save(
-                        self.gaia_db, self.gaia_db_path
-                    )
-            print("songs in db after processing queue: %d" % self.gaia_db.size())
+                    self.gaia_db_new = self.gaia_db_new.transform_and_save()
+            print(
+                "songs in db after processing queue: %d"
+                % self.gaia_db_new.dataset.size()
+            )
             for sig_file in Path("/tmp").glob("*.sig"):
                 try:
                     sig_file.unlink()
                 except OSError as e:
                     print(f"Error: {sig_file}: {e}")
-
-    def get_miximized_tracks(self, filenames: Sequence[str]) -> List[int]:
-        """Get list of tracks in ideal order."""
-        self.analyze_and_wait(filenames)
-        dataset = DataSet()
-        number_of_tracks = len(filenames)
-        for filename in filenames:
-            if not self.gaia_db.contains(filename):
-                continue
-            point = self.gaia_db.point(filename)
-            dataset.addPoint(point)
-        dataset = self.transform(dataset)
-        matrix = {}
-        for filename in filenames:
-            matrix[filename] = {
-                name: score
-                for score, name in self.get_neighbours(
-                    dataset, filename, number_of_tracks
-                )
-            }
-        clusterer = Clusterer(filenames, lambda f1, f2: matrix[f1][f2])
-        clusterer.cluster()
-        result = []
-        for cluster in clusterer.clusters:
-            result.extend([filenames.index(filename) for filename in cluster])
-        return result
 
     def analyze_and_wait(self, filenames: Sequence[str]) -> None:
         self.queue_filenames(filenames)
@@ -292,19 +362,18 @@ class GaiaAnalysis(Thread):
 
     def get_best_match(self, filename: str, filenames: List[str]) -> Optional[str]:
         self.queue_filenames([filename] + filenames)
-        if not self.gaia_db.contains(filename):
+        point = self.gaia_db_new.get(filename + "1")
+        if point is None:
             if filenames:
                 return filenames[0] or ""
 
             return ""
 
-        point = self.gaia_db.point(filename)
-
         best, best_name = None, None
         for name in filenames:
-            if not self.contains_or_add(name):
+            if not (other_point := self.contains_or_add(name)[0]):
                 continue
-            distance = self.metric(point, self.gaia_db.point(name))
+            distance = self.gaia_db_new.metric(point, other_point)
             print("%s, %s" % (distance, name))
             if best is None or distance < best:
                 best, best_name = distance, name
@@ -315,18 +384,17 @@ class GaiaAnalysis(Thread):
         self, filename: str, filenames: List[str]
     ) -> List[Tuple[float, str]]:
         self.queue_filenames([filename] + filenames)
-        if not self.gaia_db.contains(filename):
+        point = self.gaia_db_new.get(filename + "1")
+        if point is None:
             if filenames:
                 return [(1, filenames[0])]
 
             return []
 
-        point = self.gaia_db.point(filename)
-
         result = sorted(
-            (self.metric(point, self.gaia_db.point(name)) * 1000, name)
+            (self.gaia_db_new.metric(point, other_point) * 1000, name)
             for name in filenames
-            if self.contains_or_add(name)
+            if (other_point := self.contains_or_add(name)[0])
         )
 
         if not result:
@@ -335,72 +403,73 @@ class GaiaAnalysis(Thread):
         return result
 
     def get_tracks(
-        self, filename: str, number: int, request: Optional[str] = None
+        self,
+        filename: str,
+        number: int,  # , request: Optional[str] = None
     ) -> List[Tuple[float, str]]:
         """Get most similar tracks from the gaia database."""
-        while self.gaia_db is None:
-            sleep(0.1)
         if not self.contains_or_add(filename):
             return []
-        if request:
-            if not self.contains_or_add(request):
-                request = None
-        neighbours = self.get_neighbours(
-            self.gaia_db, filename, number, request=request
-        )
+        neighbours = self.get_neighbours(filename, number)  # , request=request)
         if neighbours:
-            print("total  %d" % len(neighbours))
+            print(f"{len(neighbours)} tracks found, considered {self.factor * number}.")
             print(neighbours[0][0], neighbours[-1][0])
         return neighbours
 
     def get_neighbours(
         self,
-        dataset: DataSet,
         filename: str,
-        number: int,
-        request: Optional[str] = None,
+        number: int,  # request: Optional[str] = None,
     ) -> List[Tuple[float, str]]:
         """Get a number of nearest neighbours."""
-        view = View(dataset)
-        request_point = self.gaia_db.point(request) if request else None
-        try:
-            total = view.nnSearch(filename, self.metric).get(number + 1)[1:]
-        except Exception as e:
-            print(e)
-            return []
+        view = View(self.gaia_db_new.dataset)
 
-        result = sorted(
-            [
-                (
-                    self.compute_score(score, name, request_point=request_point) * 1000,
-                    name,
-                )
-                for name, score in total
-            ]
-        )
-        return result
+        point = self.gaia_db_new.get(filename + "1")
 
-    def compute_score(
-        self, score: float, name: str, request_point: Optional[Point] = None
-    ) -> float:
-        """If there is a request, score by distance to that instead."""
-        if request_point is None:
-            return score
-        return self.metric(request_point, self.gaia_db.point(name))
+        self_name = filename + "0"
+        result = []
+        while len(result) < number:
+            to_get = number * self.factor
+            try:
+                total = view.nnSearch(point, self.gaia_db_new.metric).get(to_get)
 
-    def contains_or_add(self, filename: str) -> bool:
+            except Exception as e:
+                print(e)
+                return []
+
+            result = sorted(
+                [
+                    (score * 1000, name[:-1])
+                    for name, score in total
+                    if name.endswith("0") and name != self_name
+                ]
+            )
+            if len(total) < to_get:
+                return result
+            if len(result) < number:
+                self.factor += 1
+                print("Increasing search factor to {self.factor}")
+
+        if len(result) > (number * 2):
+            self.factor -= 1
+            print("Decreasing search factor to {self.factor}")
+        return result[:number]
+
+    def contains_or_add(self, filename: str) -> tuple[Point | None, Point | None]:
         """Check if the filename exists in the database, queue it up if not."""
-        if not self.gaia_db.contains(filename):
-            print("%r not found in gaia db" % filename)
+        start_point = self.gaia_db_new.get(filename + "0")
+        end_point = self.gaia_db_new.get(filename + "1")
+        if not (start_point and end_point):
+            print(f"{filename} not found in gaia db starts or ends")
             if filename in self.seen:
                 print("already seen")
-                return False
+                return None, None
 
             self.seen.add(filename)
             self.queue.put((ADD, filename))
-            return False
+            return None, None
 
-        return True
+        return start_point, end_point
 
 
 class DatabaseWrapper(Thread):
@@ -574,7 +643,6 @@ class Similarity(object):
     def __init__(self):
         data_dir = player_get_data_dir()
         self.db_path = os.path.join(data_dir, "similarity.db")
-        self.gaia_db_path = os.path.join(data_dir, "gaia.db")
         self.db_queue: PriorityQueue = PriorityQueue()
         self._db_wrapper = DatabaseWrapper()
         self._db_wrapper.daemon = True
@@ -586,7 +654,7 @@ class Similarity(object):
         self.cache_time = 90
         if GAIA:
             self.gaia_queue: LifoQueue = LifoQueue()
-            self.gaia_analyser = GaiaAnalysis(self.gaia_db_path, self.gaia_queue)
+            self.gaia_analyser = GaiaAnalysis(self.gaia_queue)
             self.gaia_analyser.daemon = True
             self.gaia_analyser.start()
 
@@ -611,12 +679,6 @@ class Similarity(object):
     def get_ordered_gaia_tracks_from_list(self, filename, filenames):
         start_time = time()
         tracks = self.gaia_analyser.get_ordered_matches(filename, filenames)
-        print("finding gaia matches took %f s" % (time() - start_time,))
-        return tracks
-
-    def get_ordered_gaia_tracks_by_request(self, filename, number, request):
-        start_time = time()
-        tracks = self.gaia_analyser.get_tracks(filename, number, request=request)
         print("finding gaia matches took %f s" % (time() - start_time,))
         return tracks
 
@@ -891,67 +953,6 @@ class Similarity(object):
             for filename in filenames:
                 self.gaia_queue.put((ADD, filename))
 
-    def get_similar_tracks_from_lastfm(
-        self, artist_name: str, title: str, track_id: int, cutoff: int = 0
-    ):
-        """Get similar tracks."""
-        try:
-            lastfm_track = self.network.get_track(artist_name, title)
-        except Exception as e:
-            print(e)
-            return []
-        tracks_to_update: Dict[int, List[Dict[str, Union[str, int]]]] = {}
-        results = []
-        try:
-            for similar in lastfm_track.get_similar():
-                match = int(100 * similar.match)
-                if match <= cutoff:
-                    continue
-                item = similar.item
-                similar_artist = item.artist.get_name()
-                similar_title = item.title
-                tracks_to_update.setdefault(track_id, []).append(
-                    {"score": match, "artist": similar_artist, "title": similar_title}
-                )
-                results.append((match, similar_artist, similar_title))
-        except Exception as e:
-            print(e)
-            return []
-        self.update_similar_tracks(tracks_to_update)
-        return results
-
-    def get_similar_artists_from_lastfm(self, artist_name, artist_id, cutoff=0):
-        """Get similar artists from lastfm."""
-        try:
-            lastfm_artist = self.network.get_artist(artist_name)
-        except Exception as e:
-            print(e)
-            return []
-        artists_to_update = {}
-        results = []
-        try:
-            for similar in lastfm_artist.get_similar():
-                match = int(100 * similar.match)
-                if match <= cutoff:
-                    continue
-                name = similar.item.get_name()
-                artists_to_update.setdefault(artist_id, []).append(
-                    {"score": match, "artist": name}
-                )
-                results.append((match, name))
-        except Exception as e:
-            print(e)
-            return []
-        self.update_similar_artists(artists_to_update)
-        return results
-
-    def miximize(self, filenames):
-        """Return ideally ordered list of filenames."""
-        if not GAIA:
-            return []
-
-        return self.gaia_analyser.get_miximized_tracks(filenames)
-
     def get_best_match(self, filename, filenames):
         if not GAIA:
             return
@@ -993,18 +994,6 @@ class SimilarityService(dbus.service.Object):
         return self.similarity.get_ordered_gaia_tracks_from_list(
             filename, [filename for filename in filenames]
         )
-
-    @method(dbus_interface=IFACE, in_signature="sxs", out_signature="a(xs)")
-    def get_ordered_gaia_tracks_by_request(self, filename, number, request):
-        """Get similar tracks by gaia acoustic analysis."""
-        return self.similarity.get_ordered_gaia_tracks_by_request(
-            filename, number, request
-        )
-
-    @method(dbus_interface=IFACE, in_signature="as", out_signature="ax")
-    def miximize(self, filenames):
-        """Return ideally ordered list of filenames."""
-        return self.similarity.miximize(filenames)
 
     @method(dbus_interface=IFACE, out_signature="b")
     def has_gaia(self):

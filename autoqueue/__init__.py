@@ -81,6 +81,7 @@ API_KEY = "09d0975a99a4cab235b731d31abf0057"
 THRESHOLD = 0.5
 TIMEOUT = 3000
 FIVE_MINUTES = timedelta(minutes=5)
+ONE_MONTH = timedelta(days=30)
 DEFAULT_NUMBER = 20
 DEFAULT_LENGTH = 15 * 60
 SCDL = "scdl"
@@ -254,7 +255,11 @@ class AutoQueueBase(object):
         self.requests = Requests()
         for song in self.get_last_songs():
             if song is not None:
-                self.cache.enqueue_song(song)
+                is_new = song.get_added() and (
+                    datetime.now() - datetime.fromtimestamp(song.get_added())
+                    < ONE_MONTH
+                )
+                self.cache.enqueue_song(song, is_new=is_new)
 
     @property
     def use_gaia(self):
@@ -444,19 +449,19 @@ class AutoQueueBase(object):
 
         if request:
             print("*****" + request)
-            if request in self.requests.get_requests() or request in self.get_newest():
-                self.gaia_reply_handler([(0, request)])
-                return
+            # if request in self.requests.get_requests() or request in self.get_newest():
+            self.gaia_reply_handler([(0, request)])
+            return
 
-            self.cache.current_request = request
-            self.similarity.get_ordered_gaia_tracks_by_request(
-                filename,
-                self.configuration.number * self.cache.miss_factor,
-                self.cache.current_request,
-                reply_handler=self.gaia_reply_handler,
-                error_handler=self.gaia_error_handler,
-                timeout=TIMEOUT,
-            )
+            # self.cache.current_request = request
+            # self.similarity.get_ordered_gaia_tracks_by_request(
+            #     filename,
+            #     self.configuration.number * self.cache.miss_factor,
+            #     self.cache.current_request,
+            #     reply_handler=self.gaia_reply_handler,
+            #     error_handler=self.gaia_error_handler,
+            #     timeout=TIMEOUT,
+            # )
             return
         else:
             print("***** no requests")
@@ -682,7 +687,14 @@ class AutoQueueBase(object):
             filename = song.get_filename()
             if self.is_playing_or_in_queue(filename):
                 continue
-            is_new = filename in newest
+            is_new = (
+                song.get_added()
+                and (
+                    datetime.now() - datetime.fromtimestamp(song.get_added())
+                    < ONE_MONTH
+                )
+                or filename in newest
+            )
             if filename not in current_requests:
                 rating = song.get_rating()
                 if rating is NotImplemented:

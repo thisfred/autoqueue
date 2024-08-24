@@ -8,22 +8,19 @@ This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as
 published by the Free Software Foundation
 """
-import json
+
 from collections import deque
 from datetime import datetime
-from pathlib import Path
 
+from autoqueue import AutoQueueBase
+from autoqueue.player import PlayerBase, SongBase
 from gi.repository import GLib, Gtk
-from quodlibet import _, app, config, formats
+from quodlibet import _, app, config
 from quodlibet.plugins import PluginConfig, PluginConfigMixin
 from quodlibet.plugins.events import EventPlugin
 from quodlibet.qltk.entry import UndoEntry
 from quodlibet.util import copool
 
-from autoqueue import AutoQueueBase
-from autoqueue.player import PlayerBase, SongBase
-
-BPM = "bpm"
 INT_SETTINGS = {
     "desired_queue_length": {"value": 4440, "label": "queue (seconds)"},
     "number": {"value": 40, "label": "number of tracks to look up"},
@@ -74,7 +71,6 @@ def remove_role(artist):
 
 
 class Song(SongBase):
-
     """A wrapper object around quodlibet song objects."""
 
     def get_artist(self):
@@ -190,7 +186,6 @@ class Song(SongBase):
 
 
 class AutoQueue(AutoQueueBase, EventPlugin, PluginConfigMixin):
-
     """The actual plugin class."""
 
     PLUGIN_ID = "AutoQueue"
@@ -250,59 +245,10 @@ class AutoQueue(AutoQueueBase, EventPlugin, PluginConfigMixin):
             return
         ssong = Song(song)
         GLib.idle_add(self.on_song_started, ssong)
-        GLib.idle_add(self.add_bpms)
 
     def plugin_on_removed(self, songs):
         """Triggered when songs are removed from the library."""
         GLib.idle_add(self.on_removed, [Song(s) for s in songs])
-
-    def add_bpms(self):
-        to_remove = []
-        to_do = 500
-        for sig_file in Path("/tmp/").rglob("*.sig"):
-            song = None
-            audio_filename = str(sig_file)[4:-4]
-            if audio_filename in self.seen_files:
-                continue
-            self.seen_files.add(audio_filename)
-            to_do -= 1
-            if to_do < 0:
-                break
-            with sig_file.open() as sig:
-                try:
-                    jsonsig = json.load(sig)
-                except Exception:
-                    print(f"Could not load '{sig}'")
-                    continue
-            try:
-                bpm = jsonsig.get("rhythm", {}).get(BPM)
-            except (ValueError, TypeError):
-                continue
-            try:
-                audiofile = Path(audio_filename)
-                if not audiofile.exists():
-                    print(f"{audio_filename} NO LONGER EXISTS")
-                    to_remove.append(sig_file)
-                    continue
-                song = formats.MusicFile(audio_filename)
-            except Exception as e:
-                print(e)
-            if not song:
-                return
-            if song.get(BPM):
-                try:
-                    float(song.get(BPM))
-                except (ValueError, TypeError):
-                    pass
-                else:
-                    continue
-            try:
-                song[BPM] = bpm
-                song.write()
-            except Exception as e:
-                print(repr(e))
-        for sig_file in to_remove:
-            sig_file.unlink()
 
     def PluginPreferences(self, parent):
         """Set and unset preferences from gui or config file."""
