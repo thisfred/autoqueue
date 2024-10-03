@@ -47,6 +47,7 @@ STR_SETTINGS = {
     },
     "geohash": {"value": "", "label": "geohash (see geohash.org)"},
     "extra_context": {"value": "", "label": "extra context"},
+    "owm_api_key": {"value": "", "label": "API key for openweathermap"},
 }
 
 
@@ -220,6 +221,7 @@ class AutoQueue(AutoQueueBase, EventPlugin, PluginConfigMixin):
         self.configuration.geohash = self.config_get("geohash", default="")
         self.configuration.birthdays = self.config_get("birthdays", default="")
         self.configuration.use_gaia = self.config_get_bool("use_gaia", default=True)
+        self.configuration.owm_api_key = self.config_get("owm_api_key", default=True)
         self.seen_files = set()
 
     def enabled(self):

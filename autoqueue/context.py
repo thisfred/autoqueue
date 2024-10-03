@@ -18,6 +18,7 @@ SIX_HOURS = timedelta(hours=6)
 ONE_DAY = timedelta(days=1)
 THREE_DAYS = timedelta(days=3)
 FORTY_FIVE_DAYS = timedelta(days=45)
+ONE_MONTH = timedelta(days=30)
 TWO_MONTHS = timedelta(days=60)
 SIX_MONTHS = timedelta(days=182)
 ONE_YEAR = timedelta(days=365)
@@ -85,19 +86,37 @@ class Context(object):
             applies = predicate.applies_to_song(song)
             if applies and in_context:
                 if predicate.sentence:
-                    sentences.append((predicate.sentence, predicate.scale))
-                    continue
-                predicate.score(result, applies)
+                    sentences.append(
+                        (
+                            predicate.sentence,
+                            predicate.scale,
+                            predicate.get_factor(song, self),
+                        )
+                    )
+                    if not (
+                        predicate.tags
+                        and (predicate.tags & set(song.get_non_geo_tags()))
+                    ):
+                        continue
+                    print(
+                        f"title={song.get_title()} overlap={predicate.tags & set(song.get_non_geo_tags())}"
+                    )
+                predicate.score(result, applies, self)
 
         if sentences:
             title = result["song"].get_title(with_version=False)
             similarities = self.model.predict(
-                [[sentence, title] for sentence, _ in sentences]
+                [[sentence, title] for sentence, _, _ in sentences]
             )
-            for similarity, (sentence, scale) in zip(similarities, sentences):
+            for similarity, (sentence, scale, factor) in zip(similarities, sentences):
                 if similarity > 0.3:
                     score = 1 - similarity
-                    scaled = 1 - (similarity * scale)
+
+                    if factor > 1:
+                        scaled = 1 + ((factor - 1) * score * scale)
+                    else:
+                        scaled = 1 - (factor * score * scale)
+
                     result["score"] = result["score"] * scaled
 
                     result.setdefault("reasons", []).append(
@@ -125,7 +144,7 @@ class Context(object):
                 String(song.get_title(with_version=False), scale=scale)
             )
             previous_terms.append(Tags(song.get_non_geo_tags(), scale=scale))
-            if (year := song.get_year()) and year != self.date.year:
+            if year := song.get_year():
                 previous_terms.append(SongYear(year, scale=scale))
             previous_terms.append(Geohash(song.get_geohashes(), scale=scale))
 
@@ -242,9 +261,17 @@ class Context(object):
             Midnight,
             Noon,
             Spring,
+            EarlySpring,
+            LateSpring,
             Summer,
+            EarlySummer,
+            LateSummer,
             Fall,
+            EarlyFall,
+            LateFall,
             Winter,
+            EarlyWinter,
+            LateWinter,
             Evening,
             Morning,
             Afternoon,
@@ -262,6 +289,7 @@ class Context(object):
 class Predicate(object):
     sentence: Optional[str] = None
     scale = 1.0
+    tags: set[str] = set()
 
     def applies_to_song(self, song):
         raise NotImplementedError
@@ -269,8 +297,8 @@ class Predicate(object):
     def applies_in_context(self, context):
         return True
 
-    def get_factor(self, song):
-        return 0.5
+    def get_factor(self, song, context):
+        return 1
 
     def scaled(self, factor):
         if factor > 1:
@@ -279,8 +307,8 @@ class Predicate(object):
             factor = 1 - ((1 - factor) * self.scale)
         return factor
 
-    def score(self, result, applies):
-        original_factor = self.get_factor(result["song"])
+    def score(self, result, applies, context):
+        original_factor = self.get_factor(result["song"], context)
         factor = self.scaled(original_factor)
         result["score"] *= factor
         result.setdefault("reasons", []).append(
@@ -299,9 +327,9 @@ class Tags(Predicate):
     def applies_to_song(self, song):
         return self.tags & set(song.get_non_geo_tags())
 
-    def get_factor(self, song):
+    def get_factor(self, song, context):
         song_tags = set(song.get_non_geo_tags())
-        return 1 / (1 + (len(self.tags & song_tags) / len(self.tags | song_tags)))
+        return 0.75 ** len(self.tags & song_tags)
 
 
 class BPM(Predicate):
@@ -314,23 +342,26 @@ class BPM(Predicate):
         except (ValueError, TypeError):
             return False
 
-    def score(self, result, applies):
-        original_factor = self.get_factor(result["song"])
+    def score(self, result, applies, context):
+        original_factor = self.get_factor(result["song"], context)
         factor = self.scaled(original_factor)
         result["score"] *= factor
         result.setdefault("reasons", []).append(
             f"{result['score']:12.5f} :: {factor:.5f} :: {original_factor:.5f} :: {self} :: {applies}"
         )
 
-    def get_factor(self, song):
+    def get_factor(self, song, context):
         difference = min(
             abs(float(song.song.get("bpm")) - bpm)
             for bpm in (self.bpm, self.bpm * 2, self.bpm / 2)
         )
         try:
-            return difference / 5
+            return difference / 10
         except (ValueError, TypeError):
             return 1
+
+    def __repr__(self):
+        return f"<BPM {self.bpm!r}>"
 
 
 class Terms(Predicate):
@@ -358,45 +389,30 @@ class Period(Terms):
     decay: Optional[timedelta] = None
 
     def __init__(self, peak):
-        self.diff = None
         self.peak = peak
         super(Period, self).__init__()
 
     def get_peak(self, context):
         return self.peak
 
-    def get_diff(self, context):
-        context_datetime = context.date
-        peak = self.get_peak(context)
-        return self.get_diff_between_dates(context_datetime, peak)
-
     def get_diff_between_dates(self, context_datetime, peak):
         if not isinstance(peak, datetime):
             context_datetime = context_datetime.date()
-        self.diff = abs(context_datetime - peak)
-        if self.diff.total_seconds() > (self.period.total_seconds() / 2):
-            self.diff = self.period - self.diff
-        return self.diff
+        diff = abs(context_datetime - peak)
+        if diff.total_seconds() > (self.period.total_seconds() / 2):
+            diff = self.period - diff
+        return diff
 
     def applies_in_context(self, context):
-        return self.get_diff(context) < self.decay
+        return True
 
-    def get_factor(self, song):
-        factor = super(Period, self).get_factor(song)
+    def get_factor(self, song, context):
+        peak = self.get_peak(context)
+        diff = self.get_diff_between_dates(context.date, peak)
+        if self.decay and (diff < self.decay):
+            return max((diff.total_seconds()) / (self.decay.total_seconds()), 0.01)
 
-        return factor * (
-            1.0
-            - min(
-                1,
-                (
-                    self.diff.total_seconds()
-                    if self.diff
-                    else 1 / self.decay.total_seconds()
-                    if self.decay
-                    else 1
-                ),
-            )
-        )
+        return 1 + (diff.total_seconds() / (self.period.total_seconds() / 2))
 
 
 class Geohash(Predicate):
@@ -414,17 +430,17 @@ class Geohash(Predicate):
         return False
 
     def __repr__(self):
-        return "<Geohash %r>" % self.geohashes
+        return f"<Geohash {self.geohashes!r}>"
 
-    def score(self, result, applies):
-        original_factor = self.get_factor(result["song"])
+    def score(self, result, applies, context):
+        original_factor = self.get_factor(result["song"], context)
         factor = self.scaled(original_factor)
         result["score"] *= factor
         result.setdefault("reasons", []).append(
             f"{result['score']:12.5f} :: {factor:.5f} :: {original_factor:.5f} :: {self} :: {applies}"
         )
 
-    def get_factor(self, song):
+    def get_factor(self, song, context):
         best_score = 1.0
         for self_hash in self.geohashes:
             if not self_hash:
@@ -467,11 +483,14 @@ class SongYear(Predicate):
             and any(t.startswith(str(self.year)) for t in artist_tags)
         )
 
-    def get_factor(self, song):
+    def get_factor(self, song, context):
         if self.was_released(song):
             return 1 - (1.0 / (2.0 + abs(self.year - song.get_year())))
         else:
             return 0.5
+
+    def __repr__(self):
+        return f"<SongYear {self.year!r}>"
 
 
 class String(Terms):
@@ -734,18 +753,21 @@ class Dawn(Period):
     period = ONE_DAY
     decay = ONE_HOUR
     sentence = "the sun is rising"
+    tags = {"dawn", "sunrise"}
 
 
 class Dusk(Period):
     period = ONE_DAY
     decay = ONE_HOUR
     sentence = "the sun is setting"
+    tags = {"dusk", "sunset"}
 
 
 class Noon(Period):
     period = ONE_DAY
     decay = HALF_HOUR
     sentence = "it is noon"
+    tags = {"noon"}
 
     def __init__(self, now):
         super(Noon, self).__init__(peak=now.replace(hour=12, minute=0, second=0))
@@ -755,6 +777,7 @@ class Midnight(Period):
     period = ONE_DAY
     decay = HALF_HOUR
     sentence = "it is midnight"
+    tags = {"midnight"}
 
     def __init__(self, now):
         super(Midnight, self).__init__(peak=now.replace(hour=0, minute=0, second=0))
@@ -788,42 +811,129 @@ class Date(Terms):
 
 class Season(Period):
     decay = TWO_MONTHS
+    name: str | None = None
+
+    @property
+    def sentence(self):
+        return f"it is {self.name}"
 
     def get_peak(self, context):
         if context.configuration.southern_hemisphere:
-            return self.peak + SIX_MONTHS
+            peak = self.peak + SIX_MONTHS
+        else:
+            peak = self.peak
 
-        return self.peak
+        return peak
+
+
+class EarlySeason(Period):
+    decay = ONE_MONTH
+
+    @property
+    def sentence(self):
+        return f"it is early {self.name}"
+
+    def get_peak(self, context):
+        return super().get_peak(context) - ONE_MONTH
+
+
+class LateSeason(Period):
+    decay = ONE_MONTH
+
+    @property
+    def sentence(self):
+        return f"it is late {self.name}"
+
+    def get_peak(self, context):
+        return super().get_peak(context) + ONE_MONTH
 
 
 class Winter(Season):
-    sentence = "it is winter"
+    name = "winter"
+    tags = {"winter"}
 
     def __init__(self, now):
-        super(Winter, self).__init__(
-            peak=datetime(now.year - 1, 12, 21) + FORTY_FIVE_DAYS
-        )
+        super().__init__(peak=datetime(now.year, 12, 21) + FORTY_FIVE_DAYS)
+
+
+class EarlyWinter(EarlySeason):
+    name = "winter"
+
+    def __init__(self, now):
+        super().__init__(peak=datetime(now.year, 12, 21) + FORTY_FIVE_DAYS)
+
+
+class LateWinter(LateSeason):
+    name = "winter"
+
+    def __init__(self, now):
+        super().__init__(peak=datetime(now.year, 12, 21) + FORTY_FIVE_DAYS)
 
 
 class Spring(Season):
-    sentence = "it is spring"
+    name = "spring"
+    tags = {"spring"}
 
     def __init__(self, now):
-        super(Spring, self).__init__(peak=datetime(now.year, 3, 21) + FORTY_FIVE_DAYS)
+        super().__init__(peak=datetime(now.year, 3, 21) + FORTY_FIVE_DAYS)
+
+
+class EarlySpring(EarlySeason):
+    name = "spring"
+
+    def __init__(self, now):
+        super().__init__(peak=datetime(now.year, 3, 21) + FORTY_FIVE_DAYS)
+
+
+class LateSpring(LateSeason):
+    name = "spring"
+
+    def __init__(self, now):
+        super().__init__(peak=datetime(now.year, 3, 21) + FORTY_FIVE_DAYS)
 
 
 class Summer(Season):
-    sentence = "it is summer"
+    name = "summer"
+    tags = {"summer"}
 
     def __init__(self, now):
-        super(Summer, self).__init__(peak=datetime(now.year, 6, 21) + FORTY_FIVE_DAYS)
+        super().__init__(peak=datetime(now.year, 6, 21) + FORTY_FIVE_DAYS)
+
+
+class EarlySummer(EarlySeason):
+    name = "summer"
+
+    def __init__(self, now):
+        super().__init__(peak=datetime(now.year, 6, 21) + FORTY_FIVE_DAYS)
+
+
+class LateSummer(LateSeason):
+    name = "summer"
+
+    def __init__(self, now):
+        super().__init__(peak=datetime(now.year, 6, 21) + FORTY_FIVE_DAYS)
 
 
 class Fall(Season):
-    sentence = "it is autumn"
+    name = "autumn"
+    tags = {"autumn", "fall"}
 
     def __init__(self, now):
-        super(Fall, self).__init__(peak=datetime(now.year, 9, 21) + FORTY_FIVE_DAYS)
+        super().__init__(peak=datetime(now.year, 9, 21) + FORTY_FIVE_DAYS)
+
+
+class EarlyFall(EarlySeason):
+    name = "autumn"
+
+    def __init__(self, now):
+        super().__init__(peak=datetime(now.year, 9, 21) + FORTY_FIVE_DAYS)
+
+
+class LateFall(LateSeason):
+    name = "autumn"
+
+    def __init__(self, now):
+        super().__init__(peak=datetime(now.year, 9, 21) + FORTY_FIVE_DAYS)
 
 
 class Month(Terms):
@@ -909,9 +1019,9 @@ class Day(Terms):
     day_index = 0
 
     def applies_in_context(self, context):
-        return (
-            context.date.isoweekday() == self.day_index and context.date.hour >= 4
-        ) or (context.date.isoweekday() == self.day_index + 1 and context.date.hour < 4)
+        return (context.date.isoweekday() == self.day_index) or (
+            context.date.isoweekday() == self.day_index + 1 and context.date.hour < 4
+        )
 
 
 @static_predicate
@@ -960,6 +1070,7 @@ class Night(Period):
     period = ONE_DAY
     decay = SIX_HOURS
     sentence = "it is night"
+    tags = {"night"}
 
     def __init__(self, now):
         super(Night, self).__init__(
@@ -971,6 +1082,7 @@ class DayTime(Period):
     period = ONE_DAY
     decay = SIX_HOURS
     sentence = "it is daytime"
+    tags = {"daytime"}
 
     def __init__(self, now):
         super(DayTime, self).__init__(
@@ -982,27 +1094,30 @@ class Evening(Period):
     period = ONE_DAY
     decay = THREE_HOURS
     sentence = "it is evening"
+    tags = {"evening"}
 
     def __init__(self, now):
-        super(Evening, self).__init__(peak=now.replace(hour=20))
+        super(Evening, self).__init__(peak=now.replace(hour=20, minute=0, second=0))
 
 
 class Morning(Period):
     period = ONE_DAY
     decay = THREE_HOURS
     sentence = "it is morning"
+    tags = {"morning"}
 
     def __init__(self, now):
-        super(Morning, self).__init__(peak=now.replace(hour=9))
+        super(Morning, self).__init__(peak=now.replace(hour=9, minute=0, second=0))
 
 
 class Afternoon(Period):
     period = ONE_DAY
     decay = THREE_HOURS
     sentence = "it is afternoon"
+    tags = {"afternoon"}
 
     def __init__(self, now):
-        super(Afternoon, self).__init__(peak=now.replace(hour=15))
+        super(Afternoon, self).__init__(peak=now.replace(hour=15, minute=0, second=0))
 
 
 @static_predicate
@@ -1018,6 +1133,7 @@ class Weekend(Terms):
 class Thanksgiving(Period):
     decay = THREE_DAYS
     sentence = "it is thanksgiving"
+    tags = {"thanksgiving", "thanks", "gratitude"}
 
     def __init__(self, now):
         super(Thanksgiving, self).__init__(
@@ -1030,6 +1146,7 @@ class Thanksgiving(Period):
 class Christmas(Period):
     decay = THREE_DAYS
     sentence = "it is christmas"
+    tags = {"christmas"}
 
     def __init__(self, now):
         super(Christmas, self).__init__(peak=now.replace(day=25, month=12))
@@ -1038,6 +1155,7 @@ class Christmas(Period):
 @static_predicate
 class Kwanzaa(Terms):
     sentence = "it is kwanzaa"
+    tags = {"kwanzwaa"}
 
     def applies_in_context(self, context):
         context_date = context.date
@@ -1049,6 +1167,7 @@ class Kwanzaa(Terms):
 class NewYear(Period):
     decay = THREE_DAYS
     sentence = "it is new year's eve"
+    tags = {"new year", "new year's eve", "new year's day"}
 
     def __init__(self, now):
         super(NewYear, self).__init__(peak=now.replace(day=31, month=12))
@@ -1057,6 +1176,7 @@ class NewYear(Period):
 class Halloween(Period):
     decay = THREE_DAYS
     sentence = "it is halloween"
+    tags = {"halloween"}
 
     def __init__(self, now):
         super(Halloween, self).__init__(peak=now.replace(day=31, month=10))
@@ -1079,6 +1199,7 @@ class EasterBased(Terms):
 class Easter(Period):
     decay = THREE_DAYS
     sentence = "it is easter"
+    tags = {"easter"}
 
     def __init__(self, now):
         super(Easter, self).__init__(peak=easter(now.year))

@@ -132,6 +132,7 @@ class Configuration(object):
         self.geohash = ""
         self.birthdays = ""
         self.use_gaia = True
+        self.owm_api_key = ""
 
     def get_weather(self):
         if WEATHER and self.geohash:
@@ -141,11 +142,7 @@ class Configuration(object):
 
     def _get_weather(self):
         try:
-            # If you use this code for anything else, please register for your
-            # own OWM API key for free, here:
-            #
-            # https://home.openweathermap.org/users/sign_up
-            owm = pyowm.OWM("35c8c197224e0fb5f7a771facb4243ae")
+            owm = pyowm.OWM(self.owm_api_key)
             lat, lon = [float(v) for v in pygeohash.decode(self.geohash)[:2]]
             manager = owm.weather_manager()
             location = manager.one_call(lat=lat, lon=lon, units="metric")
@@ -176,6 +173,7 @@ class Cache(object):
         self.previous_songs = deque([])
         self.newly_added = set()
         self.newest_days = 1
+        self.newest_high_water_mark = 0
 
     @property
     def prefer_newly_added(self):
@@ -185,7 +183,7 @@ class Cache(object):
     def adjust_time(self, song, *, is_new):
         duration = song.get_length()
         if is_new:
-            self.new_time += duration
+            self.new_time += 2 * duration
         else:
             self.old_time += duration
         smallest = min(self.new_time, self.old_time)
@@ -199,7 +197,7 @@ class Cache(object):
         self.previous_songs.append(song)
         while len(self.previous_songs) > 1 and sum(
             s.get_length() for s in list(self.previous_songs)[1:]
-        ) > (2 * DEFAULT_LENGTH):
+        ) > (DEFAULT_LENGTH):
             self.previous_songs.popleft()
 
     def get_weather(self, configuration):
@@ -449,20 +447,9 @@ class AutoQueueBase(object):
 
         if request:
             print("*****" + request)
-            # if request in self.requests.get_requests() or request in self.get_newest():
             self.gaia_reply_handler([(0, request)])
             return
 
-            # self.cache.current_request = request
-            # self.similarity.get_ordered_gaia_tracks_by_request(
-            #     filename,
-            #     self.configuration.number * self.cache.miss_factor,
-            #     self.cache.current_request,
-            #     reply_handler=self.gaia_reply_handler,
-            #     error_handler=self.gaia_error_handler,
-            #     timeout=TIMEOUT,
-            # )
-            return
         else:
             print("***** no requests")
         self.similarity.get_ordered_gaia_tracks(
@@ -741,7 +728,9 @@ class AutoQueueBase(object):
         if cache_ok and results:
             return results
 
+        increased = False
         while True:
+            print(f"Looking for new songs from the last {self.cache.newest_days} days")
             search = self.player.construct_recently_added_search(
                 days=self.cache.newest_days
             )
@@ -752,10 +741,18 @@ class AutoQueueBase(object):
                 and song.get_filename()
                 and not self.is_playing_or_in_queue(song.get_filename())
             }
-            if len(results) >= self.configuration.number:
+            if number_of_results := len(results):
+                if number_of_results > self.cache.newest_high_water_mark:
+                    self.cache.newest_high_water_mark = number_of_results
+                    if not increased and self.cache.newest_days > 1:
+                        self.cache.newest_days = 1
+                        print(f"decreading newest days to {self.cache.newest_days}")
+                self.cache.newest_high_water_mark = number_of_results
                 break
 
             self.cache.newest_days += 1
+            increased = True
+            print(f"increading newest days to {self.cache.newest_days}")
 
         self.cache.newly_added = results
         return results

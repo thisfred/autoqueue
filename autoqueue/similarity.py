@@ -185,6 +185,10 @@ FFMPEG_ARGS = (
 )
 
 
+def tmp_path(suffix) -> Path:
+    return (Path("/tmp") / Path(str(uuid4()))).with_suffix(suffix)
+
+
 class GaiaAnalysis(Thread):
 
     """Gaia acoustic analysis and comparison."""
@@ -212,9 +216,7 @@ class GaiaAnalysis(Thread):
             if filename + suffix in self.gaia_db_new:
                 continue
 
-            new_path = (Path("/tmp") / Path(str(uuid4()))).with_suffix(
-                Path(filename).suffix
-            )
+            new_path = tmp_path(Path(filename).suffix)
 
             env = os.environ.copy()
             try:
@@ -226,12 +228,14 @@ class GaiaAnalysis(Thread):
                         filename,
                         "-c:a",
                         "copy",
-                        new_path,
+                        str(new_path),
                         "-loglevel",
                         "error",
                         "-hide_banner",
                     ],
                     env=env,
+                    stderr=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
                 )
             except subprocess.CalledProcessError:
                 pass
@@ -239,10 +243,9 @@ class GaiaAnalysis(Thread):
             if not new_path.exists():
                 print("ffmpeg failed to extract")
 
-            signame = self.get_signame(filename, suffix=suffix)
+            sig_path = tmp_path(".sig")
             if not (
-                signame.exists()
-                or self.essentia_analyze(self.gaia_db_new.dataset, new_path, signame)
+                self.essentia_analyze(self.gaia_db_new.dataset, new_path, sig_path)
             ):
                 try:
                     new_path.unlink()
@@ -255,11 +258,16 @@ class GaiaAnalysis(Thread):
             except FileNotFoundError:
                 pass
             try:
-                point = self.load_point(signame)
+                point = self.load_point(sig_path)
                 self.gaia_db_new[filename + suffix] = point
                 self.analyzed += 1
             except Exception as e:
                 print(e)
+
+            try:
+                sig_path.unlink()
+            except FileNotFoundError:
+                pass
 
         print("{} songs left to analyze.".format(self.queue.qsize()))
 
@@ -287,27 +295,17 @@ class GaiaAnalysis(Thread):
         return point
 
     @staticmethod
-    def get_signame(full_path: str, suffix: str) -> Path:
-        """Get the path for the analysis data file for this filename."""
-        while full_path.startswith("/"):
-            full_path = full_path[1:]
-        audio_file_path = Path(full_path)
-        path = Path("/tmp") / audio_file_path.with_suffix(
-            audio_file_path.suffix + f".sig{suffix}"
-        )
-        path.parent.mkdir(exist_ok=True, parents=True)
-        return path
-
-    @staticmethod
-    def essentia_analyze(gaia_db, filename, signame: Path) -> bool:
+    def essentia_analyze(gaia_db, file_path: Path, signame: Path) -> bool:
         """Perform essentia analysis of an audio file."""
-        if filename in gaia_db:
-            return False
+        filename = str(file_path)
 
         env = os.environ.copy()
         try:
             subprocess.check_call(
-                [ESSENTIA_EXTRACTOR_PATH, filename, str(signame)], env=env
+                [ESSENTIA_EXTRACTOR_PATH, filename, str(signame)],
+                env=env,
+                stderr=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
             )
             return True
 
@@ -355,7 +353,6 @@ class GaiaAnalysis(Thread):
     def queue_filenames(self, filenames: Sequence[str]) -> None:
         for name in filenames:
             if name in self.seen:
-                print("already seen")
                 continue
             self.seen.add(name)
             self.queue.put((ADD, name))
@@ -402,25 +399,17 @@ class GaiaAnalysis(Thread):
 
         return result
 
-    def get_tracks(
-        self,
-        filename: str,
-        number: int,  # , request: Optional[str] = None
-    ) -> List[Tuple[float, str]]:
+    def get_tracks(self, filename: str, number: int) -> List[Tuple[float, str]]:
         """Get most similar tracks from the gaia database."""
         if not self.contains_or_add(filename):
             return []
-        neighbours = self.get_neighbours(filename, number)  # , request=request)
+        neighbours = self.get_neighbours(filename, number)
         if neighbours:
             print(f"{len(neighbours)} tracks found, considered {self.factor * number}.")
             print(neighbours[0][0], neighbours[-1][0])
         return neighbours
 
-    def get_neighbours(
-        self,
-        filename: str,
-        number: int,  # request: Optional[str] = None,
-    ) -> List[Tuple[float, str]]:
+    def get_neighbours(self, filename: str, number: int) -> List[Tuple[float, str]]:
         """Get a number of nearest neighbours."""
         view = View(self.gaia_db_new.dataset)
 
@@ -441,18 +430,18 @@ class GaiaAnalysis(Thread):
                 [
                     (score * 1000, name[:-1])
                     for name, score in total
-                    if name.endswith("0") and name != self_name
+                    if name.endswith("0") and (name != self_name)
                 ]
             )
             if len(total) < to_get:
                 return result
             if len(result) < number:
                 self.factor += 1
-                print("Increasing search factor to {self.factor}")
+                print(f"Increasing search factor to {self.factor}")
 
         if len(result) > (number * 2):
             self.factor -= 1
-            print("Decreasing search factor to {self.factor}")
+            print(f"Decreasing search factor to {self.factor}")
         return result[:number]
 
     def contains_or_add(self, filename: str) -> tuple[Point | None, Point | None]:
