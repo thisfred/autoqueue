@@ -145,8 +145,8 @@ class Configuration(object):
             owm = pyowm.OWM(self.owm_api_key)
             lat, lon = [float(v) for v in pygeohash.decode(self.geohash)[:2]]
             manager = owm.weather_manager()
-            location = manager.one_call(lat=lat, lon=lon, units="metric")
-            return location.current
+            location = manager.weather_at_coords(lat=lat, lon=lon)
+            return location.weather
         except Exception as exception:
             global WEATHER
             WEATHER = False

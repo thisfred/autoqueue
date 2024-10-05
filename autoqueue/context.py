@@ -222,8 +222,6 @@ class Context(object):
     def get_other_conditions(weather):
         for condition in weather.detailed_status.lower().split("/"):
             condition = condition.strip()
-            with open("weather_conditions.txt", "a") as weather_file:
-                weather_file.write("%s\n" % condition)
             if condition:
                 results = []
                 unmodified = condition.split()[-1]
