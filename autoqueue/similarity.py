@@ -359,7 +359,7 @@ class GaiaAnalysis(Thread):
 
     def get_best_match(self, filename: str, filenames: List[str]) -> Optional[str]:
         self.queue_filenames([filename] + filenames)
-        point = self.gaia_db_new.get(filename + "1")
+        point = self.gaia_db_new.get(filename + "1") or self.gaia_db_new.get(filename + "0")
         if point is None:
             if filenames:
                 return filenames[0] or ""
@@ -381,7 +381,7 @@ class GaiaAnalysis(Thread):
         self, filename: str, filenames: List[str]
     ) -> List[Tuple[float, str]]:
         self.queue_filenames([filename] + filenames)
-        point = self.gaia_db_new.get(filename + "1")
+        point = self.gaia_db_new.get(filename + "1") or self.gaia_db_new.get(filename + "0")
         if point is None:
             if filenames:
                 return [(1, filenames[0])]
@@ -413,7 +413,11 @@ class GaiaAnalysis(Thread):
         """Get a number of nearest neighbours."""
         view = View(self.gaia_db_new.dataset)
 
-        point = self.gaia_db_new.get(filename + "1")
+        point = self.gaia_db_new.get(filename + "1") or self.gaia_db_new.get(
+            filename + "0"
+        )
+        if point is None:
+            return []
 
         self_name = filename + "0"
         result = []

@@ -3,11 +3,11 @@
 import re
 from datetime import date, datetime, time, timedelta
 from os.path import commonprefix
-from typing import List, Optional, Pattern, Tuple
+from typing import Any, List, Optional, Pattern, Tuple
 
 from dateutil.easter import easter  # type: ignore[import-untyped]
 from dateutil.rrule import TH, YEARLY, rrule  # type: ignore[import-untyped]
-from sentence_transformers.cross_encoder import CrossEncoder
+from sentence_transformers import SentenceTransformer
 
 HISTORY = 10
 
@@ -22,6 +22,15 @@ ONE_MONTH = timedelta(days=30)
 TWO_MONTHS = timedelta(days=60)
 SIX_MONTHS = timedelta(days=182)
 ONE_YEAR = timedelta(days=365)
+
+NORTH = "north"
+NORTHEAST = "northeast"
+EAST = "east"
+SOUTHEAST = "southeast"
+SOUTH = "south"
+SOUTHWEST = "southwest"
+WEST = "west"
+NORTHWEST = "northwest"
 
 TIME = re.compile(r"([0-9]{2}):([0-9]{2})")
 # remove problematic synsets
@@ -57,7 +66,9 @@ class Context(object):
         self.weather = cache.get_weather(configuration)
         self.predicates = []
         self.build_predicates()
-        self.model = CrossEncoder("cross-encoder/stsb-distilroberta-base")
+        self.transformer_model = SentenceTransformer(
+            "paraphrase-multilingual-mpnet-base-v2"
+        )
 
     @staticmethod
     def string_to_datetime(time_string):
@@ -86,42 +97,56 @@ class Context(object):
             applies = predicate.applies_to_song(song)
             if applies and in_context:
                 if predicate.sentence:
-                    sentences.append(
-                        (
-                            predicate.sentence,
-                            predicate.scale,
-                            predicate.get_factor(song, self),
-                        )
-                    )
                     if not (
                         predicate.tags
                         and (predicate.tags & set(song.get_non_geo_tags()))
                     ):
                         continue
-                    print(
-                        f"title={song.get_title()} overlap={predicate.tags & set(song.get_non_geo_tags())}"
-                    )
                 predicate.score(result, applies, self)
 
-        if sentences:
-            title = result["song"].get_title(with_version=False)
-            similarities = self.model.predict(
-                [[sentence, title] for sentence, _, _ in sentences]
+    def adjust_scores(self, results: list[dict[str, Any]]):
+        predicates = [
+            p for p in self.predicates if p.sentence and p.applies_in_context(self)
+        ]
+        if predicates:
+            titles = [
+                result["song"].get_title(with_version=(False))
+                if "song" in result
+                else ""
+                for result in results
+                if "song"
+            ]
+            predicate_embeddings = self.transformer_model.encode(
+                [p.sentence for p in predicates]
             )
-            for similarity, (sentence, scale, factor) in zip(similarities, sentences):
-                if similarity > 0.3:
-                    score = 1 - similarity
+            title_embeddings = self.transformer_model.encode(titles)
+            similarities = self.transformer_model.similarity(
+                title_embeddings,  # type: ignore [arg-type]
+                predicate_embeddings,  # type: ignore [arg-type]
+            )
+            for y, ss in enumerate(similarities):
+                result = results[y]
+                song = result.get("song")
+                if not song:
+                    continue
+                for x, similarity in enumerate(ss):
+                    if similarity > 0.5:
+                        predicate = predicates[x]
+                        factor = predicate.get_factor(song, self)
 
-                    if factor > 1:
-                        scaled = 1 + ((factor - 1) * score * scale)
-                    else:
-                        scaled = 1 - (factor * score * scale)
+                        score = (1 - similarity) * 2
 
-                    result["score"] = result["score"] * scaled
+                        if factor == 1:
+                            factored = score
+                        else:
+                            factored = factor ** (1 - score)
 
-                    result.setdefault("reasons", []).append(
-                        f"{result['score']:12.5f} :: {scaled:.5f} :: {score:.5f} :: {title} :: {sentence}"
-                    )
+                        scaled = factored**predicate.scale
+                        result["score"] = result["score"] * scaled
+
+                        result.setdefault("reasons", []).append(
+                            f">{result['score']:12.5f}|{scaled:.5f}|{factored:.5f}|{score:.5f}|{predicate.scale:.5f}|{factor:.5f}|{titles[y]} :: {predicate.sentence}"
+                        )
 
     def build_predicates(self):
         """Construct predicates to check against the context."""
@@ -215,6 +240,21 @@ class Context(object):
                 Fog(),
             ]
         )
+        self.predicates.extend(
+            [
+                WindDirection(direction)
+                for direction in (
+                    NORTH,
+                    NORTHEAST,
+                    EAST,
+                    SOUTHEAST,
+                    SOUTH,
+                    SOUTHWEST,
+                    WEST,
+                    NORTHWEST,
+                )
+            ]
+        )
         self.predicates.extend(self.get_astronomical_times(self.weather))
         self.predicates.extend(self.get_other_conditions(self.weather))
 
@@ -247,9 +287,9 @@ class Context(object):
 
     def add_song_year_predicate(self):
         if self.date.month == 12:
-            self.predicates.append(SongYear(self.date.year))
+            self.predicates.append(SongYear(self.date.year, exact=True))
         elif self.date.month == 1:
-            self.predicates.append(SongYear(self.date.year - 1))
+            self.predicates.append(SongYear(self.date.year - 1, exact=True))
 
     def add_standard_predicates(self):
         self.predicates.extend(static_predicates)
@@ -259,17 +299,9 @@ class Context(object):
             Midnight,
             Noon,
             Spring,
-            EarlySpring,
-            LateSpring,
             Summer,
-            EarlySummer,
-            LateSummer,
             Fall,
-            EarlyFall,
-            LateFall,
             Winter,
-            EarlyWinter,
-            LateWinter,
             Evening,
             Morning,
             Afternoon,
@@ -284,7 +316,7 @@ class Context(object):
             self.predicates.append(predicate(self.date))
 
 
-class Predicate(object):
+class Predicate:
     sentence: Optional[str] = None
     scale = 1.0
     tags: set[str] = set()
@@ -299,18 +331,15 @@ class Predicate(object):
         return 1
 
     def scaled(self, factor):
-        if factor > 1:
-            factor *= self.scale
-        elif factor < 1:
-            factor = 1 - ((1 - factor) * self.scale)
-        return factor
+        return factor**self.scale
 
     def score(self, result, applies, context):
         original_factor = self.get_factor(result["song"], context)
         factor = self.scaled(original_factor)
         result["score"] *= factor
+
         result.setdefault("reasons", []).append(
-            f"{result['score']:12.5f} :: {factor:.5f} :: {original_factor:.5f} :: {self} :: {applies}"
+            f"{result['score']:12.5f}|{factor:.5f}|{original_factor:.5f}|{self}|{applies}"
         )
 
     def __repr__(self):
@@ -336,7 +365,8 @@ class BPM(Predicate):
 
     def applies_to_song(self, song):
         try:
-            return float(song.song.get("bpm"))
+            if float(song.song.get("bpm")) > 0 and (self.get_factor(song, None) < 1):
+                return float(song.song.get("bpm"))
         except (ValueError, TypeError):
             return False
 
@@ -345,7 +375,7 @@ class BPM(Predicate):
         factor = self.scaled(original_factor)
         result["score"] *= factor
         result.setdefault("reasons", []).append(
-            f"{result['score']:12.5f} :: {factor:.5f} :: {original_factor:.5f} :: {self} :: {applies}"
+            f"{result['score']:12.5f}|{factor:.5f}|{original_factor:.5f}|{self}|{applies}"
         )
 
     def get_factor(self, song, context):
@@ -408,9 +438,11 @@ class Period(Terms):
         peak = self.get_peak(context)
         diff = self.get_diff_between_dates(context.date, peak)
         if self.decay and (diff < self.decay):
-            return max((diff.total_seconds()) / (self.decay.total_seconds()), 0.01)
+            factor = max((diff.total_seconds()) / (self.decay.total_seconds()), 0.01)
+        else:
+            factor = 10 * (diff.total_seconds() / (self.period.total_seconds() / 2))
 
-        return 1 + (diff.total_seconds() / (self.period.total_seconds() / 2))
+        return factor
 
 
 class Geohash(Predicate):
@@ -419,11 +451,14 @@ class Geohash(Predicate):
         self.scale = scale
 
     def applies_to_song(self, song):
+        prefix = ""
         for self_hash in self.geohashes:
             for other_hash in song.get_geohashes():
-                prefix = commonprefix((self_hash, other_hash))
-                if prefix:
-                    return prefix
+                new_prefix = commonprefix((self_hash, other_hash))
+                if len(new_prefix) > len(prefix):
+                    prefix = new_prefix
+        if prefix:
+            return prefix
 
         return False
 
@@ -435,7 +470,7 @@ class Geohash(Predicate):
         factor = self.scaled(original_factor)
         result["score"] *= factor
         result.setdefault("reasons", []).append(
-            f"{result['score']:12.5f} :: {factor:.5f} :: {original_factor:.5f} :: {self} :: {applies}"
+            f"{result['score']:12.5f}|{factor:.5f}|{original_factor:.5f}|{self}|{applies}"
         )
 
     def get_factor(self, song, context):
@@ -473,7 +508,7 @@ class SongYear(Predicate):
         if self.exact:
             return self.year == song.get_year()
 
-        return abs(self.year - song.get_year()) <= 5
+        return abs(self.year - song.get_year()) < 10
 
     def artist_died(self, song):
         return self.exact and (
@@ -483,7 +518,7 @@ class SongYear(Predicate):
 
     def get_factor(self, song, context):
         if self.was_released(song):
-            return 1 - (1.0 / (2.0 + abs(self.year - song.get_year())))
+            return 0.9 ** (10 - abs(self.year - song.get_year()))
         else:
             return 0.5
 
@@ -508,7 +543,7 @@ class Weather(Terms):
 
     @staticmethod
     def get_temperature(context):
-        return context.weather.temperature().get("temp")
+        return context.weather.temperature().get("temp") - 273.15
 
     @staticmethod
     def get_wind_speed(context):
@@ -517,6 +552,29 @@ class Weather(Terms):
     @staticmethod
     def get_humidity(context):
         return context.weather.humidity or 0
+
+    @staticmethod
+    def get_wind_direction(context):
+        degrees = context.weather.wind().get("deg")
+        match degrees:
+            case n if n < 22.5:
+                return NORTH
+            case n if n < 67.5:
+                return NORTHEAST
+            case n if n < 112.5:
+                return EAST
+            case n if n < 157.5:
+                return SOUTHEAST
+            case n if n < 202.5:
+                return SOUTH
+            case n if n < 247.5:
+                return SOUTHWEST
+            case n if n < 292.5:
+                return WEST
+            case n if n < 337.5:
+                return NORTHWEST
+
+        return "north"
 
 
 class Freezing(Weather):
@@ -562,7 +620,7 @@ class Hot(Weather):
 
 
 class Calm(Weather):
-    sentence = "it is calm"
+    sentence = "the air is still"
 
     def applies_in_context(self, context):
         return self.get_wind_speed(context) < 1
@@ -609,6 +667,20 @@ class Humid(Weather):
 
     def applies_in_context(self, context):
         return self.get_humidity(context) > 65
+
+
+class WindDirection(Weather):
+    def __init__(self, direction):
+        self.direction = direction
+
+    @property
+    def sentence(self):
+        return f"the wind is blowing from the {self.direction}"
+
+    def applies_in_context(self, context):
+        self.get_wind_speed(context) > 1 and self.get_wind_direction(
+            context
+        ) == self.direction
 
 
 class Now(Period):
@@ -662,7 +734,7 @@ class Daylight(TimeRange):
 
 class NegativeTimeRange(TimeRange):
     def applies_in_context(self, context):
-        return not super(NegativeTimeRange, self).applies_in_context(context)
+        return not super().applies_in_context(context)
 
 
 class NotDaylight(NegativeTimeRange):
@@ -824,45 +896,9 @@ class Season(Period):
         return peak
 
 
-class EarlySeason(Period):
-    decay = ONE_MONTH
-
-    @property
-    def sentence(self):
-        return f"it is early {self.name}"
-
-    def get_peak(self, context):
-        return super().get_peak(context) - ONE_MONTH
-
-
-class LateSeason(Period):
-    decay = ONE_MONTH
-
-    @property
-    def sentence(self):
-        return f"it is late {self.name}"
-
-    def get_peak(self, context):
-        return super().get_peak(context) + ONE_MONTH
-
-
 class Winter(Season):
     name = "winter"
     tags = {"winter"}
-
-    def __init__(self, now):
-        super().__init__(peak=datetime(now.year, 12, 21) + FORTY_FIVE_DAYS)
-
-
-class EarlyWinter(EarlySeason):
-    name = "winter"
-
-    def __init__(self, now):
-        super().__init__(peak=datetime(now.year, 12, 21) + FORTY_FIVE_DAYS)
-
-
-class LateWinter(LateSeason):
-    name = "winter"
 
     def __init__(self, now):
         super().__init__(peak=datetime(now.year, 12, 21) + FORTY_FIVE_DAYS)
@@ -876,20 +912,6 @@ class Spring(Season):
         super().__init__(peak=datetime(now.year, 3, 21) + FORTY_FIVE_DAYS)
 
 
-class EarlySpring(EarlySeason):
-    name = "spring"
-
-    def __init__(self, now):
-        super().__init__(peak=datetime(now.year, 3, 21) + FORTY_FIVE_DAYS)
-
-
-class LateSpring(LateSeason):
-    name = "spring"
-
-    def __init__(self, now):
-        super().__init__(peak=datetime(now.year, 3, 21) + FORTY_FIVE_DAYS)
-
-
 class Summer(Season):
     name = "summer"
     tags = {"summer"}
@@ -898,37 +920,9 @@ class Summer(Season):
         super().__init__(peak=datetime(now.year, 6, 21) + FORTY_FIVE_DAYS)
 
 
-class EarlySummer(EarlySeason):
-    name = "summer"
-
-    def __init__(self, now):
-        super().__init__(peak=datetime(now.year, 6, 21) + FORTY_FIVE_DAYS)
-
-
-class LateSummer(LateSeason):
-    name = "summer"
-
-    def __init__(self, now):
-        super().__init__(peak=datetime(now.year, 6, 21) + FORTY_FIVE_DAYS)
-
-
 class Fall(Season):
     name = "autumn"
     tags = {"autumn", "fall"}
-
-    def __init__(self, now):
-        super().__init__(peak=datetime(now.year, 9, 21) + FORTY_FIVE_DAYS)
-
-
-class EarlyFall(EarlySeason):
-    name = "autumn"
-
-    def __init__(self, now):
-        super().__init__(peak=datetime(now.year, 9, 21) + FORTY_FIVE_DAYS)
-
-
-class LateFall(LateSeason):
-    name = "autumn"
 
     def __init__(self, now):
         super().__init__(peak=datetime(now.year, 9, 21) + FORTY_FIVE_DAYS)
@@ -1144,7 +1138,18 @@ class Thanksgiving(Period):
 class Christmas(Period):
     decay = THREE_DAYS
     sentence = "it is christmas"
-    tags = {"christmas"}
+    tags = {
+        "bells",
+        "christmas",
+        "jesus",
+        "joseph",
+        "mary",
+        "santa claus",
+        "sleighs",
+        "reindeer",
+        "presents",
+        "mangers",
+    }
 
     def __init__(self, now):
         super(Christmas, self).__init__(peak=now.replace(day=25, month=12))
@@ -1174,7 +1179,26 @@ class NewYear(Period):
 class Halloween(Period):
     decay = THREE_DAYS
     sentence = "it is halloween"
-    tags = {"halloween"}
+    tags = {
+        "bats",
+        "candy",
+        "curses",
+        "dead",
+        "demons",
+        "devils",
+        "ghosts",
+        "halloween",
+        "hell",
+        "hexes",
+        "horror",
+        "monsters",
+        "pumpkins",
+        "satan",
+        "skeletons",
+        "vampires",
+        "witches",
+        "zombies",
+    }
 
     def __init__(self, now):
         super(Halloween, self).__init__(peak=now.replace(day=31, month=10))
@@ -1338,4 +1362,6 @@ class Birthday(Date):
         if self.year == song.get_year():
             return True
 
+        return super(Birthday, self).applies_to_song(song)
+        return super(Birthday, self).applies_to_song(song)
         return super(Birthday, self).applies_to_song(song)

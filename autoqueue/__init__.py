@@ -80,7 +80,7 @@ DBusGMainLoop(set_as_default=True)
 API_KEY = "09d0975a99a4cab235b731d31abf0057"
 THRESHOLD = 0.5
 TIMEOUT = 3000
-FIVE_MINUTES = timedelta(minutes=5)
+TWENTY_MINUTES = timedelta(minutes=20)
 ONE_MONTH = timedelta(days=30)
 DEFAULT_NUMBER = 20
 DEFAULT_LENGTH = 15 * 60
@@ -183,7 +183,7 @@ class Cache(object):
     def adjust_time(self, song, *, is_new):
         duration = song.get_length()
         if is_new:
-            self.new_time += 2 * duration
+            self.new_time += 10 * duration
         else:
             self.old_time += duration
         smallest = min(self.new_time, self.old_time)
@@ -207,7 +207,7 @@ class Cache(object):
         if (
             self.weather
             and self.weather_at
-            and datetime.now() < (self.weather_at + FIVE_MINUTES)
+            and datetime.now() < (self.weather_at + TWENTY_MINUTES)
         ):
             return self.weather
         self.weather = configuration.get_weather()
@@ -297,14 +297,14 @@ class AutoQueueBase(object):
 
     def wrong_duration(self, song):
         duration = song.get_length()
-        target = 300
+        target = 600
 
         if not self.cache.played_number:
             return False
 
         average = self.cache.played_duration / self.cache.played_number
         print(f">>> {duration=}, {average=}")
-        if average > target and duration > average:
+        if average > target and duration > target:
             return True
 
         return False
@@ -648,6 +648,7 @@ class AutoQueueBase(object):
                 configuration=self.configuration,
                 cache=self.cache,
             )
+            self.context.adjust_scores(results)
             for result in results[:]:
                 if "song" not in result:
                     results.remove(result)
@@ -782,7 +783,10 @@ class AutoQueueBase(object):
         else:
             print(repr(result))
             look_for = str(result)
-        print("%03d: %06d %s" % (number + 1, result.get("score", 0), look_for))
+        try:
+            print("%03d: %06d %s" % (number + 1, result.get("score", 0), look_for))
+        except ValueError:
+            print("ValueError {number=}, {result.get('score')=}, {look_for=}")
 
     def maybe_enqueue_album(self, song, *, is_new):
         """Determine if a whole album should be queued, and do so."""
