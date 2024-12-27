@@ -36,7 +36,6 @@ import dbus.service
 from dbus.mainloop.glib import DBusGMainLoop
 from dbus.service import method
 from gi.repository import GObject
-from pylast import LastFMNetwork
 
 from autoqueue.utilities import player_get_data_dir
 
@@ -62,11 +61,6 @@ DBusGMainLoop(set_as_default=True)
 DBUS_BUSNAME = "org.autoqueue"
 IFACE = "org.autoqueue.SimilarityInterface"
 DBUS_PATH = "/org/autoqueue/Similarity"
-
-# If you change even a single character of code, I would ask that you
-# get and use your own (free) last.fm api key from here:
-# http://www.last.fm/api/account
-API_KEY = "09d0975a99a4cab235b731d31abf0057"
 
 # XXX: make this configurable
 ESSENTIA_EXTRACTOR_PATH = "streaming_extractor_music"
@@ -359,7 +353,9 @@ class GaiaAnalysis(Thread):
 
     def get_best_match(self, filename: str, filenames: List[str]) -> Optional[str]:
         self.queue_filenames([filename] + filenames)
-        point = self.gaia_db_new.get(filename + "1") or self.gaia_db_new.get(filename + "0")
+        point = self.gaia_db_new.get(filename + "1") or self.gaia_db_new.get(
+            filename + "0"
+        )
         if point is None:
             if filenames:
                 return filenames[0] or ""
@@ -381,7 +377,9 @@ class GaiaAnalysis(Thread):
         self, filename: str, filenames: List[str]
     ) -> List[Tuple[float, str]]:
         self.queue_filenames([filename] + filenames)
-        point = self.gaia_db_new.get(filename + "1") or self.gaia_db_new.get(filename + "0")
+        point = self.gaia_db_new.get(filename + "1") or self.gaia_db_new.get(
+            filename + "0"
+        )
         if point is None:
             if filenames:
                 return [(1, filenames[0])]
@@ -643,7 +641,6 @@ class Similarity(object):
         self._db_wrapper.set_queue(self.db_queue)
         self._db_wrapper.start()
         self.create_db()
-        self.network = LastFMNetwork(api_key=API_KEY)
         self.cache_time = 90
         if GAIA:
             self.gaia_queue: LifoQueue = LifoQueue()

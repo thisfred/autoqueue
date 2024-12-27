@@ -12,14 +12,15 @@ published by the Free Software Foundation
 from collections import deque
 from datetime import datetime
 
-from autoqueue import AutoQueueBase
-from autoqueue.player import PlayerBase, SongBase
 from gi.repository import GLib, Gtk
 from quodlibet import _, app, config
 from quodlibet.plugins import PluginConfig, PluginConfigMixin
 from quodlibet.plugins.events import EventPlugin
 from quodlibet.qltk.entry import UndoEntry
 from quodlibet.util import copool
+
+from autoqueue import AutoQueueBase
+from autoqueue.player import PlayerBase, SongBase
 
 INT_SETTINGS = {
     "desired_queue_length": {"value": 4440, "label": "queue (seconds)"},
